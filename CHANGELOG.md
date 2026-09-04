@@ -1,5 +1,11 @@
 # ESPADA release history
 
+## Unreleased — Operational case alignment
+
+- Added a mandatory temporal-alignment gate for real SAR, forcing and AIS inputs.
+- The real-case runner now stops before drift/ranking when sources describe different dates.
+- Added a machine-readable `case_alignment.json` audit with source ranges and evidence counts.
+
 ## v0.2.0 — Historical AIS replay
 
 - Added a Global Fishing Watch AIS Vessel Presence adapter for small custom ocean regions.

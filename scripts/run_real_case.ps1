@@ -44,11 +44,21 @@ $env:MPLCONFIGDIR = Join-Path $ProjectRoot ".mpl-cache"
     --observation-time $ObservationTimeUtc `
     --bbox $MinLongitude $MinLatitude $MaxLongitude $MaxLatitude
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& $PythonPath -m espada.cli ais --input $ResolvedAis --out $AisOutput
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& $PythonPath -m espada.cli case-check `
+    --slick (Join-Path $SarOutput "slick_observation.geojson") `
+    --environment-cache $copernicusCache `
+    --ais (Join-Path $AisOutput "ais_normalized.csv") `
+    --age-hours $AgeHours `
+    --out (Join-Path $CaseRoot "case_alignment.json")
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Case stopped: SAR, environment and AIS dates are not aligned. Review case_alignment.json."
+    exit $LASTEXITCODE
+}
 & $PythonPath -m espada.cli slick `
     --input (Join-Path $SarOutput "slick_observation.geojson") `
     --environment-cache $copernicusCache --out $DriftOutput --age-hours $AgeHours
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-& $PythonPath -m espada.cli ais --input $ResolvedAis --out $AisOutput
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & $PythonPath -m espada.cli rank-ais `
     --ais (Join-Path $AisOutput "ais_normalized.csv") --case $DriftOutput --out $RankingOutput

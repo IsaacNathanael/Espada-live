@@ -9,6 +9,7 @@ from .demo import run_demo
 from .dashboard import generate_dashboard
 from .ais import normalize_ais_csv
 from .attribution import write_attribution_outputs
+from .case_alignment import validate_case_alignment
 from .environment import load_environment, write_environment_outputs
 from .evaluation import EvaluationConfig, run_synthetic_evaluation
 from .historical_ais import HistoricalAISRequest, fetch_gfw_presence, parse_utc_datetime
@@ -120,6 +121,15 @@ def _parser() -> argparse.ArgumentParser:
     historical_ais.add_argument("--token-env", default="GFW_API_ACCESS_TOKEN")
     historical_ais.add_argument("--case", type=Path)
     historical_ais.add_argument("--rank-out", type=Path, default=Path("out/historical_ais_ranking"))
+    case_check = subparsers.add_parser(
+        "case-check", help="verify that slick, forcing and AIS cover one incident window"
+    )
+    case_check.add_argument("--slick", type=Path, required=True)
+    case_check.add_argument("--environment-cache", type=Path, required=True)
+    case_check.add_argument("--ais", type=Path, required=True)
+    case_check.add_argument("--out", type=Path, default=Path("out/real_case/case_alignment.json"))
+    case_check.add_argument("--age-hours", type=float, required=True)
+    case_check.add_argument("--max-ais-offset-hours", type=float, default=2.0)
     rank_ais = subparsers.add_parser("rank-ais", help="rank normalized AIS against a drift case")
     rank_ais.add_argument("--ais", type=Path, required=True)
     rank_ais.add_argument("--case", type=Path, default=Path("out/demo"))
@@ -276,6 +286,17 @@ def main(argv: list[str] | None = None) -> int:
             (args.out / "historical_ais_run_result.json").write_text(
                 json.dumps(result, indent=2, default=str), encoding="utf-8"
             )
+        print(json.dumps(result, indent=2, default=str))
+        return 0 if result["status"] == "PASS" else 1
+    if args.command == "case-check":
+        result = validate_case_alignment(
+            args.slick,
+            args.environment_cache,
+            args.ais,
+            args.out,
+            age_hours=args.age_hours,
+            max_ais_offset_hours=args.max_ais_offset_hours,
+        )
         print(json.dumps(result, indent=2, default=str))
         return 0 if result["status"] == "PASS" else 1
     if args.command == "rank-ais":
