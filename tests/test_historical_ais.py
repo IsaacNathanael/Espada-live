@@ -43,6 +43,29 @@ def test_gfw_entries_accept_a_top_level_list() -> None:
     assert rejected == 0
 
 
+def test_gfw_dataset_version_wrapper_is_unwrapped() -> None:
+    frame, rejected = gfw_entries_to_frame(
+        {
+            "entries": [
+                {
+                    "public-global-presence:v4.0": [
+                        {
+                            "date": "2026-08-29T04:00:00Z",
+                            "mmsi": "419000123",
+                            "lon": 71.4,
+                            "lat": 18.7,
+                        }
+                    ]
+                }
+            ]
+        },
+        _request().bounding_box,
+    )
+    assert rejected == 0
+    assert len(frame) == 1
+    assert frame.iloc[0]["mmsi"] == "419000123"
+
+
 def test_gfw_entries_are_converted_and_invalid_rows_are_rejected() -> None:
     frame, rejected = gfw_entries_to_frame(
         {
@@ -65,6 +88,22 @@ def test_gfw_entries_are_converted_and_invalid_rows_are_rejected() -> None:
     assert len(frame) == 1
     assert frame.iloc[0]["mmsi"] == "419000123"
     assert frame.iloc[0]["source"].startswith("Global Fishing Watch")
+    assert frame.attrs["rejection_reasons"] == {"missing_or_invalid_mmsi": 1}
+
+
+def test_gfw_nested_entry_shape_is_supported() -> None:
+    frame, rejected = gfw_entries_to_frame(
+        [
+            {
+                "timestamp": "2026-08-29T04:00:00Z",
+                "vessel": {"ssvid": "419000123", "name": "SAGAR"},
+                "position": {"lon": 71.4, "lat": 18.7},
+            }
+        ],
+        _request().bounding_box,
+    )
+    assert rejected == 0
+    assert frame.iloc[0]["vessel_name"] == "SAGAR"
 
 
 def test_fetch_writes_normalized_outputs_without_leaking_token(

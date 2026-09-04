@@ -9,6 +9,8 @@
 - Reads the bearer token only from `GFW_API_ACCESS_TOKEN`; status and evidence files never contain it.
 - Labels 96-hour latency, hourly/grid-cell sampling, AIS incompleteness, non-commercial terms, and evidentiary limits.
 - Added a one-command PowerShell runner plus adapter, request-contract, delay, and secret-handling tests.
+- Verified the live v4 API response: 8,067 accepted positions from 473 vessels; 32 rows without valid MMSI were safely rejected.
+- Added support for the API's dataset-version response wrapper and alternate nested field layouts; 45 automated tests pass.
 
 ## v0.1.0 — Verified controlled prototype
 

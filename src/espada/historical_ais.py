@@ -110,43 +110,104 @@ def _post_json(
     return payload
 
 
+def _report_entries(payload: JsonPayload) -> list[dict[str, Any]]:
+    """Flatten both documented rows and dataset-keyed 4Wings responses."""
+    rows: list[dict[str, Any]] = []
+    row_location_fields = {"lat", "latitude", "lon", "longitude", "position"}
+
+    def visit(value: object, report_dataset: str | None = None) -> None:
+        if isinstance(value, list):
+            for item in value:
+                visit(item, report_dataset)
+            return
+        if not isinstance(value, dict):
+            return
+        if row_location_fields.intersection(value):
+            row = dict(value)
+            if report_dataset:
+                row.setdefault("reportDataset", report_dataset)
+            rows.append(row)
+            return
+        if "entries" in value:
+            visit(value["entries"], report_dataset)
+        for key, nested in value.items():
+            if str(key).startswith("public-"):
+                visit(nested, str(key))
+
+    visit(payload)
+    return rows
+
+
 def gfw_entries_to_frame(
     payload: JsonPayload,
     bounding_box: AISBoundingBox,
 ) -> tuple[pd.DataFrame, int]:
-    entries = payload if isinstance(payload, list) else payload.get("entries", [])
-    if not isinstance(entries, list):
-        raise RuntimeError("Global Fishing Watch response is missing an entries list")
+    entries = _report_entries(payload)
     rows: list[dict[str, object]] = []
     rejected = 0
+    rejection_reasons: dict[str, int] = {}
+    response_fields: set[str] = set()
+
+    def reject(reason: str) -> None:
+        nonlocal rejected
+        rejected += 1
+        rejection_reasons[reason] = rejection_reasons.get(reason, 0) + 1
+
     for entry in entries:
         if not isinstance(entry, dict):
-            rejected += 1
+            reject("entry_not_an_object")
             continue
-        mmsi = _normalize_mmsi(entry.get("mmsi") or entry.get("MMSI"))
+        response_fields.update(str(key) for key in entry)
+        vessel = entry.get("vessel") if isinstance(entry.get("vessel"), dict) else {}
+        position = entry.get("position") if isinstance(entry.get("position"), dict) else {}
+        mmsi = _normalize_mmsi(
+            entry.get("mmsi")
+            or entry.get("MMSI")
+            or entry.get("ssvid")
+            or vessel.get("ssvid")
+            or vessel.get("mmsi")
+        )
         try:
-            longitude = float(entry.get("lon", entry.get("longitude")))
-            latitude = float(entry.get("lat", entry.get("latitude")))
+            longitude = float(entry.get("lon", entry.get("longitude", position.get("lon"))))
+            latitude = float(entry.get("lat", entry.get("latitude", position.get("lat"))))
         except (TypeError, ValueError):
-            rejected += 1
+            reject("missing_or_invalid_coordinates")
             continue
         timestamp_source = "report_bin"
         timestamp = pd.to_datetime(entry.get("date"), utc=True, errors="coerce")
         if pd.isna(timestamp):
-            timestamp = pd.to_datetime(entry.get("entryTimestamp"), utc=True, errors="coerce")
+            timestamp = pd.to_datetime(
+                entry.get("timestamp")
+                or entry.get("entryTimestamp")
+                or entry.get("entry_timestamp"),
+                utc=True,
+                errors="coerce",
+            )
             timestamp_source = "region_entry"
         inside = (
             bounding_box.min_longitude <= longitude <= bounding_box.max_longitude
             and bounding_box.min_latitude <= latitude <= bounding_box.max_latitude
         )
-        if mmsi is None or pd.isna(timestamp) or not inside:
-            rejected += 1
+        if mmsi is None:
+            reject("missing_or_invalid_mmsi")
+            continue
+        if pd.isna(timestamp):
+            reject("missing_or_invalid_timestamp")
+            continue
+        if not inside:
+            reject("outside_requested_box")
             continue
         rows.append(
             {
                 "timestamp_utc": timestamp.strftime("%Y-%m-%dT%H:%M:%SZ"),
                 "mmsi": mmsi,
-                "vessel_name": str(entry.get("shipName") or entry.get("vesselName") or "UNKNOWN"),
+                "vessel_name": str(
+                    entry.get("shipName")
+                    or entry.get("ship_name")
+                    or entry.get("vesselName")
+                    or vessel.get("name")
+                    or "UNKNOWN"
+                ),
                 "longitude": longitude,
                 "latitude": latitude,
                 "is_interpolated": False,
@@ -168,7 +229,10 @@ def gfw_entries_to_frame(
         "gfw_vessel_id",
         "presence_hours",
     ]
-    return pd.DataFrame(rows, columns=columns), rejected
+    frame = pd.DataFrame(rows, columns=columns)
+    frame.attrs["rejection_reasons"] = rejection_reasons
+    frame.attrs["response_entry_fields"] = sorted(response_fields)
+    return frame, rejected
 
 
 def fetch_gfw_presence(
@@ -205,6 +269,7 @@ def fetch_gfw_presence(
     }
     payload = (post_json or _post_json)(url, headers, body, timeout_seconds)
     frame, rejected = gfw_entries_to_frame(payload, request.bounding_box)
+    response_entries = len(_report_entries(payload))
     source_path = output_dir / "gfw_presence.csv"
     frame.to_csv(source_path, index=False)
 
@@ -217,9 +282,11 @@ def fetch_gfw_presence(
         "spatial_resolution": "0.01 degree grid-cell centres",
         "requested_date_range_utc": request.date_range(),
         "bounding_box": request.bounding_box.to_dict(),
-        "response_entries": len(payload if isinstance(payload, list) else payload.get("entries", [])),
+        "response_entries": response_entries,
         "positions_accepted": len(frame),
         "entries_rejected": rejected,
+        "rejection_reasons": frame.attrs.get("rejection_reasons", {}),
+        "response_entry_fields": frame.attrs.get("response_entry_fields", []),
         "vessels": int(frame["mmsi"].nunique()) if not frame.empty else 0,
         "source_file": str(source_path.resolve()),
         "limitations": [
