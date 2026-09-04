@@ -140,7 +140,10 @@ def run_demo(
         "ais_quality": {
             "valid_rows": ais_quality["valid_rows"],
             "vessel_count": ais_quality["vessel_count"],
-            "vessels_with_gaps_over_30_minutes": ais_quality["vessels_with_gaps_over_30_minutes"],
+                "gap_threshold_minutes": ais_quality["gap_threshold_minutes"],
+                "vessels_with_gaps_over_threshold": ais_quality[
+                    "vessels_with_gaps_over_threshold"
+                ],
             "suspicious_jumps_over_60_knots": ais_quality["suspicious_jumps_over_60_knots"],
         },
         "top_candidate": attribution["top_candidate"],

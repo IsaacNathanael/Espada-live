@@ -11,6 +11,7 @@
 - Added a one-command PowerShell runner plus adapter, request-contract, delay, and secret-handling tests.
 - Verified the live v4 API response: 8,067 accepted positions from 473 vessels; 32 rows without valid MMSI were safely rejected.
 - Added support for the API's dataset-version response wrapper and alternate nested field layouts; 45 automated tests pass.
+- Made AIS gap quality and ranking penalties sampling-cadence aware, so hourly GFW data is not treated like missing raw/live messages.
 
 ## v0.1.0 — Verified controlled prototype
 

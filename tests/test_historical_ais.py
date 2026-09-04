@@ -144,6 +144,9 @@ def test_fetch_writes_normalized_outputs_without_leaking_token(
     assert result["status"] == "PASS"
     assert result["vessels"] == 1
     assert len(normalized) == 2
+    quality = json.loads((tmp_path / "ais_quality.json").read_text())
+    assert quality["gap_threshold_minutes"] == 90.0
+    assert quality["vessels_with_gaps_over_threshold"] == 0
     assert "top-secret-gfw" not in (tmp_path / "historical_ais_status.json").read_text()
 
 

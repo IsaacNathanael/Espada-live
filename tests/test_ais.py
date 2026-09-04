@@ -21,7 +21,8 @@ def test_ais_aliases_are_normalized_and_bad_rows_removed(tmp_path: Path) -> None
     assert report["status"] == "PASS"
     assert report["invalid_rows_removed"] == 1
     assert report["vessel_count"] == 1
-    assert report["vessels_with_gaps_over_30_minutes"] == 1
+    assert report["gap_threshold_minutes"] == 30.0
+    assert report["vessels_with_gaps_over_threshold"] == 1
     assert set(["timestamp_utc", "mmsi", "longitude", "latitude", "gap_before_minutes"]) <= set(normalized)
 
 

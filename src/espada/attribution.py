@@ -94,7 +94,13 @@ def _score_track(
     coverage_quality = min(1.0, len(track) / max(expected_rows, 1))
     interpolated_fraction = float(track["is_interpolated"].astype(str).str.lower().isin({"true", "1", "yes"}).mean())
     maximum_gap = float(track["gap_before_minutes"].max()) if "gap_before_minutes" in track else 0.0
-    gap_penalty = min(0.35, max(0.0, maximum_gap - 30.0) / 360.0)
+    sampling_interval = 0.0
+    if "sampling_interval_minutes" in track:
+        sampling = pd.to_numeric(track["sampling_interval_minutes"], errors="coerce")
+        valid_sampling = sampling.loc[sampling > 0]
+        sampling_interval = float(valid_sampling.median()) if not valid_sampling.empty else 0.0
+    gap_threshold = max(30.0, sampling_interval * 1.5)
+    gap_penalty = min(0.35, max(0.0, maximum_gap - gap_threshold) / 360.0)
     data_quality = float(np.clip(coverage_quality * (1.0 - 0.25 * interpolated_fraction - gap_penalty), 0.0, 1.0))
     total_score = float(np.clip(joint[best_index] + 0.05 * data_quality, 0.0, 1.0))
     return {
@@ -105,6 +111,7 @@ def _score_track(
         "forward_consistency": float(forward_scores[best_index]),
         "forward_error_km": float(forward_errors[best_index]),
         "data_quality": data_quality,
+        "gap_threshold_minutes": gap_threshold,
         "best_match_time_utc": timestamps.iloc[best_index].strftime("%Y-%m-%dT%H:%M:%SZ"),
         "evidence": [
             "Space-time proximity to the inferred release distribution.",

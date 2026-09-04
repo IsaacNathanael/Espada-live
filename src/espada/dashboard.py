@@ -82,7 +82,7 @@ def generate_dashboard(output_dir: Path) -> Path:
         ais_quality = json.loads(ais_quality_report.read_text(encoding="utf-8"))
         ais_quality_section = f"""
     <section class="panel chart" id="ais-quality" style="margin-bottom:14px">
-      <div class="panel-head"><div><h2>AIS ingestion quality</h2><p>{ais_quality['valid_rows']} validated positions · {ais_quality['vessel_count']} vessels · {ais_quality['vessels_with_gaps_over_30_minutes']} vessel with a gap · {ais_quality['suspicious_jumps_over_60_knots']} suspicious jumps</p></div></div>
+      <div class="panel-head"><div><h2>AIS ingestion quality</h2><p>{ais_quality['valid_rows']} validated positions · {ais_quality['vessel_count']} vessels · {ais_quality.get('vessels_with_gaps_over_threshold', ais_quality.get('vessels_with_gaps_over_30_minutes', 0))} vessel with a cadence-adjusted gap · {ais_quality['suspicious_jumps_over_60_knots']} suspicious jumps</p></div></div>
       <img src="{ais_image}" alt="Validated AIS position coverage by vessel">
     </section>"""
     top = candidates["top_candidate"]

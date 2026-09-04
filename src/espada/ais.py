@@ -28,6 +28,7 @@ ALIASES = {
     "cog": {"cog", "courseoverground", "course"},
     "is_interpolated": {"isinterpolated", "interpolated"},
     "source": {"source", "datasource"},
+    "sampling_interval_minutes": {"samplingintervalminutes", "samplingminutes"},
 }
 
 
@@ -48,7 +49,9 @@ def _column_mapping(columns: list[object]) -> dict[object, str]:
     return mapping
 
 
-def _quality_by_vessel(frame: pd.DataFrame) -> list[dict[str, object]]:
+def _quality_by_vessel(
+    frame: pd.DataFrame, gap_threshold_minutes: float
+) -> list[dict[str, object]]:
     reports: list[dict[str, object]] = []
     for mmsi, track in frame.groupby("mmsi", sort=True):
         track = track.sort_values("timestamp_utc")
@@ -80,7 +83,7 @@ def _quality_by_vessel(frame: pd.DataFrame) -> list[dict[str, object]]:
                 "positions": len(track),
                 "coverage_hours": coverage_hours,
                 "maximum_gap_minutes": maximum_gap,
-                "gaps_over_30_minutes": int((gaps > 30.0).sum()),
+                "gaps_over_threshold": int((gaps > gap_threshold_minutes).sum()),
                 "suspicious_jumps_over_60_knots": suspicious,
                 "maximum_implied_speed_knots": max(implied_speeds, default=0.0),
             }
@@ -133,9 +136,21 @@ def normalize_ais_csv(
     if "source" not in frame:
         frame["source"] = f"CSV import: {input_path.name}"
     frame["source"] = frame["source"].fillna(f"CSV import: {input_path.name}")
+    sampling_interval_minutes = 0.0
+    if "sampling_interval_minutes" in frame:
+        sampling = pd.to_numeric(frame["sampling_interval_minutes"], errors="coerce")
+        valid_sampling = sampling.loc[sampling > 0]
+        if not valid_sampling.empty:
+            sampling_interval_minutes = float(valid_sampling.median())
+        frame["sampling_interval_minutes"] = sampling
+    elif frame["source"].astype(str).str.startswith("Global Fishing Watch").all():
+        # GFW Vessel Presence is explicitly sampled at one position per vessel per hour.
+        sampling_interval_minutes = 60.0
+        frame["sampling_interval_minutes"] = sampling_interval_minutes
+    gap_threshold_minutes = max(30.0, sampling_interval_minutes * 1.5)
     frame = frame.sort_values(["mmsi", "timestamp_utc"]).reset_index(drop=True)
     frame["gap_before_minutes"] = frame.groupby("mmsi")["timestamp_utc"].diff().dt.total_seconds().div(60.0).fillna(0.0)
-    vessel_reports = _quality_by_vessel(frame)
+    vessel_reports = _quality_by_vessel(frame, gap_threshold_minutes)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     saved = frame.copy()
@@ -143,11 +158,11 @@ def normalize_ais_csv(
     columns = [
         "timestamp_utc", "mmsi", "vessel_name", "longitude", "latitude",
         "is_interpolated", "gap_before_minutes", "source",
-    ] + [name for name in ("sog", "cog") if name in saved]
+    ] + [name for name in ("sog", "cog", "sampling_interval_minutes") if name in saved]
     normalized_path = Path(normalized_path or output_dir / "ais_normalized.csv")
     normalized_path.parent.mkdir(parents=True, exist_ok=True)
     saved[columns].to_csv(normalized_path, index=False)
-    gap_vessels = sum(report["gaps_over_30_minutes"] > 0 for report in vessel_reports)
+    gap_vessels = sum(report["gaps_over_threshold"] > 0 for report in vessel_reports)
     suspicious_jumps = sum(int(report["suspicious_jumps_over_60_knots"]) for report in vessel_reports)
     report = {
         "status": "PASS",
@@ -158,7 +173,9 @@ def normalize_ais_csv(
         "invalid_rows_removed": invalid_rows,
         "duplicate_rows_removed": duplicate_rows,
         "vessel_count": int(saved["mmsi"].nunique()),
-        "vessels_with_gaps_over_30_minutes": gap_vessels,
+        "sampling_interval_minutes": sampling_interval_minutes or None,
+        "gap_threshold_minutes": gap_threshold_minutes,
+        "vessels_with_gaps_over_threshold": gap_vessels,
         "suspicious_jumps_over_60_knots": suspicious_jumps,
         "time_start_utc": saved["timestamp_utc"].min(),
         "time_end_utc": saved["timestamp_utc"].max(),
@@ -175,11 +192,13 @@ def normalize_ais_csv(
     fig, axis = plt.subplots(figsize=(10, max(4.8, len(sorted_reports) * 0.32)), constrained_layout=True)
     names = [str(item["vessel_name"]) for item in sorted_reports]
     positions = [int(item["positions"]) for item in sorted_reports]
-    colors = ["#F49A24" if item["gaps_over_30_minutes"] else "#087F7B" for item in sorted_reports]
+    colors = ["#F49A24" if item["gaps_over_threshold"] else "#087F7B" for item in sorted_reports]
     bars = axis.barh(names[::-1], positions[::-1], color=colors[::-1])
     axis.bar_label(bars, padding=4, fontsize=8)
     axis.set_xlabel("Validated AIS positions")
-    axis.set_title("AIS coverage quality · orange indicates a gap over 30 minutes")
+    axis.set_title(
+        f"AIS coverage quality · orange indicates a gap over {gap_threshold_minutes:g} minutes"
+    )
     axis.grid(axis="x", alpha=0.2)
     fig.savefig(output_dir / "ais_quality.png", dpi=180)
     plt.close(fig)
