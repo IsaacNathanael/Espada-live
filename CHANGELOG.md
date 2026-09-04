@@ -1,10 +1,14 @@
 # ESPADA release history
 
-## Unreleased — Operational case alignment
+## v0.3.0 — Date-aligned operational inputs
 
 - Added a mandatory temporal-alignment gate for real SAR, forcing and AIS inputs.
 - The real-case runner now stops before drift/ranking when sources describe different dates.
 - Added a machine-readable `case_alignment.json` audit with source ranges and evidence counts.
+- Verified a live historical window with 36 archived wind samples and six native Copernicus current steps normalized to 31 hourly forcing steps, with no warnings.
+- The complete engineering suite now contains 49 passing automated tests.
+- Added exact-window historical wind retrieval from the Open-Meteo Historical Forecast API.
+- Added a one-command case-environment workflow that derives the AIS window and downloads matching Copernicus currents with safety padding.
 
 ## v0.2.0 — Historical AIS replay
 

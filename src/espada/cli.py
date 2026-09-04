@@ -10,7 +10,7 @@ from .dashboard import generate_dashboard
 from .ais import normalize_ais_csv
 from .attribution import write_attribution_outputs
 from .case_alignment import validate_case_alignment
-from .environment import load_environment, write_environment_outputs
+from .environment import load_environment, sync_historical_wind, write_environment_outputs
 from .evaluation import EvaluationConfig, run_synthetic_evaluation
 from .historical_ais import HistoricalAISRequest, fetch_gfw_presence, parse_utc_datetime
 from .live_ais import AISBoundingBox, capture_aisstream
@@ -60,6 +60,15 @@ def _parser() -> argparse.ArgumentParser:
     environment.add_argument("--out", type=Path, default=Path("out/environment"))
     environment.add_argument("--latitude", type=float, default=18.7167)
     environment.add_argument("--longitude", type=float, default=71.45)
+    wind_history = subparsers.add_parser(
+        "wind-history", help="download date-matched historical forecast wind"
+    )
+    wind_history.add_argument("--start", required=True)
+    wind_history.add_argument("--end", required=True)
+    wind_history.add_argument("--latitude", type=float, default=18.7167)
+    wind_history.add_argument("--longitude", type=float, default=71.45)
+    wind_history.add_argument("--cache", type=Path, default=Path("data/cache/wind_historical.json"))
+    wind_history.add_argument("--out", type=Path, default=Path("out/historical_environment"))
     evaluate = subparsers.add_parser("evaluate", help="run multi-case synthetic evaluation")
     evaluate.add_argument("--out", type=Path, default=Path("out/evaluation"))
     evaluate.add_argument("--seed", type=int, default=26143)
@@ -172,6 +181,20 @@ def main(argv: list[str] | None = None) -> int:
             longitude=args.longitude,
         )
         result = write_environment_outputs(bundle, args.out)
+        print(json.dumps(result, indent=2, default=str))
+        return 0
+    if args.command == "wind-history":
+        result = sync_historical_wind(
+            args.cache,
+            start=args.start,
+            end=args.end,
+            latitude=args.latitude,
+            longitude=args.longitude,
+        )
+        args.out.mkdir(parents=True, exist_ok=True)
+        status_path = args.out / "historical_wind_status.json"
+        result["status_file"] = str(status_path.resolve())
+        status_path.write_text(json.dumps(result, indent=2), encoding="utf-8")
         print(json.dumps(result, indent=2, default=str))
         return 0
     if args.command == "evaluate":

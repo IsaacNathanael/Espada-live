@@ -190,6 +190,16 @@ powershell -ExecutionPolicy Bypass -File .\scripts\sync_historical_ais.ps1 -Case
 
 Outputs are under `out\historical_ais` and, when ranking is requested, `out\historical_ais_ranking`. This product provides one AIS-derived position per vessel per hour at grid-cell centres and normally stops about 96 hours before the present. It is delayed evidence—not raw or real-time AIS—and the output preserves those limitations.
 
+## Prepare a date-matched environment
+
+After historical AIS succeeds, this command reads its actual time range, adds six hours of safety padding, downloads archived Open-Meteo forecast wind and a Copernicus surface-current subset for the same window, then combines them into one validated cache:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\sync_case_environment.ps1
+```
+
+The combined cache is `data\cache\environment_historical.json`; its status and graph are under `out\historical_environment`. Archived forecast wind and Copernicus currents are model estimates rather than direct observations.
+
 ## Run a complete uploaded case
 
 `scripts\run_real_case.ps1` joins a prepared SAR PNG/TIFF, its WGS84 bounds, observation time, Copernicus forcing and an AIS CSV. It stops rather than fabricating a polygon when no slick is detected. The resulting mask, drift estimate, quality report and vessel ranking are saved under `out\real_case`.

@@ -10,6 +10,8 @@ validation_runs/
 data/raw/
 data/cache/ais_live*.csv
 data/cache/ais_diagnostic*.csv
+data/cache/environment_historical.json
+data/cache/wind_historical.json
 *.zip
 *.nc
 *.tif

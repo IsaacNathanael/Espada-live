@@ -4,9 +4,11 @@ from pathlib import Path
 import numpy as np
 
 from espada.environment import (
+    build_historical_wind_url,
     build_open_meteo_urls,
     load_environment,
     parse_open_meteo,
+    sync_historical_wind,
     write_environment_outputs,
 )
 from espada.demo import run_demo
@@ -75,6 +77,40 @@ def test_urls_request_required_variables() -> None:
     assert "ocean_current_direction" in marine
     assert "wind_speed_10m" in weather
     assert "wind_direction_10m" in weather
+
+
+def test_historical_wind_uses_archive_host_and_exact_dates(tmp_path: Path) -> None:
+    times = [f"2026-08-29T{hour:02d}:00" for hour in range(24)] + [
+        f"2026-08-30T{hour:02d}:00" for hour in range(24)
+    ]
+    response = {
+        "hourly_units": {"wind_speed_10m": "m/s"},
+        "hourly": {
+            "time": times,
+            "wind_speed_10m": [5.0] * len(times),
+            "wind_direction_10m": [270.0] * len(times),
+        },
+    }
+    captured: list[str] = []
+    cache = tmp_path / "wind.json"
+    result = sync_historical_wind(
+        cache,
+        start="2026-08-29T06:00:00Z",
+        end="2026-08-30T18:00:00Z",
+        fetcher=lambda url: captured.append(url) or response,
+    )
+    assert result["status"] == "PASS"
+    assert result["sample_count"] == 37
+    assert "historical-forecast-api.open-meteo.com" in captured[0]
+    assert "start_date=2026-08-29" in captured[0]
+    payload = json.loads(cache.read_text())
+    assert payload["wind_source"] == "Open-Meteo Historical Forecast API wind"
+    assert np.isclose(payload["samples"][0]["wind_east_ms"], 5.0)
+
+
+def test_historical_wind_requires_timezone() -> None:
+    with np.testing.assert_raises_regex(ValueError, "timezone"):
+        build_historical_wind_url(18.7, 71.4, "2026-08-29", "2026-08-30T00:00:00Z")
 
 
 def test_demo_can_use_a_real_cache_contract(tmp_path: Path) -> None:

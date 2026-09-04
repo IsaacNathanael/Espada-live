@@ -28,6 +28,7 @@ from .models import Forcing, format_utc
 
 MARINE_ENDPOINT = "https://marine-api.open-meteo.com/v1/marine"
 WEATHER_ENDPOINT = "https://api.open-meteo.com/v1/forecast"
+HISTORICAL_WEATHER_ENDPOINT = "https://historical-forecast-api.open-meteo.com/v1/forecast"
 REQUIRED_COLUMNS = {
     "time_utc",
     "latitude",
@@ -64,6 +65,13 @@ def _api_url(endpoint: str, parameters: dict[str, object]) -> str:
     return f"{endpoint}?{urlencode(parameters)}"
 
 
+def _utc_timestamp(value: str | datetime, label: str) -> pd.Timestamp:
+    parsed = pd.Timestamp(value)
+    if parsed.tzinfo is None:
+        raise ValueError(f"{label} must include a timezone")
+    return parsed.tz_convert("UTC")
+
+
 def build_open_meteo_urls(latitude: float, longitude: float, forecast_days: int = 2) -> tuple[str, str]:
     common = {
         "latitude": latitude,
@@ -88,6 +96,31 @@ def build_open_meteo_urls(latitude: float, longitude: float, forecast_days: int 
         },
     )
     return marine, weather
+
+
+def build_historical_wind_url(
+    latitude: float,
+    longitude: float,
+    start: str | datetime,
+    end: str | datetime,
+) -> str:
+    start_time = _utc_timestamp(start, "historical wind start")
+    end_time = _utc_timestamp(end, "historical wind end")
+    if start_time >= end_time:
+        raise ValueError("historical wind start must be before end")
+    return _api_url(
+        HISTORICAL_WEATHER_ENDPOINT,
+        {
+            "latitude": latitude,
+            "longitude": longitude,
+            "start_date": start_time.strftime("%Y-%m-%d"),
+            "end_date": end_time.strftime("%Y-%m-%d"),
+            "hourly": "wind_speed_10m,wind_direction_10m",
+            "wind_speed_unit": "ms",
+            "timezone": "GMT",
+            "cell_selection": "sea",
+        },
+    )
 
 
 def _read_json(url: str, timeout_seconds: int = 25) -> dict:
@@ -158,6 +191,82 @@ def parse_open_meteo(marine: dict, weather: dict) -> pd.DataFrame:
     frame["longitude"] = float(marine["longitude"])
     frame["source"] = "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
     return validate_environment(frame)
+
+
+def parse_historical_wind(weather: dict) -> pd.DataFrame:
+    if weather.get("error"):
+        raise ValueError("Historical wind API returned an error response")
+    hourly = weather.get("hourly", {})
+    times = hourly.get("time", [])
+    speed = np.asarray(hourly.get("wind_speed_10m", []), dtype=float)
+    direction = np.asarray(hourly.get("wind_direction_10m", []), dtype=float)
+    if not times or len(times) != len(speed) or len(speed) != len(direction):
+        raise ValueError("Historical wind response has incomplete arrays")
+    unit = weather.get("hourly_units", {}).get("wind_speed_10m", "m/s")
+    east, north = _from_components(_speed_to_ms(speed, unit), direction)
+    frame = pd.DataFrame(
+        {
+            "time_utc": pd.to_datetime(times, utc=True),
+            "wind_east_ms": east,
+            "wind_north_ms": north,
+        }
+    )
+    if frame[["wind_east_ms", "wind_north_ms"]].isna().any().any():
+        raise ValueError("Historical wind response contains missing values")
+    return frame.drop_duplicates("time_utc").sort_values("time_utc").reset_index(drop=True)
+
+
+def sync_historical_wind(
+    cache_path: Path,
+    *,
+    start: str | datetime,
+    end: str | datetime,
+    latitude: float = 18.7167,
+    longitude: float = 71.45,
+    fetcher: Callable[[str], dict] = _read_json,
+) -> dict[str, object]:
+    start_time = _utc_timestamp(start, "historical wind start")
+    end_time = _utc_timestamp(end, "historical wind end")
+    url = build_historical_wind_url(latitude, longitude, start_time, end_time)
+    frame = parse_historical_wind(fetcher(url))
+    frame = frame[(frame["time_utc"] >= start_time) & (frame["time_utc"] <= end_time)].copy()
+    if len(frame) < 2:
+        raise ValueError("Historical wind response does not cover the requested window")
+    records = frame.copy()
+    records["time_utc"] = records["time_utc"].dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+    source = "Open-Meteo Historical Forecast API wind"
+    records["source"] = source
+    payload = {
+        "schema_version": "1.0",
+        "source": source,
+        "wind_source": source,
+        "fetched_at_utc": format_utc(datetime.now(UTC)),
+        "requested_start_utc": start_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "requested_end_utc": end_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "selection": {"latitude": latitude, "longitude": longitude},
+        "temporal_resolution": "hourly",
+        "attribution": "Open-Meteo Historical Forecast API.",
+        "limitations": [
+            "Archived numerical forecasts are model estimates, not direct wind observations.",
+            "Point sampling does not represent every wind variation across the slick area.",
+        ],
+        "samples": records.to_dict(orient="records"),
+    }
+    cache_path = Path(cache_path)
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = cache_path.with_suffix(cache_path.suffix + ".tmp")
+    temporary.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    temporary.replace(cache_path)
+    return {
+        "status": "PASS",
+        "source": source,
+        "cache_file": str(cache_path.resolve()),
+        "sample_count": len(frame),
+        "time_start_utc": records["time_utc"].iloc[0],
+        "time_end_utc": records["time_utc"].iloc[-1],
+        "selection": payload["selection"],
+        "limitations": payload["limitations"],
+    }
 
 
 def validate_environment(frame: pd.DataFrame) -> pd.DataFrame:
