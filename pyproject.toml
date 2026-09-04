@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "espada-rda"
+version = "0.1.0"
+description = "Reverse Drift Attribution prototype for SIH26143"
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+  "numpy>=2.0",
+  "scipy>=1.14",
+  "matplotlib>=3.9",
+  "Pillow>=11.0",
+  "pandas>=2.2",
+  "xarray>=2024.7",
+  "netCDF4>=1.7",
+  "shapely>=2.0",
+  "opendrift==1.14.11",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+copernicus = ["copernicusmarine>=2.0,<3"]
+realtime = ["websockets>=14,<16"]
+
+[project.scripts]
+espada = "espada.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+markers = [
+  "integration: slower tests that exercise OpenDrift",
+]

@@ -1,0 +1,23 @@
+param([string]$PythonPath = "")
+
+$ErrorActionPreference = "Stop"
+$ProjectRoot = Split-Path -Parent $PSScriptRoot
+$WorkspaceRoot = Split-Path -Parent (Split-Path -Parent $ProjectRoot)
+if (-not $PythonPath) {
+    $candidates = @(
+        (Join-Path $ProjectRoot ".venv\Scripts\python.exe"),
+        (Join-Path $WorkspaceRoot "work\envs\espada-py\Scripts\python.exe")
+    )
+    foreach ($candidate in $candidates) {
+        if (Test-Path -LiteralPath $candidate) { $PythonPath = $candidate; break }
+    }
+}
+if (-not $PythonPath -or -not (Test-Path -LiteralPath $PythonPath)) {
+    throw "The Espada Python environment was not found."
+}
+$env:PYTHONPATH = Join-Path $ProjectRoot "src"
+$env:MPLCONFIGDIR = Join-Path $ProjectRoot ".mpl-cache"
+& $PythonPath -m espada.cli sar-demo --out (Join-Path $ProjectRoot "out\sar")
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& $PythonPath -m espada.cli dashboard --out (Join-Path $ProjectRoot "out\demo")
+exit $LASTEXITCODE

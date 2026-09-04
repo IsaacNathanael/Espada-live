@@ -1,0 +1,453 @@
+{
+  "schema_version": "1.0",
+  "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind",
+  "fetched_at_utc": "2026-09-03T08:17:34Z",
+  "attribution": "Copernicus Marine Service currents; wind from the named cached source.",
+  "dataset_id": "cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i",
+  "raw_file": "C:\\Users\\glori\\Documents\\Codex\\2026-09-02\\do-x20\\outputs\\espada\\data\\raw\\copernicus_currents_latest.nc",
+  "selection": {
+    "latitude": 18.7167,
+    "longitude": 71.45,
+    "depth_m": 0.0
+  },
+  "native_sample_count": 8,
+  "temporal_resolution": "hourly linear interpolation from native Copernicus timestamps",
+  "warnings": [],
+  "limitations": [
+    "Model output, not an observation or navigational product.",
+    "The current grid is sampled at the nearest surface cell for this milestone.",
+    "Native current timestamps are linearly interpolated for hourly integration."
+  ],
+  "samples": [
+    {
+      "time_utc": "2026-09-03T00:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.003912760876119137,
+      "current_north_ms": -0.02804708108305931,
+      "wind_east_ms": 6.081325251015922,
+      "wind_north_ms": 2.8357685362800913,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-03T01:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.008325255941599607,
+      "current_north_ms": -0.023273634646708764,
+      "wind_east_ms": 6.618429896323046,
+      "wind_north_ms": 2.809356813837879,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-03T02:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.012737751007080078,
+      "current_north_ms": -0.01850018821035822,
+      "wind_east_ms": 6.996837459434945,
+      "wind_north_ms": 2.4092043429829593,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-03T03:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.01715024607256055,
+      "current_north_ms": -0.013726741774007678,
+      "wind_east_ms": 6.9570203573988945,
+      "wind_north_ms": 1.734579991449618,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-03T04:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.02156274113804102,
+      "current_north_ms": -0.008953295337657131,
+      "wind_east_ms": 7.248109075281693,
+      "wind_north_ms": 1.8071565601295183,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-03T05:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.02597523620352149,
+      "current_north_ms": -0.004179848901306588,
+      "wind_east_ms": 7.514902928528952,
+      "wind_north_ms": 2.0136121708976105,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-03T06:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.03038773126900196,
+      "current_north_ms": 0.0005935975350439548,
+      "wind_east_ms": 7.6390613079162435,
+      "wind_north_ms": 1.7636162660559036,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-03T07:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.04038055147975683,
+      "current_north_ms": -0.008596835580344001,
+      "wind_east_ms": 7.753798978246495,
+      "wind_north_ms": 1.0897253805173155,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-03T08:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.050373371690511703,
+      "current_north_ms": -0.017787268695731957,
+      "wind_east_ms": 7.647873375382023,
+      "wind_north_ms": 0.8038238825282544,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-03T09:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.060366191901266575,
+      "current_north_ms": -0.026977701811119914,
+      "wind_east_ms": 7.49970780600685,
+      "wind_north_ms": 0.39304303138451174,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-03T10:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.07035901211202145,
+      "current_north_ms": -0.03616813492650787,
+      "wind_east_ms": 7.495431202643219,
+      "wind_north_ms": -0.2617462252687596,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-03T11:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.08035183232277632,
+      "current_north_ms": -0.04535856804189583,
+      "wind_east_ms": 7.495431202643219,
+      "wind_north_ms": -0.2617462252687596,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-03T12:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.09034465253353119,
+      "current_north_ms": -0.05454900115728378,
+      "wind_east_ms": 7.395492119941309,
+      "wind_north_ms": -0.2582562755985095,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-03T13:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.08647462477286656,
+      "current_north_ms": -0.05173556134104729,
+      "wind_east_ms": 7.192436802373333,
+      "wind_north_ms": -0.5029441756951428,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-03T14:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.08260459701220195,
+      "current_north_ms": -0.04892212152481079,
+      "wind_east_ms": 7.295214214563717,
+      "wind_north_ms": -0.8957396740278354,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-03T15:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.07873456925153732,
+      "current_north_ms": -0.046108681708574295,
+      "wind_east_ms": 7.09157010532009,
+      "wind_north_ms": -1.507359758428756,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-03T16:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.0748645414908727,
+      "current_north_ms": -0.0432952418923378,
+      "wind_east_ms": 6.7442381060811165,
+      "wind_north_ms": -0.5900443784016439,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-03T17:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.07099451373020807,
+      "current_north_ms": -0.0404818020761013,
+      "wind_east_ms": 6.950461561891834,
+      "wind_north_ms": -0.36425825545088986,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-03T18:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.06712448596954346,
+      "current_north_ms": -0.03766836225986481,
+      "wind_east_ms": 7.190393303512617,
+      "wind_north_ms": -0.7557407894251311,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-03T19:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.06597249209880829,
+      "current_north_ms": -0.03930714478095373,
+      "wind_east_ms": 7.1026560378499495,
+      "wind_north_ms": -0.49666609305817155,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-03T20:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.06482049822807312,
+      "current_north_ms": -0.04094592730204264,
+      "wind_east_ms": 7.10025599210502,
+      "wind_north_ms": -0.3721086488873315,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-03T21:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.06366850435733795,
+      "current_north_ms": -0.04258470982313156,
+      "wind_east_ms": 7.24233545512699,
+      "wind_north_ms": -0.6336222497754728,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-03T22:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.06251651048660278,
+      "current_north_ms": -0.04422349234422048,
+      "wind_east_ms": 7.55155986046687,
+      "wind_north_ms": -0.5280565062430279,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-03T23:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.061364516615867615,
+      "current_north_ms": -0.045862274865309395,
+      "wind_east_ms": 7.245583495888444,
+      "wind_north_ms": -0.2530213510931343,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-04T00:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.060212522745132446,
+      "current_north_ms": -0.047501057386398315,
+      "wind_east_ms": 7.145644413186535,
+      "wind_north_ms": -0.24953140142288419,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-04T01:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.061468331764141716,
+      "current_north_ms": -0.04936079680919647,
+      "wind_east_ms": 7.098918635610378,
+      "wind_north_ms": -0.12391208570471021,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-04T02:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.06272414078315099,
+      "current_north_ms": -0.05122053623199463,
+      "wind_east_ms": 7.295553037239399,
+      "wind_north_ms": 0.25476632592825554,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-04T03:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.06397994980216026,
+      "current_north_ms": -0.053080275654792786,
+      "wind_east_ms": 7.145644413186535,
+      "wind_north_ms": 0.24953140142288047,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-04T04:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.06523575882116954,
+      "current_north_ms": -0.05494001507759094,
+      "wind_east_ms": 6.95,
+      "wind_north_ms": 1.2766942881111156e-15,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-04T05:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.0664915678401788,
+      "current_north_ms": -0.0567997545003891,
+      "wind_east_ms": 7.098918635610378,
+      "wind_north_ms": -0.12391208570471021,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-04T06:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.06774737685918808,
+      "current_north_ms": -0.058659493923187256,
+      "wind_east_ms": 6.8989490965791,
+      "wind_north_ms": 0.12042160441725613,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-04T07:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.06469558924436569,
+      "current_north_ms": -0.06475647166371346,
+      "wind_east_ms": 7.19561395453749,
+      "wind_north_ms": 0.2512763762580055,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-04T08:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.061643801629543304,
+      "current_north_ms": -0.07085344940423965,
+      "wind_east_ms": 7.7,
+      "wind_north_ms": 1.4144670530151929e-15,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-04T09:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.05859201401472092,
+      "current_north_ms": -0.07695042714476585,
+      "wind_east_ms": 8.258666252420324,
+      "wind_north_ms": -0.43281835812914643,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-04T10:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.05554022639989853,
+      "current_north_ms": -0.08304740488529205,
+      "wind_east_ms": 8.006487031989252,
+      "wind_north_ms": -1.4117596844321407,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-04T11:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.05248843878507614,
+      "current_north_ms": -0.08914438262581825,
+      "wind_east_ms": 7.861999191137297,
+      "wind_north_ms": -1.2452183417202363,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-04T12:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.049436651170253754,
+      "current_north_ms": -0.09524136036634445,
+      "wind_east_ms": 7.892436507870316,
+      "wind_north_ms": -1.1092096146517216,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-04T13:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.041782773875941835,
+      "current_north_ms": -0.08751156491537888,
+      "wind_east_ms": 8.14513432306616,
+      "wind_north_ms": -0.8560881141620779,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-04T14:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.03412889658162992,
+      "current_north_ms": -0.07978176946441333,
+      "wind_east_ms": 7.751785444318724,
+      "wind_north_ms": -0.9517995719942034,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-04T15:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.02647501928731799,
+      "current_north_ms": -0.07205197401344776,
+      "wind_east_ms": 7.308178347312789,
+      "wind_north_ms": -1.0270974850852832,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-04T16:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.018821141993006073,
+      "current_north_ms": -0.06432217856248221,
+      "wind_east_ms": 7.24558690698165,
+      "wind_north_ms": -0.8896462068575781,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-04T17:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.011167264698694154,
+      "current_north_ms": -0.05659238311151664,
+      "wind_east_ms": 7.106630445751866,
+      "wind_north_ms": -0.8725844987808574,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    },
+    {
+      "time_utc": "2026-09-04T18:00:00Z",
+      "latitude": 18.7167,
+      "longitude": 71.45,
+      "current_east_ms": 0.003513387404382229,
+      "current_north_ms": -0.04886258766055107,
+      "wind_east_ms": 7.295553037239399,
+      "wind_north_ms": -0.2547663259282594,
+      "source": "Copernicus Marine cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i currents + Open-Meteo forecast wind"
+    }
+  ]
+}
