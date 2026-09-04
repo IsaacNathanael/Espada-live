@@ -1,5 +1,15 @@
 # ESPADA release history
 
+## v0.2.0 — Historical AIS replay
+
+- Added a Global Fishing Watch AIS Vessel Presence adapter for small custom ocean regions.
+- Requests delayed hourly vessel-presence cells, validates dates and bounds, and converts them to ESPADA's canonical AIS contract.
+- Runs the existing duplicate, gap, coordinate, MMSI, and implausible-speed checks on downloaded evidence.
+- Can pass the normalized history directly into the existing transparent vessel ranker.
+- Reads the bearer token only from `GFW_API_ACCESS_TOKEN`; status and evidence files never contain it.
+- Labels 96-hour latency, hourly/grid-cell sampling, AIS incompleteness, non-commercial terms, and evidentiary limits.
+- Added a one-command PowerShell runner plus adapter, request-contract, delay, and secret-handling tests.
+
 ## v0.1.0 — Verified controlled prototype
 
 This baseline reconstructs probable oil-release locations with reverse-drift

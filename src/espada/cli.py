@@ -11,6 +11,7 @@ from .ais import normalize_ais_csv
 from .attribution import write_attribution_outputs
 from .environment import load_environment, write_environment_outputs
 from .evaluation import EvaluationConfig, run_synthetic_evaluation
+from .historical_ais import HistoricalAISRequest, fetch_gfw_presence, parse_utc_datetime
 from .live_ais import AISBoundingBox, capture_aisstream
 from .sar import load_sar_image, run_segmentation, run_synthetic_segmentation_demo
 from .slick import analyze_slick
@@ -103,6 +104,22 @@ def _parser() -> argparse.ArgumentParser:
     live_ais.add_argument("--save-raw", action="store_true")
     live_ais.add_argument("--case", type=Path)
     live_ais.add_argument("--rank-out", type=Path, default=Path("out/live_ais_ranking"))
+    historical_ais = subparsers.add_parser(
+        "ais-history", help="download delayed Global Fishing Watch AIS vessel presence"
+    )
+    historical_ais.add_argument(
+        "--bbox",
+        type=float,
+        nargs=4,
+        required=True,
+        metavar=("MIN_LON", "MIN_LAT", "MAX_LON", "MAX_LAT"),
+    )
+    historical_ais.add_argument("--start", required=True, help="UTC start date/time")
+    historical_ais.add_argument("--end", required=True, help="UTC end date/time")
+    historical_ais.add_argument("--out", type=Path, default=Path("out/historical_ais"))
+    historical_ais.add_argument("--token-env", default="GFW_API_ACCESS_TOKEN")
+    historical_ais.add_argument("--case", type=Path)
+    historical_ais.add_argument("--rank-out", type=Path, default=Path("out/historical_ais_ranking"))
     rank_ais = subparsers.add_parser("rank-ais", help="rank normalized AIS against a drift case")
     rank_ais.add_argument("--ais", type=Path, required=True)
     rank_ais.add_argument("--case", type=Path, default=Path("out/demo"))
@@ -231,6 +248,34 @@ def main(argv: list[str] | None = None) -> int:
         (args.out / "live_run_result.json").write_text(
             json.dumps(result, indent=2, default=str), encoding="utf-8"
         )
+        print(json.dumps(result, indent=2, default=str))
+        return 0 if result["status"] == "PASS" else 1
+    if args.command == "ais-history":
+        result = fetch_gfw_presence(
+            HistoricalAISRequest(
+                AISBoundingBox(*args.bbox),
+                parse_utc_datetime(args.start),
+                parse_utc_datetime(args.end),
+            ),
+            args.out,
+            token_env=args.token_env,
+        )
+        if result["status"] == "PASS" and args.case:
+            physics = args.case if (args.case / "release_estimate.json").exists() else args.case / "physics"
+            ranking = write_attribution_outputs(
+                args.rank_out,
+                args.out / "ais_normalized.csv",
+                physics / "reverse_endpoints.npz",
+                physics / "release_estimate.json",
+                physics / "forward_particles.npz",
+            )
+            result["ranking"] = {
+                "output": str(args.rank_out.resolve()),
+                "top_candidate": ranking["top_candidate"],
+            }
+            (args.out / "historical_ais_run_result.json").write_text(
+                json.dumps(result, indent=2, default=str), encoding="utf-8"
+            )
         print(json.dumps(result, indent=2, default=str))
         return 0 if result["status"] == "PASS" else 1
     if args.command == "rank-ais":

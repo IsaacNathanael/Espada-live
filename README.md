@@ -16,7 +16,7 @@ The repository now runs an offline end-to-end validation path:
 8. Open the hidden answer key only after ranking and save a machine-readable PASS/FAIL report.
 9. Export the observed slick as the production GeoJSON contract and independently reconstruct its probable release zone.
 
-This milestone includes time-varying forcing, live/cache environmental adapters, SAR segmentation, synthetic and imported AIS ranking, an AISStream live collector, evaluation, an offline dashboard, and a tested Copernicus Marine subset/normalization adapter. It does not yet include automated Sentinel-1 preprocessing or spatially varying OpenDrift readers.
+This milestone includes time-varying forcing, live/cache environmental adapters, SAR segmentation, synthetic and imported AIS ranking, AISStream live collection, delayed Global Fishing Watch AIS history, evaluation, an offline dashboard, and a tested Copernicus Marine subset/normalization adapter. It does not yet include automated Sentinel-1 preprocessing or spatially varying OpenDrift readers.
 
 ## Setup
 
@@ -167,6 +167,28 @@ powershell -ExecutionPolicy Bypass -File .\scripts\run_live_ais.ps1
 ```
 
 The key is never accepted as a command-line argument and is not saved in output files. `.env` is ignored by Git; `.env.example` contains only blank placeholders. The rolling cache is `data\cache\ais_live.csv`; normalized data and connection status are under `out\live_ais`. AISStream is event-driven, has no replay/SLA guarantee, and live messages do not prove vessel identity.
+
+## Download dependable historical AIS evidence
+
+For case replay, ESPADA can request Global Fishing Watch's worldwide AIS Vessel Presence dataset. Create a non-commercial API token in the [Global Fishing Watch API portal](https://globalfishingwatch.org/our-apis/) and add it only to the private `.env` file:
+
+```text
+GFW_API_ACCESS_TOKEN=paste_token_here
+```
+
+Then download a small west-India window. By default this requests 24 hours ending five days ago, safely outside the provider delay:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\sync_historical_ais.ps1
+```
+
+To rank the returned vessels against the controlled drift case:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\sync_historical_ais.ps1 -CasePath .\out\demo
+```
+
+Outputs are under `out\historical_ais` and, when ranking is requested, `out\historical_ais_ranking`. This product provides one AIS-derived position per vessel per hour at grid-cell centres and normally stops about 96 hours before the present. It is delayed evidence—not raw or real-time AIS—and the output preserves those limitations.
 
 ## Run a complete uploaded case
 
