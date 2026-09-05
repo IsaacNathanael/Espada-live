@@ -286,13 +286,14 @@ def _model_card() -> dict:
         },
         "planned_sar_segmentation": {
             "model": "ResNet34-based U-Net",
-            "status": "planned_not_trained_or_integrated",
+            "status": "implemented_and_gpu_smoke_verified_not_fully_trained_or_integrated",
             "task": "Sentinel-1 VV oil-slick semantic segmentation",
             "baseline": "Adaptive dark-patch thresholding with morphology and wind/shape checks",
             "training_plan": "Fine-tune a pretrained encoder only after dataset and split verification",
             "evaluation_metrics": ["oil-class IoU", "Dice/F1", "precision", "recall", "false positives per scene"],
             "reference": "https://skytruth.org/cerulean/methods",
-            "candidate_public_dataset": "https://doi.org/10.5281/zenodo.8346860",
+            "training_dataset": "https://doi.org/10.5281/zenodo.4672426",
+            "split_policy": "acquisition-date grouped; no group may cross train, validation or test",
         },
     }
 

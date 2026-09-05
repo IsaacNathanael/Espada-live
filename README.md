@@ -122,7 +122,28 @@ powershell -ExecutionPolicy Bypass -File .\scripts\run_evaluation.ps1
 
 This evaluates 24 hidden-truth cases across current bias, wind bias, AIS dropout, position noise, combined stress, and nominal conditions. Open `out\evaluation\evaluation_report.html` for the results and graphs.
 
-The working attribution core is not ML: it is physics plus transparent evidence scoring. The planned SAR segmentation model is a ResNet34-based U-Net, with adaptive thresholding retained as the fallback until training data and held-out splits are verified. Synthetic evaluation measures the complete physics-and-ranking pipeline; it is not a claim of real-world accuracy.
+The working attribution core is not ML: it is physics plus transparent evidence scoring. SAR segmentation now has an implemented ResNet34-based U-Net training path, while adaptive thresholding remains the operational fallback until full training and untouched test evaluation pass. Synthetic evaluation measures the physics-and-ranking pipeline; it is not a claim of real-world accuracy.
+
+## Prepare and train the SAR model
+
+Download and audit the labelled Sentinel-1 data:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\download_oil_dataset.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\audit_oil_dataset.ps1
+```
+
+ESPADA does not use the archive's supplied split because it repeats scenes and acquisition dates across partitions. The generated manifest keeps every acquisition date in exactly one of train, validation or test. Run a small engineering check with:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\train_sar_model.ps1 -Smoke
+```
+
+The smoke run is not an accuracy claim. Full GPU training uses the complete group-safe train/validation data, saves the best validation-IoU checkpoint, and reserves the test scenes for later full-scene evaluation:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\train_sar_model.ps1 -Epochs 20 -BatchSize 8
+```
 
 ## Analyze a slick GeoJSON
 

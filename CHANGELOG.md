@@ -1,5 +1,13 @@
 # ESPADA release history
 
+## Unreleased — Leakage-safe SAR learning foundation
+
+- Added checksum-verified acquisition for the CC BY 4.0 Zenodo oil-spill segmentation dataset.
+- Audited all 21 image/mask pairs in the published archive and identified leakage in its supplied splits.
+- Added a deterministic acquisition-date-grouped split: 14 train, 3 validation, 4 test scenes, with zero group overlap.
+- Implemented a one-channel ResNet34 U-Net, combined weighted-BCE/Dice loss, GPU mixed-precision training, early stopping and oil-class confusion metrics.
+- Verified the complete training path on an RTX 5050 with a 64-patch smoke run; this is an engineering check, not an accuracy result.
+
 ## v0.4.0 — Real Sentinel-1 ingestion and review gate
 
 - Added official Copernicus Data Space STAC discovery for Sentinel-1 GRD scenes.

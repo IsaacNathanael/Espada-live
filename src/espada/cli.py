@@ -15,6 +15,7 @@ from .environment import load_environment, sync_historical_wind, write_environme
 from .evaluation import EvaluationConfig, run_synthetic_evaluation
 from .historical_ais import HistoricalAISRequest, fetch_gfw_presence, parse_utc_datetime
 from .live_ais import AISBoundingBox, capture_aisstream
+from .ml_dataset import audit_dataset
 from .sar import load_sar_image, run_segmentation, run_synthetic_segmentation_demo
 from .sentinel_catalog import SentinelSearchRequest, discover_sentinel1
 from .sentinel_process import download_sentinel1_subset
@@ -97,6 +98,12 @@ def _parser() -> argparse.ArgumentParser:
     sar.add_argument("--observation-time", required=True)
     sar.add_argument("--bbox", type=float, nargs=4, metavar=("MIN_LON", "MIN_LAT", "MAX_LON", "MAX_LAT"))
     sar.add_argument("--analyst-approved", action="store_true")
+    ml_audit = subparsers.add_parser(
+        "ml-audit", help="validate the labelled SAR data and create leakage-safe splits"
+    )
+    ml_audit.add_argument("--root", type=Path, required=True)
+    ml_audit.add_argument("--out", type=Path, default=Path("out/ml_dataset"))
+    ml_audit.add_argument("--seed", type=int, default=26143)
     sar_discover = subparsers.add_parser(
         "sar-discover", help="discover date-matched Sentinel-1 GRD scenes"
     )
@@ -274,6 +281,10 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(json.dumps(result, indent=2))
         return 0 if result["status"] in {"PASS", "REVIEW_REQUIRED"} else 1
+    if args.command == "ml-audit":
+        result = audit_dataset(args.root, args.out, seed=args.seed)
+        print(json.dumps(result, indent=2))
+        return 0 if result["status"] == "PASS" else 1
     if args.command == "sar-discover":
         result = discover_sentinel1(
             SentinelSearchRequest(

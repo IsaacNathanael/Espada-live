@@ -8,6 +8,7 @@ validation_runs/
 .env.*
 !.env.example
 data/raw/
+data/datasets/
 data/cache/ais_live*.csv
 data/cache/ais_diagnostic*.csv
 data/cache/environment_historical.json

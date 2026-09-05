@@ -47,6 +47,10 @@ This is a verified integration milestone, not the complete SIH26143 model.
 - One-command uploaded-case chain from prepared SAR raster and bounds through segmentation, Copernicus drift, AIS validation and ranking.
 - AISStream live WebSocket adapter with geographic/MMSI filters, server-side environment-variable credentials, reconnect backoff, rolling cache, normalization and optional ranking handoff.
 - External AISStream connection verified: the documented Miami test region returned three real vessel positions for three vessels in five seconds with zero warnings.
+- Downloaded and checksum-verified the CC BY 4.0 Zenodo labelled Sentinel-1 oil-spill dataset.
+- Audited 21 valid image/mask pairs and replaced the leaking supplied splits with acquisition-date-grouped 14/3/4 train/validation/test splits.
+- Implemented and GPU-smoke-tested the 24.4-million-parameter, one-channel ResNet34 U-Net training pipeline.
+- Added weighted BCE + Dice loss, mixed precision, early stopping, checkpointing, IoU/Dice/precision/recall and a pixel confusion matrix.
 
 ## Verified manually
 
@@ -59,7 +63,7 @@ This is a verified integration milestone, not the complete SIH26143 model.
 
 - Moving-vessel line-release slick generator; the current fixture is a point release.
 - A live AIS provider with dependable west-India coverage; AISStream accepted the subscription but returned no positions for both Mumbai/JNPT and the wider 68-75 E, 15-23 N diagnostic region.
-- SNAP-calibrated real Sentinel-1 scene evaluation and trained ResNet34 U-Net segmentation.
+- Full ResNet34 U-Net training, untouched full-scene test evaluation and checkpoint integration into the real Sentinel-1 review path.
 - Spatially varying CMEMS current fields inside OpenDrift; the current adapter samples one surface cell and varies it through time.
 - Global Fishing Watch adapter.
 - Live analyst controls, downloadable investigation brief and SIH presentation.
