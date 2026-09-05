@@ -1,5 +1,14 @@
 # ESPADA release history
 
+## Unreleased — Sentinel-1 acquisition discovery
+
+- Added official Copernicus Data Space STAC discovery for Sentinel-1 GRD scenes.
+- Scene ranking verifies AOI overlap, VV availability and target-point coverage before download.
+- Added small public preview retrieval for visual triage; previews are explicitly blocked from analysis use.
+- Discovery prevents partially overlapping scenes from being mistaken for valid case coverage.
+- Added an authenticated Processing API client for a bounded, calibrated, orthorectified VV crop.
+- OAuth client credentials and short-lived access tokens are never written to project artifacts.
+
 ## v0.3.0 — Date-aligned operational inputs
 
 - Added a mandatory temporal-alignment gate for real SAR, forcing and AIS inputs.

@@ -18,6 +18,8 @@ The repository now runs an offline end-to-end validation path:
 
 This milestone includes time-varying forcing, live/cache environmental adapters, SAR segmentation, synthetic and imported AIS ranking, AISStream live collection, delayed Global Fishing Watch AIS history, evaluation, an offline dashboard, and a tested Copernicus Marine subset/normalization adapter. It does not yet include automated Sentinel-1 preprocessing or spatially varying OpenDrift readers.
 
+Sentinel-1 discovery now uses the official Copernicus Data Space STAC catalogue and checks scene overlap before any large download. Full-resolution radiometric preprocessing remains the next production step.
+
 ## Setup
 
 Use Python 3.11 or 3.12.
@@ -133,6 +135,22 @@ powershell -ExecutionPolicy Bypass -File .\scripts\analyze_slick.ps1
 This produces a normalized GeoJSON, sampled observation particles, reverse endpoints, a two-panel slick/origin graph, and a machine-readable analysis report under `out\slick`.
 
 ## Run SAR segmentation baseline
+
+Discover Sentinel-1 GRD scenes matching the current historical AIS window:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\discover_sentinel1.ps1
+```
+
+The command saves the ranked catalogue audit, scene footprints and a small preview under `out\sentinel1`. A `PARTIAL` result means the satellite footprint intersects the broad search box but does not cover the chosen target point; do not use it for attribution. The preview is only for visual triage, not scientific segmentation.
+
+After selecting a `PASS` scene, create a Copernicus Data Space OAuth client and place its client ID and secret in `.env`. Download a bounded, calibrated VV crop with:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\download_sentinel1_subset.ps1
+```
+
+The default crop is 1536 × 1400 pixels and covers the verified target area. It avoids the roughly 1.23 GB full-scene download and remains below the Processing API's 2500-pixel synchronous limit.
 
 The offline evaluated baseline simulates a speckled SAR scene, hides its truth mask during inference, detects dark anomalies, exports a slick GeoJSON, and reports pixel metrics:
 

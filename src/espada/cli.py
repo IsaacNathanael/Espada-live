@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+from datetime import datetime
 from pathlib import Path
 
 from .demo import run_demo
@@ -15,6 +16,8 @@ from .evaluation import EvaluationConfig, run_synthetic_evaluation
 from .historical_ais import HistoricalAISRequest, fetch_gfw_presence, parse_utc_datetime
 from .live_ais import AISBoundingBox, capture_aisstream
 from .sar import load_sar_image, run_segmentation, run_synthetic_segmentation_demo
+from .sentinel_catalog import SentinelSearchRequest, discover_sentinel1
+from .sentinel_process import download_sentinel1_subset
 from .slick import analyze_slick
 from .verification import VerificationConfig, run_verification
 
@@ -93,6 +96,36 @@ def _parser() -> argparse.ArgumentParser:
     sar.add_argument("--out", type=Path, default=Path("out/sar"))
     sar.add_argument("--observation-time", required=True)
     sar.add_argument("--bbox", type=float, nargs=4, metavar=("MIN_LON", "MIN_LAT", "MAX_LON", "MAX_LAT"))
+    sar_discover = subparsers.add_parser(
+        "sar-discover", help="discover date-matched Sentinel-1 GRD scenes"
+    )
+    sar_discover.add_argument(
+        "--bbox",
+        type=float,
+        nargs=4,
+        required=True,
+        metavar=("MIN_LON", "MIN_LAT", "MAX_LON", "MAX_LAT"),
+    )
+    sar_discover.add_argument("--start", required=True, help="UTC search start")
+    sar_discover.add_argument("--end", required=True, help="UTC search end")
+    sar_discover.add_argument("--target", type=float, nargs=2, metavar=("LON", "LAT"))
+    sar_discover.add_argument("--limit", type=int, default=100)
+    sar_discover.add_argument("--out", type=Path, default=Path("out/sentinel1"))
+    sar_discover.add_argument("--skip-preview", action="store_true")
+    sar_download = subparsers.add_parser(
+        "sar-download", help="download a calibrated Sentinel-1 VV crop"
+    )
+    sar_download.add_argument("--catalog", type=Path, required=True)
+    sar_download.add_argument(
+        "--bbox",
+        type=float,
+        nargs=4,
+        required=True,
+        metavar=("MIN_LON", "MIN_LAT", "MAX_LON", "MAX_LAT"),
+    )
+    sar_download.add_argument("--width", type=int, default=1536)
+    sar_download.add_argument("--height", type=int, default=1400)
+    sar_download.add_argument("--out", type=Path, default=Path("out/sentinel1_case"))
     ais = subparsers.add_parser("ais", help="normalize and quality-check an AIS CSV")
     ais.add_argument("--input", type=Path, required=True)
     ais.add_argument("--out", type=Path, default=Path("out/ais_import"))
@@ -239,6 +272,30 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(json.dumps(result, indent=2))
         return 0 if result["status"] == "PASS" else 1
+    if args.command == "sar-discover":
+        result = discover_sentinel1(
+            SentinelSearchRequest(
+                tuple(args.bbox),
+                datetime.fromisoformat(args.start.replace("Z", "+00:00")),
+                datetime.fromisoformat(args.end.replace("Z", "+00:00")),
+                tuple(args.target) if args.target else None,
+                args.limit,
+            ),
+            args.out,
+            download_preview=not args.skip_preview,
+        )
+        print(json.dumps(result, indent=2))
+        return 0 if result["status"] in {"PASS", "PARTIAL"} else 1
+    if args.command == "sar-download":
+        result = download_sentinel1_subset(
+            args.catalog,
+            args.out,
+            bbox=tuple(args.bbox),
+            width=args.width,
+            height=args.height,
+        )
+        print(json.dumps(result, indent=2))
+        return 0
     if args.command == "ais":
         result = normalize_ais_csv(args.input, args.out)
         print(json.dumps(result, indent=2))
