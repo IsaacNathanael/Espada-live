@@ -7,6 +7,8 @@ param(
     [Parameter(Mandatory = $true)][double]$MaxLongitude,
     [Parameter(Mandatory = $true)][double]$MaxLatitude,
     [double]$AgeHours = 19.0,
+    [switch]$AnalystApproved,
+    [string]$EnvironmentCache = "",
     [string]$PythonPath = ""
 )
 
@@ -27,9 +29,13 @@ if (-not $PythonPath) {
 if (-not $PythonPath -or -not (Test-Path -LiteralPath $PythonPath)) {
     throw "The Espada Python environment was not found."
 }
+$caseEnvironment = Join-Path $ProjectRoot "out\case_20260825\environment.json"
 $copernicusCache = Join-Path $ProjectRoot "data\cache\environment_copernicus.json"
-if (-not (Test-Path -LiteralPath $copernicusCache)) {
-    throw "Copernicus cache is missing. Run scripts/sync_copernicus.ps1 first."
+if (-not $EnvironmentCache) {
+    $EnvironmentCache = if (Test-Path -LiteralPath $caseEnvironment) { $caseEnvironment } else { $copernicusCache }
+}
+if (-not (Test-Path -LiteralPath $EnvironmentCache)) {
+    throw "A date-matched Copernicus environment cache is missing."
 }
 
 $CaseRoot = Join-Path $ProjectRoot "out\real_case"
@@ -40,15 +46,20 @@ $RankingOutput = Join-Path $CaseRoot "ranking"
 $env:PYTHONPATH = Join-Path $ProjectRoot "src"
 $env:MPLCONFIGDIR = Join-Path $ProjectRoot ".mpl-cache"
 
+if (-not $AnalystApproved) {
+    throw "Real SAR candidates require analyst approval. Review the segmentation, then rerun with -AnalystApproved."
+}
+
 & $PythonPath -m espada.cli sar --input $ResolvedSar --out $SarOutput `
     --observation-time $ObservationTimeUtc `
-    --bbox $MinLongitude $MinLatitude $MaxLongitude $MaxLatitude
+    --bbox $MinLongitude $MinLatitude $MaxLongitude $MaxLatitude `
+    --analyst-approved
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & $PythonPath -m espada.cli ais --input $ResolvedAis --out $AisOutput
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & $PythonPath -m espada.cli case-check `
     --slick (Join-Path $SarOutput "slick_observation.geojson") `
-    --environment-cache $copernicusCache `
+    --environment-cache $EnvironmentCache `
     --ais (Join-Path $AisOutput "ais_normalized.csv") `
     --age-hours $AgeHours `
     --out (Join-Path $CaseRoot "case_alignment.json")
@@ -58,7 +69,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 & $PythonPath -m espada.cli slick `
     --input (Join-Path $SarOutput "slick_observation.geojson") `
-    --environment-cache $copernicusCache --out $DriftOutput --age-hours $AgeHours
+    --environment-cache $EnvironmentCache --out $DriftOutput --age-hours $AgeHours
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & $PythonPath -m espada.cli rank-ais `
     --ais (Join-Path $AisOutput "ais_normalized.csv") --case $DriftOutput --out $RankingOutput

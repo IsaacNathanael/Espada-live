@@ -1,6 +1,6 @@
 # ESPADA release history
 
-## Unreleased — Sentinel-1 acquisition discovery
+## v0.4.0 — Real Sentinel-1 ingestion and review gate
 
 - Added official Copernicus Data Space STAC discovery for Sentinel-1 GRD scenes.
 - Scene ranking verifies AOI overlap, VV availability and target-point coverage before download.
@@ -8,6 +8,11 @@
 - Discovery prevents partially overlapping scenes from being mistaken for valid case coverage.
 - Added an authenticated Processing API client for a bounded, calibrated, orthorectified VV crop.
 - OAuth client credentials and short-lived access tokens are never written to project artifacts.
+- Live-verified a 1536 × 1400 calibrated VV crop from the selected Sentinel-1D scene without downloading its 1.23 GB source product.
+- Fixed big-endian float GeoTIFF decoding and no-data handling before image analysis.
+- Real detector output is now `REVIEW_REQUIRED`; only synthetic truth or explicit analyst approval can create an attribution-ready slick observation.
+- Rebuilt the selected case with 10,051 AIS positions from 499 vessels and 31 date-matched hourly environmental steps.
+- The complete engineering suite now contains 59 passing tests; the strict warning audit only reports a third-party OpenDrift/cmocean Matplotlib deprecation.
 
 ## v0.3.0 — Date-aligned operational inputs
 

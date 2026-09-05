@@ -4,6 +4,7 @@ import json
 import os
 import tempfile
 from datetime import UTC, datetime
+from io import BytesIO
 from pathlib import Path
 
 os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "espada-matplotlib"))
@@ -20,9 +21,17 @@ from shapely.geometry import MultiPoint, Polygon
 from .geo import write_polygon_geojson
 
 
-def load_sar_image(path: Path) -> np.ndarray:
-    with Image.open(path) as source:
-        image = np.asarray(source, dtype=float)
+def _repair_float_byte_order(image: np.ndarray, marker: bytes) -> np.ndarray:
+    if marker != b"MM" or image.dtype.kind != "f":
+        return image
+    swapped = image.byteswap()
+    original_reasonable = float(np.mean(np.isfinite(image) & (np.abs(image) <= 1e6)))
+    swapped_reasonable = float(np.mean(np.isfinite(swapped) & (np.abs(swapped) <= 1e6)))
+    return swapped if swapped_reasonable > original_reasonable + 0.1 else image
+
+
+def _load_sar_source(source: Image.Image, marker: bytes) -> np.ndarray:
+    image = _repair_float_byte_order(np.asarray(source), marker).astype(float, copy=True)
     if image.ndim == 3:
         image = image[..., :3].mean(axis=2)
     if image.ndim != 2 or min(image.shape) < 32:
@@ -34,18 +43,43 @@ def load_sar_image(path: Path) -> np.ndarray:
     return image
 
 
+def load_sar_image(path: Path) -> np.ndarray:
+    path = Path(path)
+    with path.open("rb") as stream:
+        marker = stream.read(2)
+    with Image.open(path) as source:
+        return _load_sar_source(source, marker)
+
+
+def load_sar_bytes(content: bytes) -> np.ndarray:
+    with Image.open(BytesIO(content)) as source:
+        return _load_sar_source(source, content[:2])
+
+
 def preprocess_sar(image: np.ndarray) -> tuple[np.ndarray, str]:
     image = np.asarray(image, dtype=float)
-    positive = image[image > 0]
+    finite = np.isfinite(image)
+    positive = image[finite & (image > 0)]
     dynamic_ratio = float(np.percentile(positive, 99) / max(np.percentile(positive, 5), 1e-12)) if positive.size else 1.0
-    if image.min() >= 0 and dynamic_ratio > 20:
+    looks_like_linear_power = bool(
+        positive.size
+        and np.nanmin(image) >= 0
+        and (dynamic_ratio > 20 or np.percentile(positive, 99) <= 10)
+    )
+    invalid = ~finite
+    if looks_like_linear_power:
+        invalid |= image <= 0
         floor = max(float(np.percentile(positive, 1)) * 0.2, 1e-12)
         working = 10.0 * np.log10(np.maximum(image, floor))
         transform = "linear intensity converted to decibels"
     else:
-        working = image
+        working = image.copy()
         transform = "input treated as decibel or display intensity"
-    low, high = np.percentile(working, [1.0, 99.0])
+    valid_working = working[~invalid]
+    if not valid_working.size:
+        raise ValueError("SAR input has no valid analysis pixels")
+    working[invalid] = float(np.median(valid_working))
+    low, high = np.percentile(valid_working, [1.0, 99.0])
     if high <= low:
         raise ValueError("SAR input has insufficient intensity variation")
     normalized = np.clip((working - low) / (high - low), 0.0, 1.0)
@@ -164,10 +198,15 @@ def run_segmentation(
     observation_time_utc: str,
     bbox: tuple[float, float, float, float] | None = None,
     truth_mask: np.ndarray | None = None,
+    analyst_approved: bool = False,
 ) -> dict[str, object]:
     mask, score, metadata = segment_dark_slick(image)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    for stale_polygon in ("slick_candidate.geojson", "slick_observation.geojson"):
+        stale_path = output_dir / stale_polygon
+        if stale_path.exists():
+            stale_path.unlink()
     display = preprocess_sar(image)[0]
     Image.fromarray(np.uint8(display * 255), mode="L").save(output_dir / "sar_input.png")
     Image.fromarray(np.uint8(mask) * 255, mode="L").save(output_dir / "slick_mask.png")
@@ -188,33 +227,54 @@ def run_segmentation(
         Image.fromarray(np.uint8(truth_mask) * 255, mode="L").save(output_dir / "truth_mask.png")
     artifacts = ["sar_input.png", "slick_mask.png", "sar_segmentation_overview.png"]
     geojson_status = "not requested; supply a WGS84 bounding box"
-    if bbox is not None:
+    review_status = "not_applicable" if truth_mask is not None else "pending"
+    if bbox is not None and mask.any():
         polygon = _mask_polygon(mask, bbox)
         confidence = float(np.mean(score[mask])) if mask.any() else 0.0
+        approved = truth_mask is not None or analyst_approved
+        polygon_name = "slick_observation.geojson" if approved else "slick_candidate.geojson"
+        review_status = "synthetic_truth" if truth_mask is not None else (
+            "analyst_approved" if analyst_approved else "pending"
+        )
         write_polygon_geojson(
-            output_dir / "slick_observation.geojson",
+            output_dir / polygon_name,
             polygon,
             {
                 "observation_time_utc": observation_time_utc,
                 "detection_confidence": confidence,
                 "source": source,
                 "segmentation_method": metadata["method"],
+                "review_status": review_status,
             },
         )
-        artifacts.append("slick_observation.geojson")
-        geojson_status = "written"
+        artifacts.append(polygon_name)
+        geojson_status = "approved observation written" if approved else "candidate written; analyst review required"
+    if not mask.any():
+        status = "NO_DETECTION"
+    elif truth_mask is not None or analyst_approved:
+        status = "PASS"
+    else:
+        status = "REVIEW_REQUIRED"
+    review_flags: list[str] = []
+    if truth_mask is None and len(metadata["components"]) > 20:
+        review_flags.append("Many disconnected dark regions were detected; sea-state lookalikes are likely.")
+    if truth_mask is None and float(mask.mean()) > 0.08:
+        review_flags.append("Detected coverage is unusually broad for one slick candidate.")
     result = {
-        "status": "PASS" if mask.any() else "NO_DETECTION",
+        "status": status,
         "source": source,
         "observation_time_utc": observation_time_utc,
         "image_shape": list(image.shape),
         "detected_pixel_fraction": float(mask.mean()),
         "segmentation": metadata,
+        "review_status": review_status,
+        "review_flags": review_flags,
         "synthetic_evaluation": evaluation,
         "geojson_status": geojson_status,
         "limitations": [
             "Dark-lookalikes such as low wind, rain cells and sensor artefacts can cause false positives.",
             "This baseline must be replaced or complemented by a held-out evaluated ResNet34 U-Net.",
+            "Real imagery never becomes an attribution input until a human approves the candidate polygon.",
             "A WGS84 bounding box is required because raster georeferencing is not inferred by this lightweight adapter.",
         ],
         "artifacts": artifacts + ["sar_result.json", "sar_model_card.json"],

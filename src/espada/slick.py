@@ -29,6 +29,7 @@ class SlickObservation:
     observation_time: pd.Timestamp
     detection_confidence: float
     source: str
+    review_status: str
 
 
 def load_slick(path: Path) -> SlickObservation:
@@ -52,11 +53,20 @@ def load_slick(path: Path) -> SlickObservation:
         raise ValueError("Slick properties must include numeric detection_confidence") from error
     if not 0.0 <= confidence <= 1.0:
         raise ValueError("Slick detection_confidence must be between 0 and 1")
+    review_status = str(
+        properties.get(
+            "review_status",
+            "synthetic_truth" if properties.get("evaluation_only") else "analyst_provided",
+        )
+    )
+    if review_status == "pending":
+        raise ValueError("Slick candidate requires analyst approval before drift attribution")
     return SlickObservation(
         polygon=polygon,
         observation_time=observation_time,
         detection_confidence=confidence,
         source=str(properties.get("source", "analyst-provided GeoJSON")),
+        review_status=review_status,
     )
 
 

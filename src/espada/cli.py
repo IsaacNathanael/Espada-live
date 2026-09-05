@@ -96,6 +96,7 @@ def _parser() -> argparse.ArgumentParser:
     sar.add_argument("--out", type=Path, default=Path("out/sar"))
     sar.add_argument("--observation-time", required=True)
     sar.add_argument("--bbox", type=float, nargs=4, metavar=("MIN_LON", "MIN_LAT", "MAX_LON", "MAX_LAT"))
+    sar.add_argument("--analyst-approved", action="store_true")
     sar_discover = subparsers.add_parser(
         "sar-discover", help="discover date-matched Sentinel-1 GRD scenes"
     )
@@ -269,9 +270,10 @@ def main(argv: list[str] | None = None) -> int:
             source=str(args.input),
             observation_time_utc=args.observation_time,
             bbox=tuple(args.bbox) if args.bbox else None,
+            analyst_approved=args.analyst_approved,
         )
         print(json.dumps(result, indent=2))
-        return 0 if result["status"] == "PASS" else 1
+        return 0 if result["status"] in {"PASS", "REVIEW_REQUIRED"} else 1
     if args.command == "sar-discover":
         result = discover_sentinel1(
             SentinelSearchRequest(

@@ -36,6 +36,12 @@ def test_slick_contract_rejects_missing_confidence(tmp_path: Path) -> None:
         load_slick(path)
 
 
+def test_slick_contract_rejects_pending_detector_candidate(tmp_path: Path) -> None:
+    path = _slick(tmp_path / "candidate.geojson", review_status="pending")
+    with pytest.raises(ValueError, match="analyst approval"):
+        load_slick(path)
+
+
 def test_slick_geojson_runs_backward_inference(tmp_path: Path) -> None:
     environment = synthetic_environment(tmp_path / "unused.json")
     records = environment.frame.copy()

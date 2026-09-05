@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import os
 from datetime import UTC, datetime, timedelta
-from io import BytesIO
 from pathlib import Path
 from typing import Callable
 from urllib.error import HTTPError
@@ -14,7 +13,7 @@ import numpy as np
 from PIL import Image
 
 from .models import format_utc
-from .sar import preprocess_sar
+from .sar import load_sar_bytes, preprocess_sar
 
 
 TOKEN_ENDPOINT = (
@@ -149,10 +148,7 @@ def _post_process(payload: dict, token: str, timeout_seconds: int = 180) -> byte
 
 
 def _quicklook(tiff_content: bytes, output_path: Path) -> tuple[int, int]:
-    with Image.open(BytesIO(tiff_content)) as source:
-        image = np.asarray(source, dtype=float)
-    if image.ndim == 3:
-        image = image[..., 0]
+    image = load_sar_bytes(tiff_content)
     display, _ = preprocess_sar(image)
     Image.fromarray(np.uint8(display * 255), mode="L").save(output_path)
     return int(image.shape[1]), int(image.shape[0])
