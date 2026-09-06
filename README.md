@@ -161,6 +161,17 @@ V5 selected epoch 33 by scene-macro validation AP. Validation-only calibration s
 
 After V5 calibration, `evaluate_sar_model.ps1` deliberately labels the old four-scene result a development replay. Those scenes informed development and are no longer an untouched test. A newly acquired, acquisition-isolated labelled set is required before publishing a new final generalization claim.
 
+V6 is now prepared as a controlled experiment rather than an automatic replacement. It warm-starts V5, uses a stronger SAR-specific augmentation profile, fine-tunes at a lower learning rate and supports four-view flip averaging during calibration and inference. Start with the isolated smoke check, then run the longer commands yourself:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\train_sar_model_v6.ps1 -Smoke
+powershell -ExecutionPolicy Bypass -File .\scripts\train_sar_model_v6.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\calibrate_sar_model.ps1 -Version v6 -Tta flip4 -BatchSize 4
+powershell -ExecutionPolicy Bypass -File .\scripts\evaluate_sar_model.ps1 -Version v6 -BatchSize 4
+```
+
+See `docs\ml_v6_plan.md` for the promotion rules and the researched pretrained-model comparison. SoftCon ResNet50 is the first optional encoder test because it is a direct Sentinel-1-compatible substitute. CROMA and TerraMind become more meaningful after the data pipeline supplies genuine VV+VH or multimodal inputs.
+
 ## Analyze a slick GeoJSON
 
 The input must contain one polygon with `observation_time_utc` and `detection_confidence` properties. The verified demo creates a representative input at `out\demo\slick_observation.geojson`.

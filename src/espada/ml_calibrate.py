@@ -23,6 +23,7 @@ def calibrate_threshold(
     output_dir: Path,
     *,
     batch_size: int = 8,
+    tta_mode: str = "none",
 ) -> dict:
     dataset_root = Path(dataset_root)
     output_dir = Path(output_dir)
@@ -62,6 +63,7 @@ def calibrate_threshold(
             stride=inference_stride,
             batch_size=batch_size,
             normalization_mode=normalization_mode,
+            tta_mode=tta_mode,
         )
         histogram.update(probability, truth)
 
@@ -78,6 +80,7 @@ def calibrate_threshold(
             {scene["acquisition_group"] for scene in validation_scenes}
         ),
         "selected_threshold": selected_threshold,
+        "test_time_augmentation": tta_mode,
         "fixed_threshold_0_5_metrics": fixed_metrics,
         "calibrated_metrics": calibrated_metrics,
         "selection_rule": "maximum oil-class IoU across thresholds 0.05 to 0.95",
@@ -100,6 +103,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--checkpoint", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--batch-size", type=int, default=8)
+    parser.add_argument("--tta", choices=("none", "flip4"), default="none")
     return parser
 
 
@@ -112,6 +116,7 @@ def main(argv: list[str] | None = None) -> int:
             args.checkpoint,
             args.out,
             batch_size=args.batch_size,
+            tta_mode=args.tta,
         )
     except Exception as exc:
         print(json.dumps({"status": "FAIL", "error": str(exc)}, indent=2), file=sys.stderr)

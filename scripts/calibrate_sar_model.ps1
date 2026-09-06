@@ -1,7 +1,9 @@
 param(
     [int]$BatchSize = 2,
-    [ValidateSet("v4", "v5")]
+    [ValidateSet("v4", "v5", "v6", "v6_softcon")]
     [string]$Version = "v5",
+    [ValidateSet("none", "flip4")]
+    [string]$Tta = "none",
     [string]$PythonPath = ""
 )
 
@@ -35,5 +37,6 @@ $env:PYTHONPATH = Join-Path $ProjectRoot "src"
     --manifest $Manifest `
     --checkpoint $Checkpoint `
     --out (Join-Path $ProjectRoot "out\ml_calibration_$Version") `
-    --batch-size $BatchSize
+    --batch-size $BatchSize `
+    --tta $Tta
 exit $LASTEXITCODE

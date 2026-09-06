@@ -58,6 +58,8 @@ class TrainingConfig:
     decoder_normalization: str = "group"
     normalization_mode: str = SCENE_CENTERED_S1_VV
     augmentation_backend: str = "albumentations"
+    augmentation_profile: str = "v5"
+    initial_checkpoint: str | None = None
 
 
 def tile_positions(length: int, patch_size: int, stride: int) -> list[int]:
@@ -70,7 +72,7 @@ def tile_positions(length: int, patch_size: int, stride: int) -> list[int]:
     return positions
 
 
-def _albumentations_pipeline(seed: int):
+def _albumentations_pipeline(seed: int, profile: str = "v5"):
     try:
         import albumentations as albumentations
     except ImportError as exc:
@@ -88,8 +90,9 @@ def _albumentations_pipeline(seed: int):
     compose_arguments: dict[str, object] = {"seed": seed}
     if "telemetry" in inspect.signature(albumentations.Compose).parameters:
         compose_arguments["telemetry"] = False
-    return albumentations.Compose(
-        [
+    if profile not in {"v5", "sar_v6"}:
+        raise ValueError(f"Unsupported augmentation profile: {profile}")
+    transforms = [
             albumentations.HorizontalFlip(p=0.5),
             albumentations.VerticalFlip(p=0.5),
             albumentations.RandomRotate90(p=0.75),
@@ -104,9 +107,52 @@ def _albumentations_pipeline(seed: int):
                 p=0.45,
             ),
             albumentations.GaussianBlur(blur_limit=(3, 5), p=0.12),
-        ],
-        **compose_arguments,
-    )
+        ]
+    if profile == "sar_v6":
+        import cv2
+
+        transforms = [
+            albumentations.D4(p=0.85),
+            albumentations.Affine(
+                scale=(0.88, 1.12),
+                translate_percent=(-0.04, 0.04),
+                rotate=(-18, 18),
+                shear=(-4, 4),
+                interpolation=cv2.INTER_LINEAR,
+                mask_interpolation=cv2.INTER_NEAREST,
+                border_mode=cv2.BORDER_REFLECT_101,
+                p=0.45,
+            ),
+            albumentations.RandomBrightnessContrast(p=0.65, **brightness_arguments),
+            albumentations.RandomGamma(gamma_limit=(78, 128), p=0.28),
+            albumentations.OneOf(
+                [
+                    albumentations.GaussNoise(std_range=(0.01, 0.065), p=1.0),
+                    albumentations.MultiplicativeNoise(
+                        multiplier=(0.82, 1.18),
+                        per_channel=False,
+                        elementwise=True,
+                        p=1.0,
+                    ),
+                ],
+                p=0.62,
+            ),
+            albumentations.OneOf(
+                [
+                    albumentations.GaussianBlur(blur_limit=(3, 7), p=1.0),
+                    albumentations.Downscale(
+                        scale_range=(0.72, 0.92),
+                        interpolation_pair={
+                            "downscale": cv2.INTER_AREA,
+                            "upscale": cv2.INTER_LINEAR,
+                        },
+                        p=1.0,
+                    ),
+                ],
+                p=0.22,
+            ),
+        ]
+    return albumentations.Compose(transforms, **compose_arguments)
 
 
 class SarPatchDataset(Dataset):
@@ -124,6 +170,7 @@ class SarPatchDataset(Dataset):
         hard_negative_fraction: float = 0.0,
         normalization_mode: str = SCENE_CENTERED_S1_VV,
         augmentation_backend: str = "torch",
+        augmentation_profile: str = "v5",
         augment: bool = False,
         return_scene_index: bool = False,
         limit: int | None = None,
@@ -134,9 +181,12 @@ class SarPatchDataset(Dataset):
         self.return_scene_index = return_scene_index
         self.normalization_mode = normalization_mode
         self.augmentation_backend = augmentation_backend
+        self.augmentation_profile = augmentation_profile
         self.albumentations_transform = None
         if augment and augmentation_backend == "albumentations":
-            self.albumentations_transform = _albumentations_pipeline(seed)
+            self.albumentations_transform = _albumentations_pipeline(
+                seed, augmentation_profile
+            )
         elif augment and augmentation_backend != "torch":
             raise ValueError(f"Unsupported augmentation backend: {augmentation_backend}")
         self._cache: dict[str, tuple[np.ndarray, np.ndarray]] = {}
@@ -410,6 +460,7 @@ def train_model(
         hard_negative_fraction=config.hard_negative_fraction,
         normalization_mode=config.normalization_mode,
         augmentation_backend=config.augmentation_backend,
+        augmentation_profile=config.augmentation_profile,
         augment=True,
         limit=max_train_patches,
     )
@@ -450,7 +501,12 @@ def train_model(
         pin_memory=device.type == "cuda",
     )
 
-    if config.pretrained_encoder and config.encoder == "resnet50" and not config.encoder_checkpoint:
+    if (
+        config.pretrained_encoder
+        and config.encoder == "resnet50"
+        and not config.encoder_checkpoint
+        and not config.initial_checkpoint
+    ):
         raise ValueError("V4 requires the downloaded SSL4EO-S12 Sentinel-1 encoder checkpoint")
     model_configuration = ModelConfig(
         architecture="ResNet50 U-Net" if config.encoder == "resnet50" else "ResNet34 U-Net",
@@ -464,9 +520,17 @@ def train_model(
     )
     model = build_segmentation_model(
         model_configuration.to_dict(),
-        pretrained_encoder=config.pretrained_encoder,
+        pretrained_encoder=config.pretrained_encoder and not config.initial_checkpoint,
         encoder_checkpoint=Path(config.encoder_checkpoint) if config.encoder_checkpoint else None,
-    ).to(device)
+    )
+    if config.initial_checkpoint:
+        initial = torch.load(config.initial_checkpoint, map_location="cpu", weights_only=True)
+        initial_config = initial.get("model_config", {})
+        for key in ("encoder", "attention_decoder", "decoder_normalization"):
+            if initial_config.get(key) != model_configuration.to_dict().get(key):
+                raise ValueError(f"Initial checkpoint has incompatible model setting: {key}")
+        model.load_state_dict(initial["model_state_dict"])
+    model = model.to(device)
     loss_function = BCEFocalTverskyLoss(positive_weight=config.positive_weight).to(device)
     encoder_parameters, decoder_parameters = encoder_and_decoder_parameters(model)
     set_encoder_trainable(model, False)
@@ -583,7 +647,10 @@ def train_model(
         "architecture": f"attention-gated {model_configuration.architecture}",
         "encoder_initialization": model_configuration.encoder_initialization,
         "normalization": normalization_metadata(config.normalization_mode),
-        "augmentation": config.augmentation_backend,
+        "augmentation": {
+            "backend": config.augmentation_backend,
+            "profile": config.augmentation_profile,
+        },
         "loss": "class-balanced BCE + false-alarm-aware focal Tversky",
         "training_strategy": {
             "encoder_freeze_epochs": config.encoder_freeze_epochs,
@@ -597,6 +664,7 @@ def train_model(
                 if config.scene_balanced_sampling
                 else "random patch sampling"
             ),
+            "initial_checkpoint": config.initial_checkpoint,
         },
         "training_patches": len(train_data),
         "validation_patches": len(validation_data),
@@ -636,6 +704,13 @@ def _parser() -> argparse.ArgumentParser:
         "--augmentation", choices=("torch", "albumentations"), default="albumentations"
     )
     parser.add_argument(
+        "--augmentation-profile", choices=("v5", "sar_v6"), default="v5"
+    )
+    parser.add_argument("--initial-checkpoint", type=Path)
+    parser.add_argument("--encoder-initialization")
+    parser.add_argument("--learning-rate", type=float, default=2e-4)
+    parser.add_argument("--patience", type=int, default=10)
+    parser.add_argument(
         "--decoder-normalization", choices=("batch", "group"), default="group"
     )
     parser.add_argument("--no-scene-balanced-sampling", action="store_true")
@@ -656,13 +731,18 @@ def main(argv: list[str] | None = None) -> int:
         scene_balanced_sampling=not args.no_scene_balanced_sampling,
         encoder=args.encoder,
         encoder_initialization=(
-            "SSL4EO-S12 MoCo Sentinel-1" if args.encoder == "resnet50" else "ImageNet"
+            args.encoder_initialization
+            or ("SSL4EO-S12 MoCo Sentinel-1" if args.encoder == "resnet50" else "ImageNet")
         ),
         encoder_checkpoint=str(args.encoder_checkpoint) if args.encoder_checkpoint else None,
         pretrained_encoder=not args.no_pretrained,
         decoder_normalization=args.decoder_normalization,
         normalization_mode=args.normalization,
         augmentation_backend=args.augmentation,
+        augmentation_profile=args.augmentation_profile,
+        initial_checkpoint=str(args.initial_checkpoint) if args.initial_checkpoint else None,
+        learning_rate=args.learning_rate,
+        patience=args.patience,
     )
     try:
         result = train_model(

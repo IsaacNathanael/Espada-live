@@ -119,6 +119,7 @@ def segment_ml_slick(
     image_db, input_transform = sar_to_decibels(image)
     patch_size = int(checkpoint.get("training_config", {}).get("patch_size", 256))
     normalization_mode = str(checkpoint.get("normalization", {}).get("mode", FIXED_MINMAX))
+    tta_mode = str(calibration.get("test_time_augmentation", "none"))
     probability = infer_full_scene(
         model,
         image_db,
@@ -127,8 +128,13 @@ def segment_ml_slick(
         stride=max(patch_size * 3 // 4, 1),
         batch_size=batch_size,
         normalization_mode=normalization_mode,
+        tta_mode=tta_mode,
     )
     threshold = float(calibration["selected_threshold"])
+    augmentation_profile = str(
+        checkpoint.get("training_config", {}).get("augmentation_profile", "v5")
+    )
+    model_generation = "V6" if augmentation_profile == "sar_v6" else "V5"
     mask = probability >= threshold
     labels, component_count = ndimage.label(mask)
     component_sizes = sorted(
@@ -139,13 +145,15 @@ def segment_ml_slick(
     if model_config.get("attention_decoder"):
         architecture = f"attention-gated {architecture}"
     metadata = {
-        "method": "calibrated V5 SAR semantic segmentation",
+        "method": f"calibrated {model_generation} SAR semantic segmentation",
         "model_type": "deep-learning binary oil-candidate segmentation",
+        "model_generation": model_generation,
         "architecture": architecture,
         "checkpoint_epoch": int(checkpoint.get("epoch", 0)),
         "checkpoint_sha256": checkpoint_digest,
         "threshold": threshold,
         "threshold_source": "validation-only IoU calibration",
+        "test_time_augmentation": tta_mode,
         "preprocessing": input_transform,
         "normalization": checkpoint.get("normalization", {}),
         "device": str(device),
@@ -370,13 +378,14 @@ def run_segmentation(
         "artifacts": artifacts + ["sar_result.json", "sar_model_card.json"],
     }
     (output_dir / "sar_result.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
+    model_generation = str(metadata.get("model_generation", "V5")) if using_ml else None
     model_card = {
         "name": (
-            "ESPADA calibrated V5 SAR segmentation"
+            f"ESPADA calibrated {model_generation} SAR segmentation"
             if using_ml
             else "Espada adaptive SAR dark-anomaly baseline"
         ),
-        "version": "0.5" if using_ml else "0.1",
+        "version": "0.6" if model_generation == "V6" else ("0.5" if using_ml else "0.1"),
         "type": metadata["model_type"],
         "intended_use": "candidate-mask generation for analyst review",
         "not_for": "autonomous pollution attribution or guilt determination",
@@ -394,8 +403,12 @@ def run_segmentation(
         "prediction_bundle": str(Path(prediction_bundle).resolve()) if prediction_bundle is not None else None,
         "evidence": (
             "V5 development replay: IoU 59.6%, Dice 74.7%, precision 68.2%, recall 82.5%"
-            if using_ml
-            else "Synthetic baseline only"
+            if model_generation == "V5"
+            else (
+                "Unpromoted V6 experiment; inspect its calibration and evaluation artifacts"
+                if model_generation == "V6"
+                else "Synthetic baseline only"
+            )
         ),
         "evidence_limit": (
             "Previously examined four-scene replay; external blind evaluation remains required"

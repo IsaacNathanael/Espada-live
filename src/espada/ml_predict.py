@@ -37,6 +37,7 @@ def predict_scene(
     image_db, input_transform = sar_to_decibels(load_sar_image(input_path))
     patch_size = int(checkpoint.get("training_config", {}).get("patch_size", 256))
     normalization_mode = str(checkpoint.get("normalization", {}).get("mode", FIXED_MINMAX))
+    tta_mode = str(calibration.get("test_time_augmentation", "none"))
     probability = infer_full_scene(
         model,
         image_db,
@@ -45,14 +46,20 @@ def predict_scene(
         stride=max(patch_size * 3 // 4, 1),
         batch_size=batch_size,
         normalization_mode=normalization_mode,
+        tta_mode=tta_mode,
     )
     threshold = float(calibration["selected_threshold"])
+    augmentation_profile = str(
+        checkpoint.get("training_config", {}).get("augmentation_profile", "v5")
+    )
+    model_generation = "V6" if augmentation_profile == "sar_v6" else "V5"
     architecture = str(model_config.get("architecture", "segmentation model"))
     if model_config.get("attention_decoder"):
         architecture = f"attention-gated {architecture}"
     metadata = {
-        "method": "calibrated V5 SAR semantic segmentation",
+        "method": f"calibrated {model_generation} SAR semantic segmentation",
         "model_type": "deep-learning binary oil-candidate segmentation",
+        "model_generation": model_generation,
         "architecture": architecture,
         "checkpoint_epoch": int(checkpoint.get("epoch", 0)),
         "checkpoint_sha256": checkpoint_digest,
@@ -60,6 +67,7 @@ def predict_scene(
         "calibration": str(calibration_path.resolve()),
         "threshold": threshold,
         "threshold_source": "validation-only IoU calibration",
+        "test_time_augmentation": tta_mode,
         "preprocessing": input_transform,
         "normalization": checkpoint.get("normalization", {}),
         "device": str(device),
@@ -84,6 +92,7 @@ def predict_scene(
         "device": str(device),
         "gpu": metadata["gpu"],
         "threshold": threshold,
+        "test_time_augmentation": tta_mode,
     }
 
 

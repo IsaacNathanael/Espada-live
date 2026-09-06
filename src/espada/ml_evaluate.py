@@ -26,7 +26,7 @@ def file_sha256(path: Path, chunk_bytes: int = 1024 * 1024) -> str:
     return digest.hexdigest()
 
 
-def infer_full_scene(
+def _infer_full_scene_once(
     model: torch.nn.Module,
     image: np.ndarray,
     device: torch.device,
@@ -67,6 +67,39 @@ def infer_full_scene(
     if not np.all(prediction_count):
         raise RuntimeError("Sliding-window inference left uncovered scene pixels")
     return probability_sum / prediction_count
+
+
+def infer_full_scene(
+    model: torch.nn.Module,
+    image: np.ndarray,
+    device: torch.device,
+    *,
+    patch_size: int = 256,
+    stride: int = 192,
+    batch_size: int = 8,
+    normalization_mode: str = FIXED_MINMAX,
+    tta_mode: str = "none",
+) -> np.ndarray:
+    """Infer one scene, optionally averaging orientation-preserving SAR views."""
+    if tta_mode not in {"none", "flip4"}:
+        raise ValueError(f"Unsupported test-time augmentation mode: {tta_mode}")
+    axes_options: list[tuple[int, ...]] = [()]
+    if tta_mode == "flip4":
+        axes_options.extend([(0,), (1,), (0, 1)])
+    predictions = []
+    for axes in axes_options:
+        transformed = np.flip(image, axis=axes).copy() if axes else image
+        probability = _infer_full_scene_once(
+            model,
+            transformed,
+            device,
+            patch_size=patch_size,
+            stride=stride,
+            batch_size=batch_size,
+            normalization_mode=normalization_mode,
+        )
+        predictions.append(np.flip(probability, axis=axes) if axes else probability)
+    return np.mean(predictions, axis=0, dtype=np.float32)
 
 
 def _save_overlay(
@@ -137,6 +170,7 @@ def evaluate_checkpoint(
     if calibration.get("checkpoint_sha256") != checkpoint_digest:
         raise ValueError("Threshold calibration was produced for a different model checkpoint")
     threshold = float(calibration["selected_threshold"])
+    tta_mode = str(calibration.get("test_time_augmentation", "none"))
     aggregate = {name: 0 for name in ("true_positive", "true_negative", "false_positive", "false_negative")}
     histogram = ProbabilityHistogram()
     scene_metrics = []
@@ -154,6 +188,7 @@ def evaluate_checkpoint(
             stride=inference_stride,
             batch_size=batch_size,
             normalization_mode=normalization_mode,
+            tta_mode=tta_mode,
         )
         confusion = confusion_from_arrays(probability, truth, threshold)
         for name, value in confusion.items():
@@ -187,6 +222,7 @@ def evaluate_checkpoint(
         "checkpoint_epoch": int(checkpoint["epoch"]),
         "threshold": threshold,
         "threshold_source": "validation-only IoU calibration",
+        "test_time_augmentation": tta_mode,
         "device": str(device),
         "gpu": torch.cuda.get_device_name(0) if device.type == "cuda" else None,
         "test_scenes": len(test_scenes),

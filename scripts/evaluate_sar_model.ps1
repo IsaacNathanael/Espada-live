@@ -1,6 +1,6 @@
 param(
     [int]$BatchSize = 2,
-    [ValidateSet("v4", "v5")]
+    [ValidateSet("v4", "v5", "v6", "v6_softcon")]
     [string]$Version = "v5",
     [string]$PythonPath = ""
 )
