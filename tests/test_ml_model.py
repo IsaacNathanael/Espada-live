@@ -6,7 +6,13 @@ try:
 except (ImportError, OSError) as error:
     pytest.skip(f"optional PyTorch environment is unavailable: {error}", allow_module_level=True)
 
-from espada.ml_model import BCEDiceLoss, BinaryConfusion, ResNet34UNet
+from espada.ml_model import (
+    BCEDiceLoss,
+    BCEFocalTverskyLoss,
+    BinaryConfusion,
+    ResNet34UNet,
+    ResNet50UNet,
+)
 
 
 def test_resnet34_unet_preserves_spatial_shape() -> None:
@@ -30,3 +36,11 @@ def test_binary_metrics_use_oil_as_positive_class() -> None:
     }
     assert metrics["iou"] == pytest.approx(1 / 3)
     assert BCEDiceLoss()(logits, target).item() > 0
+    assert BCEFocalTverskyLoss()(logits, target).item() > 0
+
+
+def test_resnet50_unet_preserves_spatial_shape() -> None:
+    model = ResNet50UNet(attention_decoder=True).eval()
+    with torch.no_grad():
+        output = model(torch.zeros((1, 1, 64, 64)))
+    assert output.shape == (1, 1, 64, 64)

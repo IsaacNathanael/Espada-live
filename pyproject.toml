@@ -24,6 +24,7 @@ dependencies = [
 dev = ["pytest>=8.0"]
 copernicus = ["copernicusmarine>=2.0,<3"]
 realtime = ["websockets>=14,<16"]
+ml = ["albumentations==2.0.8"]
 
 [project.scripts]
 espada = "espada.cli:main"

@@ -142,10 +142,20 @@ powershell -ExecutionPolicy Bypass -File .\scripts\train_sar_model.ps1 -Smoke
 The smoke run is not an accuracy claim. Full GPU training uses the complete group-safe train/validation data, saves the best threshold-independent validation-average-precision checkpoint, and reserves the test scenes for later full-scene evaluation:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\train_sar_model.ps1 -Epochs 40 -BatchSize 4
+powershell -ExecutionPolicy Bypass -File .\scripts\train_sar_model.ps1 -Epochs 40 -BatchSize 2
 ```
 
 V3 used an attention-gated ResNet34 U-Net and achieved 48.5% validation IoU, 65.3% validation Dice and 72.9% validation average precision after threshold calibration. Its one-time acquisition-group-isolated full-scene test achieved 29.3% IoU, 45.4% Dice, 32.6% precision and 74.6% recall. Two test scenes generalized well while two scenes from 2020-02-24 exposed strong brightness/domain shift, false alarms on dark lookalikes and missed small slicks. The 96.2% pixel accuracy is background-dominated and is not used as the headline result. These numbers are retained as the honest V3 baseline; any V4 changes informed by these scenes require a new external untouched test set for a final claim.
+
+V4 addresses those failures without claiming a guaranteed score. It uses scene-relative SAR normalization, stronger mask-synchronized Albumentations, more hard dark-background patches, a false-alarm-aware focal Tversky loss, and a ResNet50 encoder self-supervised on global Sentinel-1 imagery by SSL4EO-S12. ESPADA pins the legacy MIT-licensed Albumentations 2.0.8 release. The official encoder weights are CC BY 4.0 and supplied through TorchGeo; they are adapted from dual-polarization input to the archive's VV-only imagery. Prepare the V4 dependency and resumable 94.3 MB encoder download with:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\setup_ml_v4.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\download_sar_encoder.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\train_sar_model.ps1 -Smoke
+```
+
+After V4 calibration, `evaluate_sar_model.ps1` deliberately labels the old four-scene result a development replay. Those scenes informed V4 and are no longer an untouched test. A newly acquired, acquisition-isolated labelled set is required before publishing a new final generalization claim.
 
 ## Analyze a slick GeoJSON
 

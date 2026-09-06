@@ -12,7 +12,8 @@ from PIL import Image
 
 from .ml_evaluate import file_sha256, infer_full_scene
 from .ml_metrics import ProbabilityHistogram
-from .ml_model import ResNet34UNet
+from .ml_model import build_segmentation_model
+from .ml_preprocess import FIXED_MINMAX
 
 
 def calibrate_threshold(
@@ -35,14 +36,14 @@ def calibrate_threshold(
 
     checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = ResNet34UNet(
-        pretrained_encoder=False,
-        attention_decoder=bool(checkpoint.get("model_config", {}).get("attention_decoder", False)),
+    model = build_segmentation_model(
+        checkpoint.get("model_config", {}), pretrained_encoder=False
     ).to(device)
     model.load_state_dict(checkpoint["model_state_dict"])
     model.eval()
     inference_patch_size = int(checkpoint.get("training_config", {}).get("patch_size", 256))
     inference_stride = max(inference_patch_size * 3 // 4, 1)
+    normalization_mode = str(checkpoint.get("normalization", {}).get("mode", FIXED_MINMAX))
     histogram = ProbabilityHistogram(bins=1000)
     for index, scene in enumerate(validation_scenes, start=1):
         print(
@@ -60,6 +61,7 @@ def calibrate_threshold(
             patch_size=inference_patch_size,
             stride=inference_stride,
             batch_size=batch_size,
+            normalization_mode=normalization_mode,
         )
         histogram.update(probability, truth)
 

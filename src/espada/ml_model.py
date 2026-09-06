@@ -1,16 +1,20 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import Mapping
 
 import torch
 from torch import nn
 from torch.nn import functional as functional
-from torchvision.models import ResNet34_Weights, resnet34
+from torchvision.models import ResNet34_Weights, resnet34, resnet50
 
 
 @dataclass(frozen=True)
 class ModelConfig:
     architecture: str = "ResNet34 U-Net"
+    encoder: str = "resnet34"
+    encoder_initialization: str = "ImageNet"
     input_channels: int = 1
     output_classes: int = 1
     input_min_db: float = -35.0
@@ -125,6 +129,127 @@ class ResNet34UNet(nn.Module):
         return logits
 
 
+def _load_encoder_state(path: Path) -> dict[str, torch.Tensor]:
+    loaded = torch.load(path, map_location="cpu", weights_only=True)
+    if not isinstance(loaded, Mapping):
+        raise ValueError("SAR encoder checkpoint is not a state dictionary")
+    for container_key in ("state_dict", "model_state_dict", "model"):
+        candidate = loaded.get(container_key)
+        if isinstance(candidate, Mapping):
+            loaded = candidate
+            break
+    state: dict[str, torch.Tensor] = {}
+    for original_key, value in loaded.items():
+        if not isinstance(value, torch.Tensor):
+            continue
+        key = str(original_key)
+        for prefix in ("module.encoder_q.", "encoder_q.", "module.backbone.", "backbone.", "module."):
+            if key.startswith(prefix):
+                key = key[len(prefix) :]
+                break
+        if key.startswith("fc.") or key.startswith("head."):
+            continue
+        state[key] = value
+    if "conv1.weight" not in state:
+        raise ValueError("SAR encoder checkpoint has no compatible conv1.weight")
+    convolution = state["conv1.weight"]
+    if convolution.ndim != 4:
+        raise ValueError("SAR encoder conv1.weight has an invalid shape")
+    if convolution.shape[1] == 2:
+        # SSL4EO-S12 is ordered VV, VH. The labelled oil archive contains VV only.
+        state["conv1.weight"] = convolution[:, :1].contiguous()
+    elif convolution.shape[1] != 1:
+        state["conv1.weight"] = convolution.mean(dim=1, keepdim=True)
+    return state
+
+
+class ResNet50UNet(nn.Module):
+    """Attention U-Net using a Sentinel-1-pretrainable ResNet50 encoder."""
+
+    def __init__(
+        self,
+        *,
+        encoder_checkpoint: Path | None = None,
+        attention_decoder: bool = True,
+    ) -> None:
+        super().__init__()
+        encoder = resnet50(weights=None)
+        encoder.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        self.encoder_initialization_report = {"source": "random", "loaded_keys": 0}
+        if encoder_checkpoint is not None:
+            state = _load_encoder_state(Path(encoder_checkpoint))
+            incompatible = encoder.load_state_dict(state, strict=False)
+            unexpected = [key for key in incompatible.unexpected_keys if not key.startswith("fc.")]
+            missing = [key for key in incompatible.missing_keys if not key.startswith("fc.")]
+            if unexpected or missing:
+                raise ValueError(
+                    "SAR encoder weights are incompatible: "
+                    f"missing={missing[:5]}, unexpected={unexpected[:5]}"
+                )
+            self.encoder_initialization_report = {
+                "source": "SSL4EO-S12 MoCo Sentinel-1 VV channel",
+                "loaded_keys": len(state),
+                "checkpoint": str(Path(encoder_checkpoint).resolve()),
+            }
+
+        self.stem = nn.Sequential(encoder.conv1, encoder.bn1, encoder.relu)
+        self.pool = encoder.maxpool
+        self.encoder1 = encoder.layer1
+        self.encoder2 = encoder.layer2
+        self.encoder3 = encoder.layer3
+        self.encoder4 = encoder.layer4
+        self.decoder4 = DecoderBlock(2048, 1024, 512, attention=attention_decoder)
+        self.decoder3 = DecoderBlock(512, 512, 256, attention=attention_decoder)
+        self.decoder2 = DecoderBlock(256, 256, 128, attention=attention_decoder)
+        self.decoder1 = DecoderBlock(128, 64, 64, attention=attention_decoder)
+        self.final = nn.Sequential(
+            nn.ConvTranspose2d(64, 32, kernel_size=2, stride=2),
+            nn.Conv2d(32, 32, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(32, 1, kernel_size=1),
+        )
+
+    def forward(self, image: torch.Tensor) -> torch.Tensor:
+        stem = self.stem(image)
+        encoder1 = self.encoder1(self.pool(stem))
+        encoder2 = self.encoder2(encoder1)
+        encoder3 = self.encoder3(encoder2)
+        encoder4 = self.encoder4(encoder3)
+        decoded = self.decoder4(encoder4, encoder3)
+        decoded = self.decoder3(decoded, encoder2)
+        decoded = self.decoder2(decoded, encoder1)
+        decoded = self.decoder1(decoded, stem)
+        logits = self.final(decoded)
+        if logits.shape[-2:] != image.shape[-2:]:
+            logits = functional.interpolate(
+                logits, size=image.shape[-2:], mode="bilinear", align_corners=False
+            )
+        return logits
+
+
+def build_segmentation_model(
+    model_config: Mapping[str, object] | None = None,
+    *,
+    pretrained_encoder: bool = False,
+    encoder_checkpoint: Path | None = None,
+) -> nn.Module:
+    config = dict(model_config or {})
+    encoder = str(config.get("encoder", "resnet34")).lower()
+    attention = bool(config.get("attention_decoder", False))
+    if encoder == "resnet50":
+        return ResNet50UNet(
+            encoder_checkpoint=encoder_checkpoint if pretrained_encoder else None,
+            attention_decoder=attention,
+        )
+    if encoder != "resnet34":
+        raise ValueError(f"Unsupported encoder: {encoder}")
+    return ResNet34UNet(
+        pretrained_encoder=pretrained_encoder,
+        attention_decoder=attention,
+    )
+
+
 class BCEDiceLoss(nn.Module):
     def __init__(self, *, positive_weight: float = 4.0, dice_weight: float = 0.5) -> None:
         super().__init__()
@@ -141,6 +266,47 @@ class BCEDiceLoss(nn.Module):
         denominator = probability.sum(dim=dimensions) + target.sum(dim=dimensions)
         dice_loss = 1.0 - ((2.0 * intersection + 1.0) / (denominator + 1.0)).mean()
         return (1.0 - self.dice_weight) * binary_cross_entropy + self.dice_weight * dice_loss
+
+
+class BCEFocalTverskyLoss(nn.Module):
+    """Class-balanced BCE plus a false-alarm-aware focal Tversky term."""
+
+    def __init__(
+        self,
+        *,
+        positive_weight: float = 2.5,
+        false_positive_weight: float = 0.6,
+        false_negative_weight: float = 0.4,
+        gamma: float = 0.75,
+        tversky_weight: float = 0.55,
+    ) -> None:
+        super().__init__()
+        self.register_buffer("positive_weight", torch.tensor([positive_weight]))
+        self.false_positive_weight = false_positive_weight
+        self.false_negative_weight = false_negative_weight
+        self.gamma = gamma
+        self.tversky_weight = tversky_weight
+
+    def forward(self, logits: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        binary_cross_entropy = functional.binary_cross_entropy_with_logits(
+            logits, target, pos_weight=self.positive_weight
+        )
+        probability = torch.sigmoid(logits)
+        dimensions = tuple(range(1, probability.ndim))
+        true_positive = (probability * target).sum(dim=dimensions)
+        false_positive = (probability * (1.0 - target)).sum(dim=dimensions)
+        false_negative = ((1.0 - probability) * target).sum(dim=dimensions)
+        tversky = (true_positive + 1.0) / (
+            true_positive
+            + self.false_positive_weight * false_positive
+            + self.false_negative_weight * false_negative
+            + 1.0
+        )
+        focal_tversky = torch.pow(1.0 - tversky, self.gamma).mean()
+        return (
+            (1.0 - self.tversky_weight) * binary_cross_entropy
+            + self.tversky_weight * focal_tversky
+        )
 
 
 @dataclass

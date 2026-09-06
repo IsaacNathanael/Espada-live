@@ -1,5 +1,5 @@
 param(
-    [int]$BatchSize = 4,
+    [int]$BatchSize = 2,
     [string]$PythonPath = ""
 )
 
@@ -20,8 +20,8 @@ if (-not $PythonPath -or -not (Test-Path -LiteralPath $PythonPath)) {
 
 $DatasetRoot = Join-Path $ProjectRoot "data\datasets\oil_spill_zenodo_4672426\extracted"
 $Manifest = Join-Path $ProjectRoot "out\ml_dataset\scene_manifest.csv"
-$Checkpoint = Join-Path $ProjectRoot "out\ml_training_v3\resnet34_unet_best.pt"
-$Calibration = Join-Path $ProjectRoot "out\ml_calibration_v3\threshold_calibration.json"
+$Checkpoint = Join-Path $ProjectRoot "out\ml_training_v4\sar_segmentation_best.pt"
+$Calibration = Join-Path $ProjectRoot "out\ml_calibration_v4\threshold_calibration.json"
 foreach ($RequiredPath in @($DatasetRoot, $Manifest, $Checkpoint, $Calibration)) {
     if (-not (Test-Path -LiteralPath $RequiredPath)) {
         throw "Required evaluation input not found: $RequiredPath"
@@ -34,6 +34,7 @@ $env:PYTHONPATH = Join-Path $ProjectRoot "src"
     --manifest $Manifest `
     --checkpoint $Checkpoint `
     --calibration $Calibration `
-    --out (Join-Path $ProjectRoot "out\ml_test") `
-    --batch-size $BatchSize
+    --out (Join-Path $ProjectRoot "out\ml_test_v4_development_replay") `
+    --batch-size $BatchSize `
+    --development-replay
 exit $LASTEXITCODE

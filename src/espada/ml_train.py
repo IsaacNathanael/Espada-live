@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import inspect
 import json
 import random
 import sys
@@ -14,26 +15,44 @@ from PIL import Image
 from torch.utils.data import DataLoader, Dataset
 
 from .ml_metrics import ProbabilityHistogram
-from .ml_model import BCEDiceLoss, BinaryConfusion, ModelConfig, ResNet34UNet
+from .ml_model import (
+    BCEFocalTverskyLoss,
+    BinaryConfusion,
+    ModelConfig,
+    build_segmentation_model,
+)
+from .ml_preprocess import (
+    SCENE_CENTERED_S1_VV,
+    db_to_unit,
+    model_input_from_db,
+    normalization_metadata,
+    prepare_scene_db,
+    unit_to_db,
+)
 
 
 @dataclass(frozen=True)
 class TrainingConfig:
     seed: int = 26143
     epochs: int = 40
-    batch_size: int = 4
-    patch_size: int = 384
-    training_stride: int = 256
-    validation_stride: int = 384
-    learning_rate: float = 3e-4
+    batch_size: int = 2
+    patch_size: int = 320
+    training_stride: int = 192
+    validation_stride: int = 240
+    learning_rate: float = 2e-4
     weight_decay: float = 1e-4
-    positive_weight: float = 4.0
-    negative_patch_ratio: float = 3.0
-    hard_negative_fraction: float = 0.65
+    positive_weight: float = 2.5
+    negative_patch_ratio: float = 4.0
+    hard_negative_fraction: float = 0.75
     minimum_oil_pixels: int = 64
     patience: int = 10
+    encoder: str = "resnet50"
+    encoder_initialization: str = "SSL4EO-S12 MoCo Sentinel-1"
+    encoder_checkpoint: str | None = None
     pretrained_encoder: bool = True
     attention_decoder: bool = True
+    normalization_mode: str = SCENE_CENTERED_S1_VV
+    augmentation_backend: str = "albumentations"
 
 
 def tile_positions(length: int, patch_size: int, stride: int) -> list[int]:
@@ -44,6 +63,45 @@ def tile_positions(length: int, patch_size: int, stride: int) -> list[int]:
     if positions[-1] != final:
         positions.append(final)
     return positions
+
+
+def _albumentations_pipeline(seed: int):
+    try:
+        import albumentations as albumentations
+    except ImportError as exc:
+        raise RuntimeError(
+            "Albumentations is required for V4. Run scripts/setup_ml_v4.ps1 first."
+        ) from exc
+    brightness_parameters = inspect.signature(
+        albumentations.RandomBrightnessContrast
+    ).parameters
+    brightness_arguments = (
+        {"brightness_range": (-0.12, 0.12), "contrast_range": (-0.18, 0.18)}
+        if "brightness_range" in brightness_parameters
+        else {"brightness_limit": 0.12, "contrast_limit": 0.18}
+    )
+    compose_arguments: dict[str, object] = {"seed": seed}
+    if "telemetry" in inspect.signature(albumentations.Compose).parameters:
+        compose_arguments["telemetry"] = False
+    return albumentations.Compose(
+        [
+            albumentations.HorizontalFlip(p=0.5),
+            albumentations.VerticalFlip(p=0.5),
+            albumentations.RandomRotate90(p=0.75),
+            albumentations.RandomBrightnessContrast(p=0.55, **brightness_arguments),
+            albumentations.OneOf(
+                [
+                    albumentations.GaussNoise(std_range=(0.01, 0.05), p=1.0),
+                    albumentations.MultiplicativeNoise(
+                        multiplier=(0.9, 1.1), per_channel=False, elementwise=True, p=1.0
+                    ),
+                ],
+                p=0.45,
+            ),
+            albumentations.GaussianBlur(blur_limit=(3, 5), p=0.12),
+        ],
+        **compose_arguments,
+    )
 
 
 class SarPatchDataset(Dataset):
@@ -59,12 +117,21 @@ class SarPatchDataset(Dataset):
         minimum_oil_pixels: int = 64,
         negative_patch_ratio: float = 2.0,
         hard_negative_fraction: float = 0.0,
+        normalization_mode: str = SCENE_CENTERED_S1_VV,
+        augmentation_backend: str = "torch",
         augment: bool = False,
         limit: int | None = None,
     ) -> None:
         self.dataset_root = Path(dataset_root)
         self.patch_size = patch_size
         self.augment = augment
+        self.normalization_mode = normalization_mode
+        self.augmentation_backend = augmentation_backend
+        self.albumentations_transform = None
+        if augment and augmentation_backend == "albumentations":
+            self.albumentations_transform = _albumentations_pipeline(seed)
+        elif augment and augmentation_backend != "torch":
+            raise ValueError(f"Unsupported augmentation backend: {augmentation_backend}")
         self._cache: dict[str, tuple[np.ndarray, np.ndarray]] = {}
         with Path(manifest_path).open("r", encoding="utf-8-sig", newline="") as stream:
             self.scenes = [row for row in csv.DictReader(stream) if row["split"] == split]
@@ -80,7 +147,9 @@ class SarPatchDataset(Dataset):
             image = None
             if split == "train" and hard_negative_fraction:
                 with Image.open(self.dataset_root / scene["image_path"]) as image_file:
-                    image = np.asarray(image_file, dtype=np.float32).copy()
+                    image = prepare_scene_db(
+                        np.asarray(image_file, dtype=np.float32), self.normalization_mode
+                    )
             for y in tile_positions(mask.shape[0], patch_size, stride):
                 for x in tile_positions(mask.shape[1], patch_size, stride):
                     item = (scene_index, x, y)
@@ -124,7 +193,9 @@ class SarPatchDataset(Dataset):
         scene_id = scene["scene_id"]
         if scene_id not in self._cache:
             with Image.open(self.dataset_root / scene["image_path"]) as image_file:
-                image = np.asarray(image_file, dtype=np.float32).copy()
+                image = prepare_scene_db(
+                    np.asarray(image_file, dtype=np.float32), self.normalization_mode
+                )
             with Image.open(self.dataset_root / scene["mask_path"]) as mask_file:
                 mask = np.asarray(mask_file, dtype=np.float32).copy()
             self._cache[scene_id] = image, mask
@@ -136,26 +207,40 @@ class SarPatchDataset(Dataset):
         size = self.patch_size
         image_patch = image[y : y + size, x : x + size].copy()
         mask_patch = mask[y : y + size, x : x + size].copy()
-        image_patch = np.clip((image_patch + 35.0) / 40.0, 0.0, 1.0)
-        image_tensor = torch.from_numpy(image_patch).unsqueeze(0)
-        mask_tensor = torch.from_numpy(mask_patch).unsqueeze(0)
-        if self.augment:
+        if self.albumentations_transform is not None:
+            augmented = self.albumentations_transform(
+                image=db_to_unit(image_patch)[..., None], mask=mask_patch
+            )
+            augmented_image = np.asarray(augmented["image"])
+            if augmented_image.ndim == 3:
+                augmented_image = augmented_image[..., 0]
+            image_patch = unit_to_db(augmented_image)
+            mask_patch = np.asarray(augmented["mask"], dtype=np.float32)
+        if self.augment and self.augmentation_backend == "torch":
+            unit_tensor = torch.from_numpy(db_to_unit(image_patch)).unsqueeze(0)
+            mask_tensor = torch.from_numpy(mask_patch).unsqueeze(0)
             if torch.rand(()) < 0.5:
-                image_tensor = torch.flip(image_tensor, dims=(-1,))
+                unit_tensor = torch.flip(unit_tensor, dims=(-1,))
                 mask_tensor = torch.flip(mask_tensor, dims=(-1,))
             if torch.rand(()) < 0.5:
-                image_tensor = torch.flip(image_tensor, dims=(-2,))
+                unit_tensor = torch.flip(unit_tensor, dims=(-2,))
                 mask_tensor = torch.flip(mask_tensor, dims=(-2,))
             rotations = int(torch.randint(0, 4, ()).item())
-            image_tensor = torch.rot90(image_tensor, rotations, dims=(-2, -1))
+            unit_tensor = torch.rot90(unit_tensor, rotations, dims=(-2, -1))
             mask_tensor = torch.rot90(mask_tensor, rotations, dims=(-2, -1))
             gain = 0.9 + 0.2 * torch.rand(())
             offset = -0.05 + 0.1 * torch.rand(())
-            image_tensor = torch.clamp(image_tensor * gain + offset, 0.0, 1.0)
+            unit_tensor = torch.clamp(unit_tensor * gain + offset, 0.0, 1.0)
             if torch.rand(()) < 0.35:
-                image_tensor = torch.clamp(
-                    image_tensor + 0.015 * torch.randn_like(image_tensor), 0.0, 1.0
+                unit_tensor = torch.clamp(
+                    unit_tensor + 0.015 * torch.randn_like(unit_tensor), 0.0, 1.0
                 )
+            image_patch = unit_to_db(unit_tensor.squeeze(0).numpy())
+            mask_patch = mask_tensor.squeeze(0).numpy()
+        image_tensor = torch.from_numpy(
+            model_input_from_db(image_patch, self.normalization_mode)
+        ).unsqueeze(0)
+        mask_tensor = torch.from_numpy(mask_patch).unsqueeze(0)
         return image_tensor.contiguous(), mask_tensor.contiguous()
 
 
@@ -234,6 +319,8 @@ def train_model(
         minimum_oil_pixels=config.minimum_oil_pixels,
         negative_patch_ratio=config.negative_patch_ratio,
         hard_negative_fraction=config.hard_negative_fraction,
+        normalization_mode=config.normalization_mode,
+        augmentation_backend=config.augmentation_backend,
         augment=True,
         limit=max_train_patches,
     )
@@ -244,6 +331,7 @@ def train_model(
         patch_size=config.patch_size,
         stride=config.validation_stride,
         seed=config.seed,
+        normalization_mode=config.normalization_mode,
         augment=False,
         limit=max_validation_patches,
     )
@@ -262,11 +350,23 @@ def train_model(
         pin_memory=device.type == "cuda",
     )
 
-    model = ResNet34UNet(
+    if config.pretrained_encoder and config.encoder == "resnet50" and not config.encoder_checkpoint:
+        raise ValueError("V4 requires the downloaded SSL4EO-S12 Sentinel-1 encoder checkpoint")
+    model_configuration = ModelConfig(
+        architecture="ResNet50 U-Net" if config.encoder == "resnet50" else "ResNet34 U-Net",
+        encoder=config.encoder,
+        encoder_initialization=(
+            config.encoder_initialization if config.pretrained_encoder else "random"
+        ),
         pretrained_encoder=config.pretrained_encoder,
         attention_decoder=config.attention_decoder,
+    )
+    model = build_segmentation_model(
+        model_configuration.to_dict(),
+        pretrained_encoder=config.pretrained_encoder,
+        encoder_checkpoint=Path(config.encoder_checkpoint) if config.encoder_checkpoint else None,
     ).to(device)
-    loss_function = BCEDiceLoss(positive_weight=config.positive_weight).to(device)
+    loss_function = BCEFocalTverskyLoss(positive_weight=config.positive_weight).to(device)
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay
     )
@@ -277,7 +377,7 @@ def train_model(
     history: list[dict] = []
     best_average_precision = -1.0
     stale_epochs = 0
-    checkpoint_path = output_dir / "resnet34_unet_best.pt"
+    checkpoint_path = output_dir / "sar_segmentation_best.pt"
 
     for epoch in range(1, config.epochs + 1):
         _, training_metrics = _run_epoch(
@@ -316,16 +416,13 @@ def train_model(
                 {
                     "format_version": 1,
                     "model_state_dict": model.state_dict(),
-                    "model_config": ModelConfig(
-                        pretrained_encoder=config.pretrained_encoder,
-                        attention_decoder=config.attention_decoder,
-                    ).to_dict(),
+                    "model_config": model_configuration.to_dict(),
                     "training_config": asdict(config),
                     "epoch": epoch,
                     "threshold": 0.5,
                     "validation_metrics": validation_metrics,
                     "selection_metric": "validation_average_precision",
-                    "normalization": {"clip_min_db": -35.0, "clip_max_db": 5.0},
+                    "normalization": normalization_metadata(config.normalization_mode),
                     "dataset_doi": "10.5281/zenodo.4672426",
                 },
                 checkpoint_path,
@@ -346,7 +443,11 @@ def train_model(
         "run_type": "smoke" if max_train_patches else "full_training",
         "device": str(device),
         "gpu": torch.cuda.get_device_name(0) if device.type == "cuda" else None,
-        "architecture": "attention-gated ResNet34 U-Net",
+        "architecture": f"attention-gated {model_configuration.architecture}",
+        "encoder_initialization": model_configuration.encoder_initialization,
+        "normalization": normalization_metadata(config.normalization_mode),
+        "augmentation": config.augmentation_backend,
+        "loss": "class-balanced BCE + false-alarm-aware focal Tversky",
         "training_patches": len(train_data),
         "validation_patches": len(validation_data),
         "epochs_completed": len(history),
@@ -364,12 +465,21 @@ def train_model(
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Train ESPADA's ResNet34 U-Net")
+    parser = argparse.ArgumentParser(description="Train ESPADA's SAR segmentation model")
     parser.add_argument("--dataset-root", type=Path, required=True)
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--epochs", type=int, default=40)
-    parser.add_argument("--batch-size", type=int, default=4)
+    parser.add_argument("--batch-size", type=int, default=2)
+    parser.add_argument("--encoder", choices=("resnet34", "resnet50"), default="resnet50")
+    parser.add_argument("--encoder-checkpoint", type=Path)
+    parser.add_argument(
+        "--normalization", choices=("fixed_minmax", "scene_centered_s1_vv"),
+        default="scene_centered_s1_vv",
+    )
+    parser.add_argument(
+        "--augmentation", choices=("torch", "albumentations"), default="albumentations"
+    )
     parser.add_argument("--no-pretrained", action="store_true")
     parser.add_argument("--max-train-patches", type=int)
     parser.add_argument("--max-validation-patches", type=int)
@@ -381,7 +491,14 @@ def main(argv: list[str] | None = None) -> int:
     config = TrainingConfig(
         epochs=args.epochs,
         batch_size=args.batch_size,
+        encoder=args.encoder,
+        encoder_initialization=(
+            "SSL4EO-S12 MoCo Sentinel-1" if args.encoder == "resnet50" else "ImageNet"
+        ),
+        encoder_checkpoint=str(args.encoder_checkpoint) if args.encoder_checkpoint else None,
         pretrained_encoder=not args.no_pretrained,
+        normalization_mode=args.normalization,
+        augmentation_backend=args.augmentation,
     )
     try:
         result = train_model(
