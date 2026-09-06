@@ -354,6 +354,7 @@ def run_segmentation(
         review_flags.append("Many disconnected dark regions were detected; sea-state lookalikes are likely.")
     if truth_mask is None and float(mask.mean()) > 0.08:
         review_flags.append("Detected coverage is unusually broad for one slick candidate.")
+    model_generation = str(metadata.get("model_generation", "V5")) if using_ml else None
     result = {
         "status": status,
         "source": source,
@@ -368,7 +369,7 @@ def run_segmentation(
         "limitations": [
             "Dark-lookalikes such as low wind, rain cells and sensor artefacts can cause false positives.",
             (
-                "V5 has development-replay evidence but still requires an external blind test."
+                f"{model_generation} has development-replay evidence but still requires an external blind test."
                 if using_ml
                 else "The classical fallback is not the evaluated V5 neural model."
             ),
@@ -378,7 +379,6 @@ def run_segmentation(
         "artifacts": artifacts + ["sar_result.json", "sar_model_card.json"],
     }
     (output_dir / "sar_result.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
-    model_generation = str(metadata.get("model_generation", "V5")) if using_ml else None
     model_card = {
         "name": (
             f"ESPADA calibrated {model_generation} SAR segmentation"
@@ -405,7 +405,7 @@ def run_segmentation(
             "V5 development replay: IoU 59.6%, Dice 74.7%, precision 68.2%, recall 82.5%"
             if model_generation == "V5"
             else (
-                "Unpromoted V6 experiment; inspect its calibration and evaluation artifacts"
+                "V6 development replay: IoU 61.3%, Dice 76.0%, precision 71.7%, recall 80.9%, AP 77.4%"
                 if model_generation == "V6"
                 else "Synthetic baseline only"
             )

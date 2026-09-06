@@ -16,7 +16,7 @@ The repository now runs an offline end-to-end validation path:
 8. Open the hidden answer key only after ranking and save a machine-readable PASS/FAIL report.
 9. Export the observed slick as the production GeoJSON contract and independently reconstruct its probable release zone.
 
-This milestone includes time-varying forcing, live/cache environmental adapters, calibrated V5 SAR segmentation, synthetic and imported AIS ranking, AISStream live collection, delayed Global Fishing Watch AIS history, evaluation, an offline dashboard, and tested Copernicus Marine adapters. It does not yet include automatic full-scene Sentinel-1 tiling or spatially varying OpenDrift readers.
+This milestone includes time-varying forcing, live/cache environmental adapters, calibrated V6 SAR segmentation, synthetic and imported AIS ranking, AISStream live collection, delayed Global Fishing Watch AIS history, evaluation, an offline dashboard, and tested Copernicus Marine adapters. It does not yet include automatic full-scene Sentinel-1 tiling or spatially varying OpenDrift readers.
 
 Sentinel-1 discovery now uses the official Copernicus Data Space STAC catalogue and checks scene overlap before any large download. The authenticated Processing API then returns a bounded, calibrated VV crop; automatic full-scene tiling remains a future production step.
 
@@ -122,7 +122,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\run_evaluation.ps1
 
 This evaluates 24 hidden-truth cases across current bias, wind bias, AIS dropout, position noise, combined stress, and nominal conditions. Open `out\evaluation\evaluation_report.html` for the results and graphs.
 
-The working attribution core is not ML: it is physics plus transparent evidence scoring. SAR segmentation now uses the calibrated Sentinel-1-pretrained V5 attention U-Net by default and retains adaptive thresholding as an explicit fallback. Synthetic evaluation measures the physics-and-ranking pipeline; it is not a claim of real-world accuracy.
+The working attribution core is not ML: it is physics plus transparent evidence scoring. SAR segmentation now uses the calibrated Sentinel-1-pretrained V6 attention U-Net by default and retains adaptive thresholding as an explicit fallback. Synthetic evaluation measures the physics-and-ranking pipeline; it is not a claim of real-world accuracy.
 
 ## Prepare and train the SAR model
 
@@ -161,7 +161,9 @@ V5 selected epoch 33 by scene-macro validation AP. Validation-only calibration s
 
 After V5 calibration, `evaluate_sar_model.ps1` deliberately labels the old four-scene result a development replay. Those scenes informed development and are no longer an untouched test. A newly acquired, acquisition-isolated labelled set is required before publishing a new final generalization claim.
 
-V6 is now prepared as a controlled experiment rather than an automatic replacement. It warm-starts V5, uses a stronger SAR-specific augmentation profile, fine-tunes at a lower learning rate and supports four-view flip averaging during calibration and inference. Start with the isolated smoke check, then run the longer commands yourself:
+V6 warm-starts V5, uses a stronger SAR-specific augmentation profile, fine-tunes at a lower learning rate and uses four-view flip averaging during calibration and inference. It is the current development winner: validation-only calibration achieved 55.7% IoU, 71.6% Dice, 78.7% precision, 65.7% recall and 80.7% AP. On the four-scene development replay it achieved 61.3% IoU, 76.0% Dice, 71.7% precision, 80.9% recall and 77.4% AP. It improved V5's IoU, Dice, precision, AP, false-positive rate and weakest-scene IoU while reducing aggregate recall by 1.6 percentage points. This is not an external blind-test claim.
+
+Reproduce V6 with:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\train_sar_model_v6.ps1 -Smoke
@@ -200,13 +202,13 @@ powershell -ExecutionPolicy Bypass -File .\scripts\download_sentinel1_subset.ps1
 
 The default crop is 1536 × 1400 pixels and covers the verified target area. It avoids the roughly 1.23 GB full-scene download and remains below the Processing API's 2500-pixel synchronous limit.
 
-Run the calibrated V5 model on that crop with:
+Run the calibrated V6 model on that crop with:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run_sentinel_v5.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\run_sentinel_v6.ps1
 ```
 
-The launcher uses the CUDA/PyTorch environment for inference and the normal Espada environment for maps and reports. It verifies that the validation threshold belongs to the selected checkpoint. Output is saved under `out\sentinel1_case\segmentation_v5`. The current downloaded crop correctly returns `NO_DETECTION`: its maximum oil probability is 0.0754, below the frozen 0.114 threshold. This is not an error and no slick polygon is fabricated.
+The launcher uses the CUDA/PyTorch environment for inference and the normal Espada environment for maps and reports. It verifies that the validation threshold belongs to the selected checkpoint and automatically applies the calibrated flip4 inference policy. Output is saved under `out\sentinel1_case\segmentation_v6`. The current downloaded crop correctly returns `NO_DETECTION`: its maximum oil probability is 0.0222, below the frozen 0.05 threshold. This is not an error and no slick polygon is fabricated. The crop has no ground-truth mask, so this run proves operational compatibility rather than accuracy.
 
 Real detections are deliberately exported as `slick_candidate.geojson` with status `REVIEW_REQUIRED`. They do not become `slick_observation.geojson` or enter reverse-drift attribution until an analyst explicitly approves the candidate. Numerous disconnected dark regions or unusually broad coverage are flagged because low wind, rain and natural films can resemble oil in SAR imagery.
 
@@ -278,7 +280,7 @@ The combined cache is `data\cache\environment_historical.json`; its status and g
 
 ## Run a complete uploaded case
 
-`scripts\run_real_case.ps1` joins a prepared SAR PNG/TIFF, its WGS84 bounds, observation time, Copernicus forcing and an AIS CSV. It runs calibrated V5 inference by default, pauses for human review when a candidate exists, and stops rather than fabricating a polygon when no slick is detected. The resulting mask, drift estimate, quality report and vessel ranking are saved under `out\real_case`.
+`scripts\run_real_case.ps1` joins a prepared SAR PNG/TIFF, its WGS84 bounds, observation time, Copernicus forcing and an AIS CSV. It runs calibrated V6 inference by default, pauses for human review when a candidate exists, and stops rather than fabricating a polygon when no slick is detected. The resulting mask, drift estimate, quality report and vessel ranking are saved under `out\real_case`.
 
 Before reverse drift or ranking, the runner writes `case_alignment.json` and stops unless the environmental series covers the full assumed spill age and AIS positions exist within two hours of the inferred release time. This prevents convincing-looking results made from mismatched dates.
 

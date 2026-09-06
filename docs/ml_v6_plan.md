@@ -1,6 +1,6 @@
-# V6 improvement experiment
+# V6 development milestone
 
-V5 remains the frozen operational baseline. V6 is an experiment and must not replace it merely because training or validation numbers look better.
+V5 remains reproducible as the frozen comparison baseline. V6 is the current operational development model after passing calibration, development replay and real-input compatibility checks.
 
 ## Why augmentation alone is insufficient
 
@@ -49,3 +49,9 @@ Sources: [SSL4EO-S12](https://github.com/DLR-MF-DAS/SSL4EO-S12), [SoftCon](https
 ## Promotion rule
 
 V6 is promoted only if it improves validation macro average precision and the four-scene development replay without materially worsening the weakest scene, precision or false-positive rate. Even then, it is a better development model—not a new blind-test claim. Production confidence still requires new labelled acquisition groups from additional regions.
+
+## Result
+
+V6 selected epoch 3 and threshold 0.05 with flip4 test-time augmentation. Its validation calibration achieved 55.7% IoU, 71.6% Dice, 78.7% precision, 65.7% recall and 80.7% AP. The four-scene development replay achieved 61.3% IoU, 76.0% Dice, 71.7% precision, 80.9% recall and 77.4% AP. Compared with V5, V6 improved replay IoU by 1.7 points, Dice by 1.4, precision by 3.5 and AP by 2.7; false-positive rate fell from 0.83% to 0.69%, while recall fell by 1.6 points. The weakest scene improved from 41.7% to 48.4% IoU.
+
+The bounded real Sentinel-1 crop completed CUDA inference and correctly followed the no-detection branch. Because that crop has no labelled truth mask, it is an integration check rather than accuracy evidence. V6 satisfies the development promotion rule, but a locked multi-region external test set is still required for a real-world generalization claim.

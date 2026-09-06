@@ -34,14 +34,14 @@ if (-not $PythonPath) {
 if (-not $GpuPythonPath) {
     $GpuPythonPath = Join-Path $env:USERPROFILE "ml\Scripts\python.exe"
 }
-$DefaultCheckpoint = Join-Path $ProjectRoot "out\ml_training_v5\sar_segmentation_best.pt"
-$DefaultCalibration = Join-Path $ProjectRoot "out\ml_calibration_v5\threshold_calibration.json"
+$DefaultCheckpoint = Join-Path $ProjectRoot "out\ml_training_v6\sar_segmentation_best.pt"
+$DefaultCalibration = Join-Path $ProjectRoot "out\ml_calibration_v6\threshold_calibration.json"
 if (-not $ModelCheckpoint) { $ModelCheckpoint = $DefaultCheckpoint }
 if (-not $CalibrationPath) { $CalibrationPath = $DefaultCalibration }
 if (-not $UseClassicalFallback) {
     foreach ($RequiredMlPath in @($ModelCheckpoint, $CalibrationPath)) {
         if (-not (Test-Path -LiteralPath $RequiredMlPath)) {
-            throw "V5 model input is missing: $RequiredMlPath"
+            throw "Calibrated SAR model input is missing: $RequiredMlPath"
         }
     }
     if (-not (Test-Path -LiteralPath $GpuPythonPath)) {
@@ -76,7 +76,7 @@ $SarArguments = @(
     "--bbox", $MinLongitude, $MinLatitude, $MaxLongitude, $MaxLatitude
 )
 if (-not $UseClassicalFallback) {
-    $PredictionBundle = Join-Path $SarOutput "v5_prediction.npz"
+    $PredictionBundle = Join-Path $SarOutput "model_prediction.npz"
     & $GpuPythonPath -m espada.ml_predict `
         --input $ResolvedSar.Path `
         --checkpoint $ModelCheckpoint `

@@ -75,6 +75,7 @@ def test_precomputed_ml_no_detection_needs_no_review(tmp_path: Path) -> None:
     metadata = {
         "method": "test ML segmentation",
         "model_type": "deep-learning binary oil-candidate segmentation",
+        "model_generation": "V6",
         "threshold": 0.25,
     }
     np.savez_compressed(
@@ -93,6 +94,10 @@ def test_precomputed_ml_no_detection_needs_no_review(tmp_path: Path) -> None:
     assert result["status"] == "NO_DETECTION"
     assert result["review_status"] == "not_required"
     assert "no detection" in result["geojson_status"]
+    assert any("V6 has development-replay evidence" in item for item in result["limitations"])
+    model_card = json.loads((tmp_path / "result" / "sar_model_card.json").read_text())
+    assert model_card["version"] == "0.6"
+    assert "IoU 61.3%" in model_card["evidence"]
 
 
 def test_load_sar_rejects_tiny_image(tmp_path: Path) -> None:
