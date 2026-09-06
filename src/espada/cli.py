@@ -98,6 +98,10 @@ def _parser() -> argparse.ArgumentParser:
     sar.add_argument("--observation-time", required=True)
     sar.add_argument("--bbox", type=float, nargs=4, metavar=("MIN_LON", "MIN_LAT", "MAX_LON", "MAX_LAT"))
     sar.add_argument("--analyst-approved", action="store_true")
+    sar.add_argument("--model-checkpoint", type=Path)
+    sar.add_argument("--calibration", type=Path)
+    sar.add_argument("--prediction-bundle", type=Path)
+    sar.add_argument("--inference-batch-size", type=int, default=4)
     ml_audit = subparsers.add_parser(
         "ml-audit", help="validate the labelled SAR data and create leakage-safe splits"
     )
@@ -278,9 +282,13 @@ def main(argv: list[str] | None = None) -> int:
             observation_time_utc=args.observation_time,
             bbox=tuple(args.bbox) if args.bbox else None,
             analyst_approved=args.analyst_approved,
+            model_checkpoint=args.model_checkpoint,
+            calibration_path=args.calibration,
+            prediction_bundle=args.prediction_bundle,
+            inference_batch_size=args.inference_batch_size,
         )
         print(json.dumps(result, indent=2))
-        return 0 if result["status"] in {"PASS", "REVIEW_REQUIRED"} else 1
+        return 0 if result["status"] in {"PASS", "REVIEW_REQUIRED", "NO_DETECTION"} else 1
     if args.command == "ml-audit":
         result = audit_dataset(args.root, args.out, seed=args.seed)
         print(json.dumps(result, indent=2))

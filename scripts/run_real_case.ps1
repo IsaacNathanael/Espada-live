@@ -8,7 +8,12 @@ param(
     [Parameter(Mandatory = $true)][double]$MaxLatitude,
     [double]$AgeHours = 19.0,
     [switch]$AnalystApproved,
+    [switch]$UseClassicalFallback,
+    [string]$ModelCheckpoint = "",
+    [string]$CalibrationPath = "",
+    [int]$InferenceBatchSize = 4,
     [string]$EnvironmentCache = "",
+    [string]$GpuPythonPath = "",
     [string]$PythonPath = ""
 )
 
@@ -24,6 +29,23 @@ if (-not $PythonPath) {
     )
     foreach ($candidate in $candidates) {
         if (Test-Path -LiteralPath $candidate) { $PythonPath = $candidate; break }
+    }
+}
+if (-not $GpuPythonPath) {
+    $GpuPythonPath = Join-Path $env:USERPROFILE "ml\Scripts\python.exe"
+}
+$DefaultCheckpoint = Join-Path $ProjectRoot "out\ml_training_v5\sar_segmentation_best.pt"
+$DefaultCalibration = Join-Path $ProjectRoot "out\ml_calibration_v5\threshold_calibration.json"
+if (-not $ModelCheckpoint) { $ModelCheckpoint = $DefaultCheckpoint }
+if (-not $CalibrationPath) { $CalibrationPath = $DefaultCalibration }
+if (-not $UseClassicalFallback) {
+    foreach ($RequiredMlPath in @($ModelCheckpoint, $CalibrationPath)) {
+        if (-not (Test-Path -LiteralPath $RequiredMlPath)) {
+            throw "V5 model input is missing: $RequiredMlPath"
+        }
+    }
+    if (-not (Test-Path -LiteralPath $GpuPythonPath)) {
+        throw "The GPU PyTorch environment was not found at '$GpuPythonPath'."
     }
 }
 if (-not $PythonPath -or -not (Test-Path -LiteralPath $PythonPath)) {
@@ -46,15 +68,40 @@ $RankingOutput = Join-Path $CaseRoot "ranking"
 $env:PYTHONPATH = Join-Path $ProjectRoot "src"
 $env:MPLCONFIGDIR = Join-Path $ProjectRoot ".mpl-cache"
 
-if (-not $AnalystApproved) {
-    throw "Real SAR candidates require analyst approval. Review the segmentation, then rerun with -AnalystApproved."
+$SarArguments = @(
+    "-m", "espada.cli", "sar",
+    "--input", $ResolvedSar.Path,
+    "--out", $SarOutput,
+    "--observation-time", $ObservationTimeUtc,
+    "--bbox", $MinLongitude, $MinLatitude, $MaxLongitude, $MaxLatitude
+)
+if (-not $UseClassicalFallback) {
+    $PredictionBundle = Join-Path $SarOutput "v5_prediction.npz"
+    & $GpuPythonPath -m espada.ml_predict `
+        --input $ResolvedSar.Path `
+        --checkpoint $ModelCheckpoint `
+        --calibration $CalibrationPath `
+        --output $PredictionBundle `
+        --batch-size $InferenceBatchSize
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    $SarArguments += @("--prediction-bundle", $PredictionBundle)
 }
-
-& $PythonPath -m espada.cli sar --input $ResolvedSar --out $SarOutput `
-    --observation-time $ObservationTimeUtc `
-    --bbox $MinLongitude $MinLatitude $MaxLongitude $MaxLatitude `
-    --analyst-approved
+if ($AnalystApproved) { $SarArguments += "--analyst-approved" }
+& $PythonPath @SarArguments
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$SarResultPath = Join-Path $SarOutput "sar_result.json"
+$SarResult = Get-Content -LiteralPath $SarResultPath -Raw | ConvertFrom-Json
+if ($SarResult.status -eq "NO_DETECTION") {
+    Write-Output "NO SLICK CANDIDATE: attribution stopped correctly. Review:"
+    Write-Output (Join-Path $SarOutput "sar_segmentation_overview.png")
+    exit 0
+}
+if (-not $AnalystApproved) {
+    Write-Output "SAR CANDIDATE READY. Review:"
+    Write-Output (Join-Path $SarOutput "sar_segmentation_overview.png")
+    Write-Output "If the outlined region is a credible slick, rerun this command with -AnalystApproved."
+    exit 0
+}
 & $PythonPath -m espada.cli ais --input $ResolvedAis --out $AisOutput
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & $PythonPath -m espada.cli case-check `

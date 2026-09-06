@@ -4,7 +4,6 @@ import json
 import os
 import tempfile
 from datetime import UTC, datetime
-from io import BytesIO
 from pathlib import Path
 
 os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "espada-matplotlib"))
@@ -19,66 +18,17 @@ from scipy import ndimage
 from shapely.geometry import MultiPoint, Polygon
 
 from .geo import write_polygon_geojson
-
-
-def _repair_float_byte_order(image: np.ndarray, marker: bytes) -> np.ndarray:
-    if marker != b"MM" or image.dtype.kind != "f":
-        return image
-    swapped = image.byteswap()
-    original_reasonable = float(np.mean(np.isfinite(image) & (np.abs(image) <= 1e6)))
-    swapped_reasonable = float(np.mean(np.isfinite(swapped) & (np.abs(swapped) <= 1e6)))
-    return swapped if swapped_reasonable > original_reasonable + 0.1 else image
-
-
-def _load_sar_source(source: Image.Image, marker: bytes) -> np.ndarray:
-    image = _repair_float_byte_order(np.asarray(source), marker).astype(float, copy=True)
-    if image.ndim == 3:
-        image = image[..., :3].mean(axis=2)
-    if image.ndim != 2 or min(image.shape) < 32:
-        raise ValueError("SAR input must be a two-dimensional image of at least 32x32 pixels")
-    finite = np.isfinite(image)
-    if not finite.any():
-        raise ValueError("SAR input has no finite pixels")
-    image[~finite] = float(np.nanmedian(image[finite]))
-    return image
-
-
-def load_sar_image(path: Path) -> np.ndarray:
-    path = Path(path)
-    with path.open("rb") as stream:
-        marker = stream.read(2)
-    with Image.open(path) as source:
-        return _load_sar_source(source, marker)
-
-
-def load_sar_bytes(content: bytes) -> np.ndarray:
-    with Image.open(BytesIO(content)) as source:
-        return _load_sar_source(source, content[:2])
+from .sar_input import (
+    _repair_float_byte_order,
+    load_sar_bytes,
+    load_sar_image,
+    sar_to_decibels,
+)
 
 
 def preprocess_sar(image: np.ndarray) -> tuple[np.ndarray, str]:
-    image = np.asarray(image, dtype=float)
-    finite = np.isfinite(image)
-    positive = image[finite & (image > 0)]
-    dynamic_ratio = float(np.percentile(positive, 99) / max(np.percentile(positive, 5), 1e-12)) if positive.size else 1.0
-    looks_like_linear_power = bool(
-        positive.size
-        and np.nanmin(image) >= 0
-        and (dynamic_ratio > 20 or np.percentile(positive, 99) <= 10)
-    )
-    invalid = ~finite
-    if looks_like_linear_power:
-        invalid |= image <= 0
-        floor = max(float(np.percentile(positive, 1)) * 0.2, 1e-12)
-        working = 10.0 * np.log10(np.maximum(image, floor))
-        transform = "linear intensity converted to decibels"
-    else:
-        working = image.copy()
-        transform = "input treated as decibel or display intensity"
-    valid_working = working[~invalid]
-    if not valid_working.size:
-        raise ValueError("SAR input has no valid analysis pixels")
-    working[invalid] = float(np.median(valid_working))
+    working, transform = sar_to_decibels(image)
+    valid_working = working[np.isfinite(working)]
     low, high = np.percentile(valid_working, [1.0, 99.0])
     if high <= low:
         raise ValueError("SAR input has insufficient intensity variation")
@@ -140,6 +90,106 @@ def segment_dark_slick(image: np.ndarray) -> tuple[np.ndarray, np.ndarray, dict[
     return mask, score, metadata
 
 
+def segment_ml_slick(
+    image: np.ndarray,
+    checkpoint_path: Path,
+    calibration_path: Path,
+    *,
+    batch_size: int = 4,
+) -> tuple[np.ndarray, np.ndarray, dict[str, object]]:
+    """Run the calibrated V5 network on a prepared or linear-power SAR raster."""
+    import torch
+
+    from .ml_evaluate import file_sha256, infer_full_scene
+    from .ml_model import build_segmentation_model
+    from .ml_preprocess import FIXED_MINMAX
+
+    checkpoint_path = Path(checkpoint_path)
+    calibration_path = Path(calibration_path)
+    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
+    calibration = json.loads(calibration_path.read_text(encoding="utf-8"))
+    checkpoint_digest = file_sha256(checkpoint_path)
+    if calibration.get("checkpoint_sha256") != checkpoint_digest:
+        raise ValueError("Threshold calibration belongs to a different model checkpoint")
+    model_config = checkpoint.get("model_config", {})
+    model = build_segmentation_model(model_config, pretrained_encoder=False)
+    model.load_state_dict(checkpoint["model_state_dict"])
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = model.to(device).eval()
+    image_db, input_transform = sar_to_decibels(image)
+    patch_size = int(checkpoint.get("training_config", {}).get("patch_size", 256))
+    normalization_mode = str(checkpoint.get("normalization", {}).get("mode", FIXED_MINMAX))
+    probability = infer_full_scene(
+        model,
+        image_db,
+        device,
+        patch_size=patch_size,
+        stride=max(patch_size * 3 // 4, 1),
+        batch_size=batch_size,
+        normalization_mode=normalization_mode,
+    )
+    threshold = float(calibration["selected_threshold"])
+    mask = probability >= threshold
+    labels, component_count = ndimage.label(mask)
+    component_sizes = sorted(
+        (int(value) for value in ndimage.sum(mask, labels, range(1, component_count + 1))),
+        reverse=True,
+    )
+    architecture = str(model_config.get("architecture", "segmentation model"))
+    if model_config.get("attention_decoder"):
+        architecture = f"attention-gated {architecture}"
+    metadata = {
+        "method": "calibrated V5 SAR semantic segmentation",
+        "model_type": "deep-learning binary oil-candidate segmentation",
+        "architecture": architecture,
+        "checkpoint_epoch": int(checkpoint.get("epoch", 0)),
+        "checkpoint_sha256": checkpoint_digest,
+        "threshold": threshold,
+        "threshold_source": "validation-only IoU calibration",
+        "preprocessing": input_transform,
+        "normalization": checkpoint.get("normalization", {}),
+        "device": str(device),
+        "gpu": torch.cuda.get_device_name(0) if device.type == "cuda" else None,
+        "detected_components": component_count,
+        "largest_component_pixels": component_sizes[:10],
+        "probability_summary": {
+            "minimum": float(probability.min()),
+            "mean": float(probability.mean()),
+            "maximum": float(probability.max()),
+        },
+    }
+    return mask, probability, metadata
+
+
+def segment_precomputed_slick(
+    prediction_bundle: Path,
+    expected_shape: tuple[int, int],
+) -> tuple[np.ndarray, np.ndarray, dict[str, object]]:
+    """Load a GPU-produced probability map in a non-PyTorch reporting process."""
+    with np.load(Path(prediction_bundle), allow_pickle=False) as bundle:
+        probability = np.asarray(bundle["probability"], dtype=np.float32)
+        metadata = json.loads(str(bundle["metadata_json"].item()))
+    if probability.shape != expected_shape:
+        raise ValueError(
+            f"Prediction shape {probability.shape} does not match SAR image {expected_shape}"
+        )
+    if not np.all(np.isfinite(probability)):
+        raise ValueError("Prediction bundle contains invalid probability values")
+    if float(probability.min()) < 0.0 or float(probability.max()) > 1.0:
+        raise ValueError("Prediction probabilities must be within [0, 1]")
+    threshold = float(metadata["threshold"])
+    mask = probability >= threshold
+    labels, component_count = ndimage.label(mask)
+    component_sizes = sorted(
+        (int(value) for value in ndimage.sum(mask, labels, range(1, component_count + 1))),
+        reverse=True,
+    )
+    metadata["detected_components"] = component_count
+    metadata["largest_component_pixels"] = component_sizes[:10]
+    metadata["prediction_bundle"] = str(Path(prediction_bundle).resolve())
+    return mask, probability, metadata
+
+
 def synthetic_sar_scene(size: int = 384, seed: int = 26143) -> tuple[np.ndarray, np.ndarray]:
     rng = np.random.default_rng(seed)
     y, x = np.mgrid[-1:1:complex(size), -1:1:complex(size)]
@@ -199,8 +249,26 @@ def run_segmentation(
     bbox: tuple[float, float, float, float] | None = None,
     truth_mask: np.ndarray | None = None,
     analyst_approved: bool = False,
+    model_checkpoint: Path | None = None,
+    calibration_path: Path | None = None,
+    prediction_bundle: Path | None = None,
+    inference_batch_size: int = 4,
 ) -> dict[str, object]:
-    mask, score, metadata = segment_dark_slick(image)
+    if model_checkpoint is not None and prediction_bundle is not None:
+        raise ValueError("Choose a model checkpoint or a precomputed prediction, not both")
+    if prediction_bundle is not None:
+        mask, score, metadata = segment_precomputed_slick(prediction_bundle, image.shape)
+    elif model_checkpoint is not None:
+        if calibration_path is None:
+            raise ValueError("ML segmentation requires a validation calibration file")
+        mask, score, metadata = segment_ml_slick(
+            image,
+            model_checkpoint,
+            calibration_path,
+            batch_size=inference_batch_size,
+        )
+    else:
+        mask, score, metadata = segment_dark_slick(image)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     for stale_polygon in ("slick_candidate.geojson", "slick_observation.geojson"):
@@ -213,11 +281,22 @@ def run_segmentation(
     fig, axes = plt.subplots(1, 3, figsize=(13, 4.6), constrained_layout=True)
     axes[0].imshow(display, cmap="gray")
     axes[0].set_title("Preprocessed SAR")
-    axes[1].imshow(score, cmap="magma", vmin=0, vmax=1)
-    axes[1].set_title("Dark-anomaly score")
+    using_ml = model_checkpoint is not None or prediction_bundle is not None
+    score_max = (
+        max(float(metadata["threshold"]), float(np.percentile(score, 99.9)))
+        if using_ml
+        else 1.0
+    )
+    axes[1].imshow(score, cmap="magma", vmin=0, vmax=score_max)
+    axes[1].set_title(
+        f"Oil probability (threshold {float(metadata['threshold']):.3f})"
+        if using_ml
+        else "Dark-anomaly score"
+    )
     axes[2].imshow(display, cmap="gray")
-    axes[2].contour(mask, levels=[0.5], colors=["#ff9d24"], linewidths=1.4)
-    axes[2].set_title("Candidate slick boundary")
+    if mask.any():
+        axes[2].contour(mask, levels=[0.5], colors=["#ff9d24"], linewidths=1.4)
+    axes[2].set_title("Candidate slick boundary" if mask.any() else "No candidate above threshold")
     for axis in axes:
         axis.axis("off")
     fig.savefig(output_dir / "sar_segmentation_overview.png", dpi=180)
@@ -226,6 +305,8 @@ def run_segmentation(
     if truth_mask is not None:
         Image.fromarray(np.uint8(truth_mask) * 255, mode="L").save(output_dir / "truth_mask.png")
     artifacts = ["sar_input.png", "slick_mask.png", "sar_segmentation_overview.png"]
+    if prediction_bundle is not None:
+        artifacts.append(Path(prediction_bundle).name)
     geojson_status = "not requested; supply a WGS84 bounding box"
     review_status = "not_applicable" if truth_mask is not None else "pending"
     if bbox is not None and mask.any():
@@ -251,12 +332,17 @@ def run_segmentation(
         geojson_status = "approved observation written" if approved else "candidate written; analyst review required"
     if not mask.any():
         status = "NO_DETECTION"
+        review_status = "not_required"
+        geojson_status = "not created; no detection above the calibrated threshold"
     elif truth_mask is not None or analyst_approved:
         status = "PASS"
     else:
         status = "REVIEW_REQUIRED"
     review_flags: list[str] = []
-    if truth_mask is None and len(metadata["components"]) > 20:
+    component_count = int(
+        metadata.get("detected_components", len(metadata.get("components", [])))
+    )
+    if truth_mask is None and component_count > 20:
         review_flags.append("Many disconnected dark regions were detected; sea-state lookalikes are likely.")
     if truth_mask is None and float(mask.mean()) > 0.08:
         review_flags.append("Detected coverage is unusually broad for one slick candidate.")
@@ -273,7 +359,11 @@ def run_segmentation(
         "geojson_status": geojson_status,
         "limitations": [
             "Dark-lookalikes such as low wind, rain cells and sensor artefacts can cause false positives.",
-            "This baseline must be replaced or complemented by a held-out evaluated ResNet34 U-Net.",
+            (
+                "V5 has development-replay evidence but still requires an external blind test."
+                if using_ml
+                else "The classical fallback is not the evaluated V5 neural model."
+            ),
             "Real imagery never becomes an attribution input until a human approves the candidate polygon.",
             "A WGS84 bounding box is required because raster georeferencing is not inferred by this lightweight adapter.",
         ],
@@ -281,13 +371,37 @@ def run_segmentation(
     }
     (output_dir / "sar_result.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
     model_card = {
-        "name": "Espada adaptive SAR dark-anomaly baseline",
-        "version": "0.1",
-        "type": "classical computer vision (not ML)",
-        "intended_use": "fallback candidate-mask generation for analyst review",
+        "name": (
+            "ESPADA calibrated V5 SAR segmentation"
+            if using_ml
+            else "Espada adaptive SAR dark-anomaly baseline"
+        ),
+        "version": "0.5" if using_ml else "0.1",
+        "type": metadata["model_type"],
+        "intended_use": "candidate-mask generation for analyst review",
         "not_for": "autonomous pollution attribution or guilt determination",
         "evaluation": evaluation,
-        "planned_upgrade": "ResNet34-based U-Net trained and tested on separated labelled Sentinel-1 scenes",
+        "checkpoint": (
+            str(Path(model_checkpoint).resolve())
+            if model_checkpoint is not None
+            else metadata.get("checkpoint")
+        ),
+        "calibration": (
+            str(Path(calibration_path).resolve())
+            if calibration_path is not None
+            else metadata.get("calibration")
+        ),
+        "prediction_bundle": str(Path(prediction_bundle).resolve()) if prediction_bundle is not None else None,
+        "evidence": (
+            "V5 development replay: IoU 59.6%, Dice 74.7%, precision 68.2%, recall 82.5%"
+            if using_ml
+            else "Synthetic baseline only"
+        ),
+        "evidence_limit": (
+            "Previously examined four-scene replay; external blind evaluation remains required"
+            if using_ml
+            else "Not a learned oil-versus-lookalike model"
+        ),
     }
     (output_dir / "sar_model_card.json").write_text(
         json.dumps(model_card, indent=2), encoding="utf-8"
