@@ -122,7 +122,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\run_evaluation.ps1
 
 This evaluates 24 hidden-truth cases across current bias, wind bias, AIS dropout, position noise, combined stress, and nominal conditions. Open `out\evaluation\evaluation_report.html` for the results and graphs.
 
-The working attribution core is not ML: it is physics plus transparent evidence scoring. SAR segmentation now has an implemented ResNet34-based U-Net training path, while adaptive thresholding remains the operational fallback until full training and untouched test evaluation pass. Synthetic evaluation measures the physics-and-ranking pipeline; it is not a claim of real-world accuracy.
+The working attribution core is not ML: it is physics plus transparent evidence scoring. SAR segmentation has a Sentinel-1-pretrained attention U-Net training path, while adaptive thresholding remains the operational fallback until external blind evaluation passes. Synthetic evaluation measures the physics-and-ranking pipeline; it is not a claim of real-world accuracy.
 
 ## Prepare and train the SAR model
 
@@ -139,7 +139,7 @@ ESPADA does not use the archive's supplied split because it repeats scenes and a
 powershell -ExecutionPolicy Bypass -File .\scripts\train_sar_model.ps1 -Smoke
 ```
 
-The smoke run is not an accuracy claim. Full GPU training uses the complete group-safe train/validation data, saves the best threshold-independent validation-average-precision checkpoint, and reserves the test scenes for later full-scene evaluation:
+The smoke run is not an accuracy claim. V5 full GPU training uses the complete group-safe train/validation data. It freezes the pretrained encoder for four epochs, uses a ten-times lower encoder learning rate after unfreezing, keeps encoder BatchNorm statistics fixed, replaces decoder BatchNorm with GroupNorm, accumulates gradients to an effective batch of eight, balances sampling across scenes, and selects the checkpoint using scene-macro validation average precision:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\train_sar_model.ps1 -Epochs 40 -BatchSize 2
@@ -155,7 +155,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\download_sar_encoder.ps1
 powershell -ExecutionPolicy Bypass -File .\scripts\train_sar_model.ps1 -Smoke
 ```
 
-After V4 calibration, `evaluate_sar_model.ps1` deliberately labels the old four-scene result a development replay. Those scenes informed V4 and are no longer an untouched test. A newly acquired, acquisition-isolated labelled set is required before publishing a new final generalization claim.
+V4 peaked early and remained unstable with batch size two, so V5 protects the pretrained features and removes small-batch decoder statistics. Training writes to `out\ml_training_v5`; calibration and evaluation automatically use the matching V5 directories. Pass `-Version v4` to the calibration or evaluation script only when reproducing the archived V4 model.
+
+After V5 calibration, `evaluate_sar_model.ps1` deliberately labels the old four-scene result a development replay. Those scenes informed development and are no longer an untouched test. A newly acquired, acquisition-isolated labelled set is required before publishing a new final generalization claim.
 
 ## Analyze a slick GeoJSON
 

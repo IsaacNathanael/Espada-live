@@ -1,5 +1,7 @@
 param(
     [int]$BatchSize = 2,
+    [ValidateSet("v4", "v5")]
+    [string]$Version = "v5",
     [string]$PythonPath = ""
 )
 
@@ -20,7 +22,7 @@ if (-not $PythonPath -or -not (Test-Path -LiteralPath $PythonPath)) {
 
 $DatasetRoot = Join-Path $ProjectRoot "data\datasets\oil_spill_zenodo_4672426\extracted"
 $Manifest = Join-Path $ProjectRoot "out\ml_dataset\scene_manifest.csv"
-$Checkpoint = Join-Path $ProjectRoot "out\ml_training_v4\sar_segmentation_best.pt"
+$Checkpoint = Join-Path $ProjectRoot "out\ml_training_$Version\sar_segmentation_best.pt"
 foreach ($RequiredPath in @($DatasetRoot, $Manifest, $Checkpoint)) {
     if (-not (Test-Path -LiteralPath $RequiredPath)) {
         throw "Required calibration input not found: $RequiredPath"
@@ -32,6 +34,6 @@ $env:PYTHONPATH = Join-Path $ProjectRoot "src"
     --dataset-root $DatasetRoot `
     --manifest $Manifest `
     --checkpoint $Checkpoint `
-    --out (Join-Path $ProjectRoot "out\ml_calibration_v4") `
+    --out (Join-Path $ProjectRoot "out\ml_calibration_$Version") `
     --batch-size $BatchSize
 exit $LASTEXITCODE

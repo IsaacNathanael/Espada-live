@@ -21,6 +21,7 @@ class ModelConfig:
     input_max_db: float = 5.0
     pretrained_encoder: bool = True
     attention_decoder: bool = False
+    decoder_normalization: str = "batch"
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -43,6 +44,17 @@ class AttentionGate(nn.Module):
         return skip * attention
 
 
+def normalization_layer(channels: int, normalization: str) -> nn.Module:
+    """Build a normalization layer while retaining old checkpoint compatibility."""
+    if normalization == "batch":
+        return nn.BatchNorm2d(channels)
+    if normalization == "group":
+        for groups in (32, 16, 8, 4, 2, 1):
+            if channels % groups == 0:
+                return nn.GroupNorm(groups, channels)
+    raise ValueError(f"Unsupported decoder normalization: {normalization}")
+
+
 class DecoderBlock(nn.Module):
     def __init__(
         self,
@@ -51,16 +63,17 @@ class DecoderBlock(nn.Module):
         output_channels: int,
         *,
         attention: bool = False,
+        normalization: str = "batch",
     ) -> None:
         super().__init__()
         self.up = nn.ConvTranspose2d(input_channels, output_channels, kernel_size=2, stride=2)
         self.attention = AttentionGate(skip_channels, output_channels) if attention else None
         self.refine = nn.Sequential(
             nn.Conv2d(output_channels + skip_channels, output_channels, 3, padding=1, bias=False),
-            nn.BatchNorm2d(output_channels),
+            normalization_layer(output_channels, normalization),
             nn.ReLU(inplace=True),
             nn.Conv2d(output_channels, output_channels, 3, padding=1, bias=False),
-            nn.BatchNorm2d(output_channels),
+            normalization_layer(output_channels, normalization),
             nn.ReLU(inplace=True),
         )
 
@@ -79,7 +92,11 @@ class ResNet34UNet(nn.Module):
     """Binary U-Net with an ImageNet-pretrained ResNet34 encoder and one SAR channel."""
 
     def __init__(
-        self, *, pretrained_encoder: bool = True, attention_decoder: bool = False
+        self,
+        *,
+        pretrained_encoder: bool = True,
+        attention_decoder: bool = False,
+        decoder_normalization: str = "batch",
     ) -> None:
         super().__init__()
         weights = ResNet34_Weights.DEFAULT if pretrained_encoder else None
@@ -99,14 +116,22 @@ class ResNet34UNet(nn.Module):
         self.encoder3 = encoder.layer3
         self.encoder4 = encoder.layer4
 
-        self.decoder4 = DecoderBlock(512, 256, 256, attention=attention_decoder)
-        self.decoder3 = DecoderBlock(256, 128, 128, attention=attention_decoder)
-        self.decoder2 = DecoderBlock(128, 64, 64, attention=attention_decoder)
-        self.decoder1 = DecoderBlock(64, 64, 64, attention=attention_decoder)
+        self.decoder4 = DecoderBlock(
+            512, 256, 256, attention=attention_decoder, normalization=decoder_normalization
+        )
+        self.decoder3 = DecoderBlock(
+            256, 128, 128, attention=attention_decoder, normalization=decoder_normalization
+        )
+        self.decoder2 = DecoderBlock(
+            128, 64, 64, attention=attention_decoder, normalization=decoder_normalization
+        )
+        self.decoder1 = DecoderBlock(
+            64, 64, 64, attention=attention_decoder, normalization=decoder_normalization
+        )
         self.final = nn.Sequential(
             nn.ConvTranspose2d(64, 32, kernel_size=2, stride=2),
             nn.Conv2d(32, 32, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(32),
+            normalization_layer(32, decoder_normalization),
             nn.ReLU(inplace=True),
             nn.Conv2d(32, 1, kernel_size=1),
         )
@@ -171,6 +196,7 @@ class ResNet50UNet(nn.Module):
         *,
         encoder_checkpoint: Path | None = None,
         attention_decoder: bool = True,
+        decoder_normalization: str = "batch",
     ) -> None:
         super().__init__()
         encoder = resnet50(weights=None)
@@ -198,14 +224,22 @@ class ResNet50UNet(nn.Module):
         self.encoder2 = encoder.layer2
         self.encoder3 = encoder.layer3
         self.encoder4 = encoder.layer4
-        self.decoder4 = DecoderBlock(2048, 1024, 512, attention=attention_decoder)
-        self.decoder3 = DecoderBlock(512, 512, 256, attention=attention_decoder)
-        self.decoder2 = DecoderBlock(256, 256, 128, attention=attention_decoder)
-        self.decoder1 = DecoderBlock(128, 64, 64, attention=attention_decoder)
+        self.decoder4 = DecoderBlock(
+            2048, 1024, 512, attention=attention_decoder, normalization=decoder_normalization
+        )
+        self.decoder3 = DecoderBlock(
+            512, 512, 256, attention=attention_decoder, normalization=decoder_normalization
+        )
+        self.decoder2 = DecoderBlock(
+            256, 256, 128, attention=attention_decoder, normalization=decoder_normalization
+        )
+        self.decoder1 = DecoderBlock(
+            128, 64, 64, attention=attention_decoder, normalization=decoder_normalization
+        )
         self.final = nn.Sequential(
             nn.ConvTranspose2d(64, 32, kernel_size=2, stride=2),
             nn.Conv2d(32, 32, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(32),
+            normalization_layer(32, decoder_normalization),
             nn.ReLU(inplace=True),
             nn.Conv2d(32, 1, kernel_size=1),
         )
@@ -237,16 +271,19 @@ def build_segmentation_model(
     config = dict(model_config or {})
     encoder = str(config.get("encoder", "resnet34")).lower()
     attention = bool(config.get("attention_decoder", False))
+    decoder_normalization = str(config.get("decoder_normalization", "batch"))
     if encoder == "resnet50":
         return ResNet50UNet(
             encoder_checkpoint=encoder_checkpoint if pretrained_encoder else None,
             attention_decoder=attention,
+            decoder_normalization=decoder_normalization,
         )
     if encoder != "resnet34":
         raise ValueError(f"Unsupported encoder: {encoder}")
     return ResNet34UNet(
         pretrained_encoder=pretrained_encoder,
         attention_decoder=attention,
+        decoder_normalization=decoder_normalization,
     )
 
 

@@ -44,3 +44,14 @@ def test_resnet50_unet_preserves_spatial_shape() -> None:
     with torch.no_grad():
         output = model(torch.zeros((1, 1, 64, 64)))
     assert output.shape == (1, 1, 64, 64)
+
+
+def test_group_normalized_decoder_avoids_small_batch_statistics() -> None:
+    model = ResNet50UNet(attention_decoder=True, decoder_normalization="group")
+    decoder_modules = [
+        module
+        for name, module in model.named_modules()
+        if name.startswith(("decoder", "final"))
+    ]
+    assert any(isinstance(module, torch.nn.GroupNorm) for module in decoder_modules)
+    assert not any(isinstance(module, torch.nn.BatchNorm2d) for module in decoder_modules)

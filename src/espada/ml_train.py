@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 import torch
 from PIL import Image
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 
 from .ml_metrics import ProbabilityHistogram
 from .ml_model import (
@@ -46,11 +46,16 @@ class TrainingConfig:
     hard_negative_fraction: float = 0.75
     minimum_oil_pixels: int = 64
     patience: int = 10
+    gradient_accumulation_steps: int = 4
+    encoder_freeze_epochs: int = 4
+    encoder_learning_rate_multiplier: float = 0.1
+    scene_balanced_sampling: bool = True
     encoder: str = "resnet50"
     encoder_initialization: str = "SSL4EO-S12 MoCo Sentinel-1"
     encoder_checkpoint: str | None = None
     pretrained_encoder: bool = True
     attention_decoder: bool = True
+    decoder_normalization: str = "group"
     normalization_mode: str = SCENE_CENTERED_S1_VV
     augmentation_backend: str = "albumentations"
 
@@ -120,11 +125,13 @@ class SarPatchDataset(Dataset):
         normalization_mode: str = SCENE_CENTERED_S1_VV,
         augmentation_backend: str = "torch",
         augment: bool = False,
+        return_scene_index: bool = False,
         limit: int | None = None,
     ) -> None:
         self.dataset_root = Path(dataset_root)
         self.patch_size = patch_size
         self.augment = augment
+        self.return_scene_index = return_scene_index
         self.normalization_mode = normalization_mode
         self.augmentation_backend = augmentation_backend
         self.albumentations_transform = None
@@ -201,7 +208,7 @@ class SarPatchDataset(Dataset):
             self._cache[scene_id] = image, mask
         return self._cache[scene_id]
 
-    def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor]:
+    def __getitem__(self, index: int):
         scene_index, x, y = self.patches[index]
         image, mask = self._scene_arrays(scene_index)
         size = self.patch_size
@@ -241,7 +248,49 @@ class SarPatchDataset(Dataset):
             model_input_from_db(image_patch, self.normalization_mode)
         ).unsqueeze(0)
         mask_tensor = torch.from_numpy(mask_patch).unsqueeze(0)
-        return image_tensor.contiguous(), mask_tensor.contiguous()
+        result = image_tensor.contiguous(), mask_tensor.contiguous()
+        if self.return_scene_index:
+            return result[0], result[1], scene_index
+        return result
+
+    def scene_balancing_weights(self) -> torch.Tensor:
+        """Give every acquisition scene equal expected sampling mass."""
+        counts: dict[int, int] = {}
+        for scene_index, _, _ in self.patches:
+            counts[scene_index] = counts.get(scene_index, 0) + 1
+        return torch.tensor(
+            [1.0 / counts[scene_index] for scene_index, _, _ in self.patches],
+            dtype=torch.double,
+        )
+
+
+ENCODER_PREFIXES = ("stem.", "encoder1.", "encoder2.", "encoder3.", "encoder4.")
+
+
+def encoder_and_decoder_parameters(
+    model: torch.nn.Module,
+) -> tuple[list[torch.nn.Parameter], list[torch.nn.Parameter]]:
+    encoder_parameters: list[torch.nn.Parameter] = []
+    decoder_parameters: list[torch.nn.Parameter] = []
+    for name, parameter in model.named_parameters():
+        target = encoder_parameters if name.startswith(ENCODER_PREFIXES) else decoder_parameters
+        target.append(parameter)
+    if not encoder_parameters or not decoder_parameters:
+        raise ValueError("Could not separate encoder and decoder parameters")
+    return encoder_parameters, decoder_parameters
+
+
+def set_encoder_trainable(model: torch.nn.Module, trainable: bool) -> None:
+    for name, parameter in model.named_parameters():
+        if name.startswith(ENCODER_PREFIXES):
+            parameter.requires_grad_(trainable)
+
+
+def freeze_encoder_batch_norm_statistics(model: torch.nn.Module) -> None:
+    """Keep pretrained encoder statistics stable for very small GPU batches."""
+    for name, module in model.named_modules():
+        if name.startswith(ENCODER_PREFIXES) and isinstance(module, torch.nn.BatchNorm2d):
+            module.eval()
 
 
 def _set_seed(seed: int) -> None:
@@ -260,38 +309,74 @@ def _run_epoch(
     *,
     optimizer: torch.optim.Optimizer | None,
     scaler: torch.amp.GradScaler,
+    gradient_accumulation_steps: int = 1,
+    freeze_encoder_batch_norm: bool = False,
 ) -> tuple[float, dict]:
     training = optimizer is not None
     model.train(training)
+    if training and freeze_encoder_batch_norm:
+        freeze_encoder_batch_norm_statistics(model)
     confusion = BinaryConfusion()
     probability_histogram = ProbabilityHistogram(bins=500)
+    scene_confusions: dict[int, BinaryConfusion] = {}
+    scene_histograms: dict[int, ProbabilityHistogram] = {}
     loss_sum = 0.0
     batches = 0
-    for image, mask in loader:
+    if training:
+        optimizer.zero_grad(set_to_none=True)
+    for batch_index, batch in enumerate(loader):
+        if len(batch) == 3:
+            image, mask, scene_indices = batch
+        else:
+            image, mask = batch
+            scene_indices = None
         image = image.to(device, non_blocking=True)
         mask = mask.to(device, non_blocking=True)
-        if training:
-            optimizer.zero_grad(set_to_none=True)
         with torch.set_grad_enabled(training):
             with torch.amp.autocast(device_type=device.type, enabled=device.type == "cuda"):
                 logits = model(image)
                 loss = loss_function(logits, mask)
             if training:
-                scaler.scale(loss).backward()
-                scaler.unscale_(optimizer)
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-                scaler.step(optimizer)
-                scaler.update()
+                scaler.scale(loss / gradient_accumulation_steps).backward()
+                should_step = (
+                    (batch_index + 1) % gradient_accumulation_steps == 0
+                    or batch_index + 1 == len(loader)
+                )
+                if should_step:
+                    scaler.unscale_(optimizer)
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                    scaler.step(optimizer)
+                    scaler.update()
+                    optimizer.zero_grad(set_to_none=True)
         confusion.update(logits.detach(), mask)
-        probability_histogram.update(
-            torch.sigmoid(logits.detach()).float().cpu().numpy(),
-            mask.detach().float().cpu().numpy(),
-        )
+        probabilities = torch.sigmoid(logits.detach()).float().cpu().numpy()
+        targets = mask.detach().float().cpu().numpy()
+        probability_histogram.update(probabilities, targets)
+        if scene_indices is not None:
+            for sample_index, raw_scene_index in enumerate(scene_indices.tolist()):
+                scene_index = int(raw_scene_index)
+                scene_confusions.setdefault(scene_index, BinaryConfusion()).update(
+                    logits[sample_index : sample_index + 1].detach(),
+                    mask[sample_index : sample_index + 1],
+                )
+                scene_histograms.setdefault(
+                    scene_index, ProbabilityHistogram(bins=500)
+                ).update(
+                    probabilities[sample_index : sample_index + 1],
+                    targets[sample_index : sample_index + 1],
+                )
         loss_sum += float(loss.detach().item())
         batches += 1
     metrics = confusion.metrics()
     metrics["loss"] = loss_sum / max(batches, 1)
     metrics["average_precision"] = probability_histogram.average_precision()
+    if scene_histograms:
+        metrics["macro_average_precision"] = float(
+            np.mean([item.average_precision() for item in scene_histograms.values()])
+        )
+        metrics["macro_iou"] = float(
+            np.mean([item.metrics()["iou"] for item in scene_confusions.values()])
+        )
     return float(metrics["loss"]), metrics
 
 
@@ -305,6 +390,10 @@ def train_model(
     max_validation_patches: int | None = None,
 ) -> dict:
     config = config or TrainingConfig()
+    if config.gradient_accumulation_steps < 1:
+        raise ValueError("gradient_accumulation_steps must be at least one")
+    if not 0.0 < config.encoder_learning_rate_multiplier <= 1.0:
+        raise ValueError("encoder_learning_rate_multiplier must be in (0, 1]")
     _set_seed(config.seed)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -333,12 +422,23 @@ def train_model(
         seed=config.seed,
         normalization_mode=config.normalization_mode,
         augment=False,
+        return_scene_index=True,
         limit=max_validation_patches,
     )
+    sampler = None
+    if config.scene_balanced_sampling:
+        sampler_generator = torch.Generator().manual_seed(config.seed)
+        sampler = WeightedRandomSampler(
+            train_data.scene_balancing_weights(),
+            num_samples=len(train_data),
+            replacement=True,
+            generator=sampler_generator,
+        )
     train_loader = DataLoader(
         train_data,
         batch_size=config.batch_size,
-        shuffle=True,
+        shuffle=sampler is None,
+        sampler=sampler,
         num_workers=0,
         pin_memory=device.type == "cuda",
     )
@@ -360,6 +460,7 @@ def train_model(
         ),
         pretrained_encoder=config.pretrained_encoder,
         attention_decoder=config.attention_decoder,
+        decoder_normalization=config.decoder_normalization,
     )
     model = build_segmentation_model(
         model_configuration.to_dict(),
@@ -367,11 +468,25 @@ def train_model(
         encoder_checkpoint=Path(config.encoder_checkpoint) if config.encoder_checkpoint else None,
     ).to(device)
     loss_function = BCEFocalTverskyLoss(positive_weight=config.positive_weight).to(device)
+    encoder_parameters, decoder_parameters = encoder_and_decoder_parameters(model)
+    set_encoder_trainable(model, False)
     optimizer = torch.optim.AdamW(
-        model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay
+        [
+            {
+                "params": encoder_parameters,
+                "lr": config.learning_rate * config.encoder_learning_rate_multiplier,
+                "name": "encoder",
+            },
+            {"params": decoder_parameters, "lr": config.learning_rate, "name": "decoder"},
+        ],
+        weight_decay=config.weight_decay,
     )
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="max", factor=0.5, patience=2, min_lr=1e-6
+        optimizer,
+        mode="max",
+        factor=0.5,
+        patience=3,
+        min_lr=[1e-7, 1e-6],
     )
     scaler = torch.amp.GradScaler(device.type, enabled=device.type == "cuda")
     history: list[dict] = []
@@ -380,8 +495,17 @@ def train_model(
     checkpoint_path = output_dir / "sar_segmentation_best.pt"
 
     for epoch in range(1, config.epochs + 1):
+        encoder_is_trainable = epoch > config.encoder_freeze_epochs
+        set_encoder_trainable(model, encoder_is_trainable)
         _, training_metrics = _run_epoch(
-            model, train_loader, loss_function, device, optimizer=optimizer, scaler=scaler
+            model,
+            train_loader,
+            loss_function,
+            device,
+            optimizer=optimizer,
+            scaler=scaler,
+            gradient_accumulation_steps=config.gradient_accumulation_steps,
+            freeze_encoder_batch_norm=True,
         )
         with torch.no_grad():
             _, validation_metrics = _run_epoch(
@@ -392,6 +516,11 @@ def train_model(
                 optimizer=None,
                 scaler=scaler,
             )
+        selection_score = float(
+            validation_metrics.get(
+                "macro_average_precision", validation_metrics["average_precision"]
+            )
+        )
         row = {
             "epoch": epoch,
             "training_loss": training_metrics["loss"],
@@ -404,13 +533,21 @@ def train_model(
             "validation_precision": validation_metrics["precision"],
             "validation_recall": validation_metrics["recall"],
             "validation_average_precision": validation_metrics["average_precision"],
-            "learning_rate": float(optimizer.param_groups[0]["lr"]),
+            "validation_macro_average_precision": validation_metrics.get(
+                "macro_average_precision", validation_metrics["average_precision"]
+            ),
+            "validation_macro_iou": validation_metrics.get(
+                "macro_iou", validation_metrics["iou"]
+            ),
+            "encoder_trainable": encoder_is_trainable,
+            "encoder_learning_rate": float(optimizer.param_groups[0]["lr"]),
+            "decoder_learning_rate": float(optimizer.param_groups[1]["lr"]),
         }
         history.append(row)
         print(json.dumps(row), flush=True)
-        scheduler.step(float(validation_metrics["average_precision"]))
-        if float(validation_metrics["average_precision"]) > best_average_precision:
-            best_average_precision = float(validation_metrics["average_precision"])
+        scheduler.step(selection_score)
+        if selection_score > best_average_precision:
+            best_average_precision = selection_score
             stale_epochs = 0
             torch.save(
                 {
@@ -421,7 +558,7 @@ def train_model(
                     "epoch": epoch,
                     "threshold": 0.5,
                     "validation_metrics": validation_metrics,
-                    "selection_metric": "validation_average_precision",
+                    "selection_metric": "validation_macro_average_precision",
                     "normalization": normalization_metadata(config.normalization_mode),
                     "dataset_doi": "10.5281/zenodo.4672426",
                 },
@@ -437,7 +574,7 @@ def train_model(
         writer = csv.DictWriter(stream, fieldnames=list(history[0]))
         writer.writeheader()
         writer.writerows(history)
-    best = max(history, key=lambda item: item["validation_average_precision"])
+    best = max(history, key=lambda item: item["validation_macro_average_precision"])
     result = {
         "status": "PASS",
         "run_type": "smoke" if max_train_patches else "full_training",
@@ -448,10 +585,25 @@ def train_model(
         "normalization": normalization_metadata(config.normalization_mode),
         "augmentation": config.augmentation_backend,
         "loss": "class-balanced BCE + false-alarm-aware focal Tversky",
+        "training_strategy": {
+            "encoder_freeze_epochs": config.encoder_freeze_epochs,
+            "encoder_learning_rate_multiplier": config.encoder_learning_rate_multiplier,
+            "gradient_accumulation_steps": config.gradient_accumulation_steps,
+            "effective_batch_size": config.batch_size * config.gradient_accumulation_steps,
+            "decoder_normalization": config.decoder_normalization,
+            "encoder_batch_norm_statistics": "frozen",
+            "sampling": (
+                "scene-balanced weighted sampling"
+                if config.scene_balanced_sampling
+                else "random patch sampling"
+            ),
+        },
         "training_patches": len(train_data),
         "validation_patches": len(validation_data),
         "epochs_completed": len(history),
-        "checkpoint_selection": "highest validation average precision (threshold-independent)",
+        "checkpoint_selection": (
+            "highest scene-macro validation average precision (threshold-independent)"
+        ),
         "best_validation": best,
         "checkpoint": str(checkpoint_path.resolve()),
         "limitations": [
@@ -471,6 +623,9 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--epochs", type=int, default=40)
     parser.add_argument("--batch-size", type=int, default=2)
+    parser.add_argument("--gradient-accumulation-steps", type=int, default=4)
+    parser.add_argument("--encoder-freeze-epochs", type=int, default=4)
+    parser.add_argument("--encoder-learning-rate-multiplier", type=float, default=0.1)
     parser.add_argument("--encoder", choices=("resnet34", "resnet50"), default="resnet50")
     parser.add_argument("--encoder-checkpoint", type=Path)
     parser.add_argument(
@@ -480,6 +635,10 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--augmentation", choices=("torch", "albumentations"), default="albumentations"
     )
+    parser.add_argument(
+        "--decoder-normalization", choices=("batch", "group"), default="group"
+    )
+    parser.add_argument("--no-scene-balanced-sampling", action="store_true")
     parser.add_argument("--no-pretrained", action="store_true")
     parser.add_argument("--max-train-patches", type=int)
     parser.add_argument("--max-validation-patches", type=int)
@@ -491,12 +650,17 @@ def main(argv: list[str] | None = None) -> int:
     config = TrainingConfig(
         epochs=args.epochs,
         batch_size=args.batch_size,
+        gradient_accumulation_steps=args.gradient_accumulation_steps,
+        encoder_freeze_epochs=args.encoder_freeze_epochs,
+        encoder_learning_rate_multiplier=args.encoder_learning_rate_multiplier,
+        scene_balanced_sampling=not args.no_scene_balanced_sampling,
         encoder=args.encoder,
         encoder_initialization=(
             "SSL4EO-S12 MoCo Sentinel-1" if args.encoder == "resnet50" else "ImageNet"
         ),
         encoder_checkpoint=str(args.encoder_checkpoint) if args.encoder_checkpoint else None,
         pretrained_encoder=not args.no_pretrained,
+        decoder_normalization=args.decoder_normalization,
         normalization_mode=args.normalization,
         augmentation_backend=args.augmentation,
     )
