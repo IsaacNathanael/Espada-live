@@ -1,6 +1,6 @@
 param(
-    [int]$Epochs = 20,
-    [int]$BatchSize = 8,
+    [int]$Epochs = 40,
+    [int]$BatchSize = 4,
     [switch]$Smoke,
     [string]$PythonPath = ""
 )
@@ -31,7 +31,7 @@ $Arguments = @(
     "-m", "espada.ml_train",
     "--dataset-root", $DatasetRoot,
     "--manifest", $Manifest,
-    "--out", (Join-Path $ProjectRoot "out\ml_training"),
+    "--out", (Join-Path $ProjectRoot "out\ml_training_v3"),
     "--epochs", $Epochs,
     "--batch-size", $BatchSize
 )

@@ -16,15 +16,41 @@ class ModelConfig:
     input_min_db: float = -35.0
     input_max_db: float = 5.0
     pretrained_encoder: bool = True
+    attention_decoder: bool = False
 
     def to_dict(self) -> dict:
         return asdict(self)
 
 
+class AttentionGate(nn.Module):
+    def __init__(self, skip_channels: int, gate_channels: int) -> None:
+        super().__init__()
+        intermediate = max(min(skip_channels, gate_channels) // 2, 16)
+        self.skip_projection = nn.Conv2d(skip_channels, intermediate, kernel_size=1, bias=False)
+        self.gate_projection = nn.Conv2d(gate_channels, intermediate, kernel_size=1, bias=False)
+        self.mask = nn.Sequential(
+            nn.ReLU(inplace=True),
+            nn.Conv2d(intermediate, 1, kernel_size=1),
+            nn.Sigmoid(),
+        )
+
+    def forward(self, skip: torch.Tensor, gate: torch.Tensor) -> torch.Tensor:
+        attention = self.mask(self.skip_projection(skip) + self.gate_projection(gate))
+        return skip * attention
+
+
 class DecoderBlock(nn.Module):
-    def __init__(self, input_channels: int, skip_channels: int, output_channels: int) -> None:
+    def __init__(
+        self,
+        input_channels: int,
+        skip_channels: int,
+        output_channels: int,
+        *,
+        attention: bool = False,
+    ) -> None:
         super().__init__()
         self.up = nn.ConvTranspose2d(input_channels, output_channels, kernel_size=2, stride=2)
+        self.attention = AttentionGate(skip_channels, output_channels) if attention else None
         self.refine = nn.Sequential(
             nn.Conv2d(output_channels + skip_channels, output_channels, 3, padding=1, bias=False),
             nn.BatchNorm2d(output_channels),
@@ -40,13 +66,17 @@ class DecoderBlock(nn.Module):
             features = functional.interpolate(
                 features, size=skip.shape[-2:], mode="bilinear", align_corners=False
             )
+        if self.attention is not None:
+            skip = self.attention(skip, features)
         return self.refine(torch.cat((features, skip), dim=1))
 
 
 class ResNet34UNet(nn.Module):
     """Binary U-Net with an ImageNet-pretrained ResNet34 encoder and one SAR channel."""
 
-    def __init__(self, *, pretrained_encoder: bool = True) -> None:
+    def __init__(
+        self, *, pretrained_encoder: bool = True, attention_decoder: bool = False
+    ) -> None:
         super().__init__()
         weights = ResNet34_Weights.DEFAULT if pretrained_encoder else None
         encoder = resnet34(weights=weights)
@@ -65,10 +95,10 @@ class ResNet34UNet(nn.Module):
         self.encoder3 = encoder.layer3
         self.encoder4 = encoder.layer4
 
-        self.decoder4 = DecoderBlock(512, 256, 256)
-        self.decoder3 = DecoderBlock(256, 128, 128)
-        self.decoder2 = DecoderBlock(128, 64, 64)
-        self.decoder1 = DecoderBlock(64, 64, 64)
+        self.decoder4 = DecoderBlock(512, 256, 256, attention=attention_decoder)
+        self.decoder3 = DecoderBlock(256, 128, 128, attention=attention_decoder)
+        self.decoder2 = DecoderBlock(128, 64, 64, attention=attention_decoder)
+        self.decoder1 = DecoderBlock(64, 64, 64, attention=attention_decoder)
         self.final = nn.Sequential(
             nn.ConvTranspose2d(64, 32, kernel_size=2, stride=2),
             nn.Conv2d(32, 32, kernel_size=3, padding=1, bias=False),

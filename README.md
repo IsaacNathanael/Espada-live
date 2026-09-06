@@ -139,11 +139,13 @@ ESPADA does not use the archive's supplied split because it repeats scenes and a
 powershell -ExecutionPolicy Bypass -File .\scripts\train_sar_model.ps1 -Smoke
 ```
 
-The smoke run is not an accuracy claim. Full GPU training uses the complete group-safe train/validation data, saves the best validation-IoU checkpoint, and reserves the test scenes for later full-scene evaluation:
+The smoke run is not an accuracy claim. Full GPU training uses the complete group-safe train/validation data, saves the best threshold-independent validation-average-precision checkpoint, and reserves the test scenes for later full-scene evaluation:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\train_sar_model.ps1 -Epochs 20 -BatchSize 8
+powershell -ExecutionPolicy Bypass -File .\scripts\train_sar_model.ps1 -Epochs 40 -BatchSize 4
 ```
+
+V3 used an attention-gated ResNet34 U-Net and achieved 48.5% validation IoU, 65.3% validation Dice and 72.9% validation average precision after threshold calibration. Its one-time acquisition-group-isolated full-scene test achieved 29.3% IoU, 45.4% Dice, 32.6% precision and 74.6% recall. Two test scenes generalized well while two scenes from 2020-02-24 exposed strong brightness/domain shift, false alarms on dark lookalikes and missed small slicks. The 96.2% pixel accuracy is background-dominated and is not used as the headline result. These numbers are retained as the honest V3 baseline; any V4 changes informed by these scenes require a new external untouched test set for a final claim.
 
 ## Analyze a slick GeoJSON
 
