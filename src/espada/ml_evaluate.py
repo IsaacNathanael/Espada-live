@@ -198,7 +198,10 @@ def evaluate_checkpoint(
             "The source data covers the Gulf of Mexico and cannot prove cross-ocean generalization.",
             "SAR lookalikes can produce false alarms; operational outputs require analyst approval.",
             *(
-                ["This replay informed V4 development and is not an untouched final-test claim."]
+                [
+                    "This replay informed model development and is not an untouched "
+                    "final-test claim."
+                ]
                 if development_replay
                 else []
             ),

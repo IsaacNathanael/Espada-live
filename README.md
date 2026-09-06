@@ -157,6 +157,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\train_sar_model.ps1 -Smoke
 
 V4 peaked early and remained unstable with batch size two, so V5 protects the pretrained features and removes small-batch decoder statistics. Training writes to `out\ml_training_v5`; calibration and evaluation automatically use the matching V5 directories. Pass `-Version v4` to the calibration or evaluation script only when reproducing the archived V4 model.
 
+V5 selected epoch 33 by scene-macro validation AP. Validation-only calibration selected threshold 0.114 and achieved 55.9% oil IoU, 71.7% Dice, 68.8% precision, 74.9% recall and 76.8% AP. On the four previously examined V3 holdout scenes, the V5 development replay achieved 59.6% IoU, 74.7% Dice, 68.2% precision, 82.5% recall and 74.7% AP. This is a large diagnostic improvement over V3 (29.3% IoU and 45.4% Dice), but it is not a fresh blind-test claim because those scenes informed model development.
+
 After V5 calibration, `evaluate_sar_model.ps1` deliberately labels the old four-scene result a development replay. Those scenes informed development and are no longer an untouched test. A newly acquired, acquisition-isolated labelled set is required before publishing a new final generalization claim.
 
 ## Analyze a slick GeoJSON
