@@ -13,6 +13,7 @@ dependencies = [
   "scipy>=1.14",
   "matplotlib>=3.9",
   "Pillow>=11.0",
+  "requests>=2.32",
   "pandas>=2.2",
   "xarray>=2024.7",
   "netCDF4>=1.7",

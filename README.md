@@ -174,6 +174,19 @@ powershell -ExecutionPolicy Bypass -File .\scripts\evaluate_sar_model.ps1 -Versi
 
 See `docs\ml_v6_plan.md` for the promotion rules and the researched pretrained-model comparison. SoftCon ResNet50 is the first optional encoder test because it is a direct Sentinel-1-compatible substitute. CROMA and TerraMind become more meaningful after the data pipeline supplies genuine VV+VH or multimodal inputs.
 
+### External DARTIS evaluation
+
+V6's development replay is not enough for a real-world claim. ESPADA therefore locks a deterministic external sample from the CC BY 4.0 DARTIS_2019 Sentinel-1 benchmark before inference. The default download selects 25 images from each of four subsets—oil/water, oil/coast, no-oil/water and no-oil/coast—while spreading selection across Sentinel products. The result is 100 individual JPEG patches plus oil-object annotations, usually only tens of megabytes rather than a monolithic archive.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\download_dartis_external.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\evaluate_dartis_v6.ps1 -BatchSize 4
+```
+
+The second command is GPU work and may take several minutes because it preserves V6's calibrated flip4 inference. It writes `external_evaluation_report.html`, machine-readable metrics, per-image results and up to 12 review overlays under `out\ml_external_dartis_v6`.
+
+DARTIS publishes Pascal-VOC object boxes instead of pixel masks, so the external report measures object precision, object recall, oil-patch detection rate and no-oil specificity—not pixel IoU or Dice. Its documented sigmoid JPEG normalization is approximately inverted using a dB scale frozen from ESPADA's training scenes; external labels never tune that adapter. Once evaluated, this selection must not be used for model tuning while still being called blind. Source: [DARTIS_2019 on PANGAEA](https://doi.org/10.1594/PANGAEA.980773).
+
 ## Analyze a slick GeoJSON
 
 The input must contain one polygon with `observation_time_utc` and `detection_confidence` properties. The verified demo creates a representative input at `out\demo\slick_observation.geojson`.

@@ -97,7 +97,7 @@ def segment_ml_slick(
     *,
     batch_size: int = 4,
 ) -> tuple[np.ndarray, np.ndarray, dict[str, object]]:
-    """Run the calibrated V5 network on a prepared or linear-power SAR raster."""
+    """Run a calibrated ESPADA network on a prepared or linear-power SAR raster."""
     import torch
 
     from .ml_evaluate import file_sha256, infer_full_scene
