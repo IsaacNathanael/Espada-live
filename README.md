@@ -197,6 +197,12 @@ The challenger follows POSEatSea's published five-class argmax rule at 512x512, 
 
 Provenance: [POSEatSea model card and publisher's MIT license declaration](https://huggingface.co/23f2003521/poseatsea-weights), [input/output implementation](https://github.com/23f2003521/SIH2026/blob/main/poseatsea/inference/sar.py). Pinned model revision: `214e7c248ec09cccfcc36b087847fa7748a662df`; SHA-256: `6a76ca8f06178fdaa36bba27e725fb6e2a7da46764ad76a494b4fcdf1ecd6489`. ESPADA verifies this before loading with `weights_only=True` and strict architecture matching. Published accuracy claims and unknown training overlap are not independent validation. This adapter is implemented against the documented interface without copying upstream application code.
 
+### Prepare the box-detector pilot
+
+Run `scripts\download_dartis_pilot.ps1 -PlanOnly` to reproduce the metadata-only selection without network access. Run it without `-PlanOnly` to download 60 training and 20 validation images from each DARTIS subset (320 total). The script excludes every acquisition group connected to the previously reviewed comparison images and never selects or downloads the reserved test allocation. It validates images and annotations, records hashes and flags cross-partition duplicates. Reruns reuse validated files.
+
+This pilot supports oil-object detection from Pascal-VOC boxes; it does not create segmentation masks. See `docs\DETECTOR_NEXT_STEP.md` for the measured comparison, partition counts and the promotion boundary.
+
 ## Analyze a slick GeoJSON
 
 The input must contain one polygon with `observation_time_utc` and `detection_confidence` properties. The verified demo creates a representative input at `out\demo\slick_observation.geojson`.
