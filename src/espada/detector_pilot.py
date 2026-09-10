@@ -172,11 +172,14 @@ def balanced_limit(rows, maximum):
 
 def _write_report(path, result):
     metrics = result["validation_metrics"]
-    rows = "".join(f"<tr><td>{html.escape(name)}</td><td>{value:.1%}</td></tr>" for name, value in (
+    def percent(value):
+        return "N/A" if value is None else f"{value:.1%}"
+
+    rows = "".join(f"<tr><td>{html.escape(name)}</td><td>{percent(value)}</td></tr>" for name, value in (
         ("Object precision", metrics["object_precision"]), ("Object recall", metrics["object_recall"]),
         ("Object F1", metrics["object_f1"]), ("Oil-image detection", metrics["oil_patch_detection_rate"]),
         ("No-oil specificity", metrics["no_oil_image_specificity"]), ("AP50", result["validation_ap50"])))
-    subset_rows = "".join(f"<tr><td>{key}</td><td>{value['images']}</td><td>{(value['object_f1'] or 0):.1%}</td><td>{(value['oil_patch_detection_rate'] or 0):.1%}</td><td>{(value['no_oil_image_specificity'] or 0):.1%}</td></tr>"
+    subset_rows = "".join(f"<tr><td>{key}</td><td>{value['images']}</td><td>{percent(value['object_f1'])}</td><td>{percent(value['oil_patch_detection_rate'])}</td><td>{percent(value['no_oil_image_specificity'])}</td></tr>"
                           for key, value in result["per_subset_metrics"].items())
     document = f"""<!doctype html><meta charset='utf-8'><title>ESPADA detector pilot</title>
 <style>body{{font:16px/1.5 Segoe UI,sans-serif;background:#edf4f3;color:#102e36;max-width:850px;margin:30px auto}}table{{width:100%;border-collapse:collapse;background:white;margin:16px 0}}td,th{{padding:10px;border-bottom:1px solid #d4e3e0;text-align:left}}.note{{background:#fff2d6;padding:14px}}</style>
