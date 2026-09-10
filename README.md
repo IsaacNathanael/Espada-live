@@ -187,6 +187,16 @@ The second command is GPU work and may take several minutes because it preserves
 
 DARTIS publishes Pascal-VOC object boxes instead of pixel masks, so the external report measures object precision, object recall, oil-patch detection rate and no-oil specificity—not pixel IoU or Dice. Its documented sigmoid JPEG normalization is approximately inverted using a dB scale frozen from ESPADA's training scenes; external labels never tune that adapter. Once evaluated, this selection must not be used for model tuning while still being called blind. Source: [DARTIS_2019 on PANGAEA](https://doi.org/10.1594/PANGAEA.980773).
 
+### Compare the public POSEatSea checkpoint with V6
+
+Run `scripts\run_poseatsea_comparison.ps1` from this project directory. It checks the locked DARTIS files, installs SMP 0.5.0/timm 1.0.19 while pinning the existing torch/torchvision/numpy versions, downloads the resumable 110 MB checkpoint, and evaluates both models. `-SetupOnly` stops after dependency and checkpoint verification. The GPU work is intentionally left to the operator.
+
+Results: `out\model_comparison\comparison.html` and `comparison.json`, plus each model's detailed report and overlays. Original V6 outputs are preserved. Rerunning the command reuses the verified checkpoint but repeats both evaluations.
+
+The challenger follows POSEatSea's published five-class argmax rule at 512x512, then restores labels to original image size with nearest-neighbour resizing. V6 retains its validation threshold and flip4 TTA. Both share the same object matcher (IoU >= 0.5) and 24-pixel minimum component size. Audit A is now a development comparison, not a fresh blind test. A development quality PASS is not an operational certification; no model is promoted automatically. The new evaluator saves boxes for reproducible scoring and reports undefined metrics as N/A.
+
+Provenance: [POSEatSea model card and publisher's MIT license declaration](https://huggingface.co/23f2003521/poseatsea-weights), [input/output implementation](https://github.com/23f2003521/SIH2026/blob/main/poseatsea/inference/sar.py). Pinned model revision: `214e7c248ec09cccfcc36b087847fa7748a662df`; SHA-256: `6a76ca8f06178fdaa36bba27e725fb6e2a7da46764ad76a494b4fcdf1ecd6489`. ESPADA verifies this before loading with `weights_only=True` and strict architecture matching. Published accuracy claims and unknown training overlap are not independent validation. This adapter is implemented against the documented interface without copying upstream application code.
+
 ## Analyze a slick GeoJSON
 
 The input must contain one polygon with `observation_time_utc` and `detection_confidence` properties. The verified demo creates a representative input at `out\demo\slick_observation.geojson`.

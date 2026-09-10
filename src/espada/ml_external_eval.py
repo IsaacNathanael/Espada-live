@@ -9,7 +9,6 @@ from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
-import torch
 from PIL import Image, ImageDraw
 
 from .dartis import (
@@ -26,10 +25,11 @@ from .dartis import (
     load_voc_boxes,
     match_boxes,
     selection_sha256,
+    _file_sha256 as file_sha256,
 )
-from .ml_evaluate import file_sha256, infer_full_scene
-from .ml_model import build_segmentation_model
 from .ml_preprocess import FIXED_MINMAX
+
+EVALUATOR_VERSION = "dartis-object-v2"
 
 
 EXTERNAL_QUALITY_POLICY = {
@@ -71,11 +71,7 @@ def _summarize(counts: dict[str, int]) -> dict[str, object]:
     fn = counts["missed_objects"]
     precision = _divide(tp, tp + fp)
     recall = _divide(tp, tp + fn)
-    f1 = (
-        _divide(2 * precision * recall, precision + recall)
-        if precision is not None and recall is not None
-        else None
-    )
+    f1 = _divide(2 * tp, 2 * tp + fp + fn)
     return {
         **counts,
         "object_precision": precision,
@@ -252,20 +248,27 @@ def _write_report(path: Path, result: dict[str, object]) -> None:
     )
     report = f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ESPADA DARTIS external evaluation</title><style>
     :root{{--ink:#0a1d27;--muted:#60747d;--paper:#eef3f2;--card:#fff;--line:#d5e1df;--teal:#087f7b;--amber:#ffbf3e}}*{{box-sizing:border-box}}body{{margin:0;background:var(--paper);color:var(--ink);font-family:Inter,Segoe UI,Arial,sans-serif}}main{{max-width:1100px;margin:auto;padding:28px}}h1{{margin:5px 0;font:600 34px Georgia,serif}}.eyebrow{{color:var(--teal);font-weight:800;font-size:12px;letter-spacing:.13em}}.note{{color:var(--muted)}}.grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:20px 0}}.card,.panel{{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}}.card small{{display:block;color:var(--muted);text-transform:uppercase}}.card strong{{font:600 27px Georgia,serif}}table{{width:100%;border-collapse:collapse}}th,td{{padding:10px;text-align:left;border-bottom:1px solid var(--line)}}th{{font-size:11px;color:var(--muted);text-transform:uppercase}}code{{background:#e4eeec;padding:2px 5px;border-radius:5px}}@media(max-width:700px){{.grid{{grid-template-columns:1fr 1fr}}main{{padding:14px}}.panel{{overflow:auto}}}}
-    </style></head><body><main><div class="eyebrow">ESPADA · EXTERNAL GENERALIZATION CHECK</div><h1>DARTIS Eastern Mediterranean benchmark</h1><p class="note">Execution {result['execution_status']} · Quality <strong>{result['quality_status']}</strong> · {metrics['images']} locked images · IoU≥{result['matching_iou_threshold']:.2f} object matching · threshold {result['model']['threshold']:.3f}</p><section class="grid"><div class="card"><small>Object precision</small><strong>{_format_percent(metrics['object_precision'])}</strong></div><div class="card"><small>Object recall</small><strong>{_format_percent(metrics['object_recall'])}</strong></div><div class="card"><small>Oil-patch detection</small><strong>{_format_percent(metrics['oil_patch_detection_rate'])}</strong></div><div class="card"><small>No-oil specificity</small><strong>{_format_percent(metrics['no_oil_image_specificity'])}</strong></div></section><section class="panel"><h2>Quality gate: {quality['status']}</h2><table><thead><tr><th>Metric</th><th>Minimum</th><th>Observed</th><th>Result</th></tr></thead><tbody>{quality_rows}</tbody></table><p class="note">{html.escape(quality['note'])}</p></section><section class="panel"><h2>What these numbers mean</h2><p>This dataset supplies oil bounding boxes, not pixel masks. Therefore this report measures whether ESPADA finds oil objects and avoids lookalike/no-oil patches; it does not report segmentation IoU or Dice.</p><p><strong>{metrics['matched_objects']}</strong> oil objects matched, <strong>{metrics['missed_objects']}</strong> missed, and <strong>{metrics['false_positive_objects']}</strong> unmatched detections.</p></section><section class="panel"><h2>Subsets</h2><table><thead><tr><th>Subset</th><th>Images</th><th>Object precision</th><th>Object recall</th><th>Oil patch detection</th><th>No-oil specificity</th></tr></thead><tbody>{subset_rows}</tbody></table></section><section class="panel"><h2>Evidence boundary</h2><p>DARTIS is geographically external to ESPADA's Gulf of Mexico training data. Its JPEG normalization is approximately inverted using a scale frozen from ESPADA training scenes. Review images show truth boxes in amber and predictions in teal.</p><p class="note">This audit exposes a domain-shift failure and does not certify autonomous operational use. Human approval remains mandatory.</p></section></main></body></html>"""
+    </style></head><body><main><div class="eyebrow">ESPADA · EXTERNAL GENERALIZATION CHECK</div><h1>{html.escape(str(result['model'].get('backend', 'v6')).upper())} · DARTIS comparison</h1><p class="note">Execution {result['execution_status']} · Quality <strong>{result['quality_status']}</strong> · {metrics['images']} locked images · IoU≥{result['matching_iou_threshold']:.2f} object matching · {html.escape(str(result['model'].get('decision_rule', 'threshold ' + str(result['model'].get('threshold')))))}</p><section class="grid"><div class="card"><small>Object precision</small><strong>{_format_percent(metrics['object_precision'])}</strong></div><div class="card"><small>Object recall</small><strong>{_format_percent(metrics['object_recall'])}</strong></div><div class="card"><small>Oil-patch detection</small><strong>{_format_percent(metrics['oil_patch_detection_rate'])}</strong></div><div class="card"><small>No-oil specificity</small><strong>{_format_percent(metrics['no_oil_image_specificity'])}</strong></div></section><section class="panel"><h2>Quality gate: {quality['status']}</h2><table><thead><tr><th>Metric</th><th>Minimum</th><th>Observed</th><th>Result</th></tr></thead><tbody>{quality_rows}</tbody></table><p class="note">{html.escape(quality['note'])}</p></section><section class="panel"><h2>What these numbers mean</h2><p>This dataset supplies oil bounding boxes, not pixel masks. Therefore this report measures whether ESPADA finds oil objects and avoids lookalike/no-oil patches; it does not report segmentation IoU or Dice.</p><p><strong>{metrics['matched_objects']}</strong> oil objects matched, <strong>{metrics['missed_objects']}</strong> missed, and <strong>{metrics['false_positive_objects']}</strong> unmatched detections.</p></section><section class="panel"><h2>Subsets</h2><table><thead><tr><th>Subset</th><th>Images</th><th>Object precision</th><th>Object recall</th><th>Oil patch detection</th><th>No-oil specificity</th></tr></thead><tbody>{subset_rows}</tbody></table></section><section class="panel"><h2>Evidence boundary</h2><p>{html.escape(str(result['input_adapter']['method']))}. Audit A now informs development; future claims require a fresh test. Review images show truth boxes in amber and predictions in teal.</p><p class="note">These results do not certify autonomous operational use. Human approval remains mandatory.</p></section></main></body></html>"""
     path.write_text(report, encoding="utf-8")
 
 
 def evaluate_dartis(
     dataset_root: Path,
     checkpoint_path: Path,
-    calibration_path: Path,
+    calibration_path: Path | None,
     output_dir: Path,
     *,
     batch_size: int = 4,
     matching_iou_threshold: float = 0.5,
     min_component_pixels: int = 24,
+    backend: str = "v6",
 ) -> dict[str, object]:
+    import torch
+
+    if backend not in {"v6", "poseatsea"}:
+        raise ValueError("Unknown DARTIS model backend")
+    if batch_size < 1 or not 0 < matching_iou_threshold <= 1 or min_component_pixels < 1:
+        raise ValueError("Invalid batch size, matching IoU or component size")
     dataset_root = Path(dataset_root)
     manifest_path = dataset_root / "external_manifest.csv"
     download_status_path = dataset_root / "download_status.json"
@@ -279,24 +282,61 @@ def evaluate_dartis(
     )
 
     checkpoint_path = Path(checkpoint_path)
-    calibration_path = Path(calibration_path)
-    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
-    calibration = json.loads(calibration_path.read_text(encoding="utf-8"))
     checkpoint_digest = file_sha256(checkpoint_path)
-    if calibration.get("checkpoint_sha256") != checkpoint_digest:
-        raise ValueError("Threshold calibration belongs to a different model checkpoint")
-    model = build_segmentation_model(
-        checkpoint.get("model_config", {}), pretrained_encoder=False
-    )
-    model.load_state_dict(checkpoint["model_state_dict"])
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = model.to(device).eval()
-    patch_size = int(checkpoint.get("training_config", {}).get("patch_size", 256))
-    normalization_mode = str(
-        checkpoint.get("normalization", {}).get("mode", FIXED_MINMAX)
-    )
-    threshold = float(calibration["selected_threshold"])
-    tta_mode = str(calibration.get("test_time_augmentation", "none"))
+    if backend == "poseatsea":
+        from .poseatsea import load_model, predict, MODEL_SPEC
+
+        model = load_model(checkpoint_path, device)
+        model_details = {**MODEL_SPEC, "threshold": None,
+                         "decision_rule": "argmax of five logits; oil class 1",
+                         "test_time_augmentation": "none"}
+        adapter_details = {
+            "method": "RGB uint8, OpenCV linear resize to 512x512, divide by 255; "
+                      "argmax labels resized back with nearest neighbour",
+            "external_labels_used_for_adapter": False,
+        }
+
+        def infer(image_path, image):
+            return predict(model, image_path, device)
+    else:
+        from .ml_evaluate import infer_full_scene
+        from .ml_model import build_segmentation_model
+
+        if calibration_path is None:
+            raise ValueError("V6 requires its frozen calibration")
+        calibration_path = Path(calibration_path)
+        calibration = json.loads(calibration_path.read_text(encoding="utf-8"))
+        if calibration.get("checkpoint_sha256") != checkpoint_digest:
+            raise ValueError("Threshold calibration belongs to a different model checkpoint")
+        checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
+        model = build_segmentation_model(checkpoint.get("model_config", {}), pretrained_encoder=False)
+        model.load_state_dict(checkpoint["model_state_dict"], strict=True)
+        model = model.to(device).eval()
+        patch_size = int(checkpoint.get("training_config", {}).get("patch_size", 256))
+        normalization_mode = str(checkpoint.get("normalization", {}).get("mode", FIXED_MINMAX))
+        threshold = float(calibration["selected_threshold"])
+        tta_mode = str(calibration.get("test_time_augmentation", "none"))
+        model_details = {
+            "checkpoint_epoch": int(checkpoint.get("epoch", 0)),
+            "calibration": str(calibration_path.resolve()),
+            "calibration_sha256": file_sha256(calibration_path),
+            "threshold": threshold, "test_time_augmentation": tta_mode,
+        }
+        adapter_details = {
+            "method": "documented DARTIS sigmoid normalization approximately inverted",
+            "target_scene_std_db": ESPADA_TRAIN_MEDIAN_SCENE_STD_DB,
+            "target_scale_source": "median standard deviation of ESPADA's 14 training scenes only",
+            "external_labels_used_for_adapter": False,
+        }
+
+        def infer(image_path, image):
+            probability = infer_full_scene(
+                model, dartis_jpeg_to_db(image), device, patch_size=patch_size,
+                stride=max(patch_size * 3 // 4, 1), batch_size=batch_size,
+                normalization_mode=normalization_mode, tta_mode=tta_mode,
+            )
+            return probability >= threshold, probability
 
     aggregate = _new_counts()
     subset_counts: dict[str, dict[str, int]] = defaultdict(_new_counts)
@@ -306,19 +346,11 @@ def evaluate_dartis(
         print(f"Evaluating DARTIS image {index}/{len(rows)}: {row['jpg_file']}", flush=True)
         with Image.open(image_path) as image_file:
             image = np.asarray(image_file.convert("L"), dtype=np.uint8)
-        image_db = dartis_jpeg_to_db(image)
-        probability = infer_full_scene(
-            model,
-            image_db,
-            device,
-            patch_size=patch_size,
-            stride=max(patch_size * 3 // 4, 1),
-            batch_size=batch_size,
-            normalization_mode=normalization_mode,
-            tta_mode=tta_mode,
-        )
+        mask, probability = infer(image_path, image)
+        if mask.shape != image.shape or probability.shape != image.shape or not np.isfinite(probability).all():
+            raise ValueError("Model returned invalid prediction shape or non-finite probabilities")
         predicted = component_boxes(
-            probability >= threshold, min_component_pixels=min_component_pixels
+            mask, min_component_pixels=min_component_pixels
         )
         truth = load_voc_boxes(annotation_path) if annotation_path is not None else []
         matches = match_boxes(predicted, truth, iou_threshold=matching_iou_threshold)
@@ -353,11 +385,15 @@ def evaluate_dartis(
             "missed_objects": len(truth) - matched,
             "best_box_iou": best_iou,
             "maximum_probability": float(probability.max()),
+            "predicted_boxes_json": json.dumps(predicted),
+            "truth_boxes_json": json.dumps(truth),
         }
         per_image.append(item)
         error_weight = item["missed_objects"] + item["false_positive_objects"]
         if error_weight:
             review_candidates.append((int(error_weight), image, predicted, truth, row["jpg_file"]))
+            review_candidates.sort(key=lambda item: (-item[0], item[4]))
+            del review_candidates[12:]
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -380,7 +416,8 @@ def evaluate_dartis(
     result: dict[str, object] = {
         "execution_status": "PASS",
         "quality_status": quality_gate["status"],
-        "evaluation": "Locked external DARTIS object-level generalization benchmark",
+        "evaluator_version": EVALUATOR_VERSION,
+        "evaluation": "DARTIS External Audit A; development comparison, not a fresh blind test",
         "dataset": {
             "name": "DARTIS_2019",
             "doi": DARTIS_DOI,
@@ -388,24 +425,18 @@ def evaluate_dartis(
             "region": "Eastern Mediterranean Sea",
             "selection_sha256": download_status["selection_sha256"],
             "selection_seed": download_status["selection_seed"],
-            "role": download_status["dataset_role"],
+            "manifest_sha256": download_status["manifest_sha256"],
+            "role": "External Audit A, now used for development comparisons",
         },
         "model": {
+            **model_details,
+            "backend": backend,
             "checkpoint": str(checkpoint_path.resolve()),
             "checkpoint_sha256": checkpoint_digest,
-            "checkpoint_epoch": int(checkpoint.get("epoch", 0)),
-            "calibration": str(calibration_path.resolve()),
-            "threshold": threshold,
-            "test_time_augmentation": tta_mode,
             "device": str(device),
             "gpu": torch.cuda.get_device_name(0) if device.type == "cuda" else None,
         },
-        "input_adapter": {
-            "method": "documented DARTIS sigmoid normalization approximately inverted",
-            "target_scene_std_db": ESPADA_TRAIN_MEDIAN_SCENE_STD_DB,
-            "target_scale_source": "median standard deviation of ESPADA's 14 training scenes only",
-            "external_labels_used_for_adapter": False,
-        },
+        "input_adapter": adapter_details,
         "matching_iou_threshold": matching_iou_threshold,
         "minimum_component_pixels": min_component_pixels,
         "external_metrics": external_metrics,
@@ -422,6 +453,8 @@ def evaluate_dartis(
             "DARTIS JPEG normalization cannot recover exact calibrated backscatter values.",
             "A single external region cannot establish global or autonomous operational validity.",
             "The result must not be used to retune V6 while still being called a blind test.",
+            "Third-party training overlap has not been independently excluded; a fresh test is required.",
+            "The quality gate is a development screening policy, not operational certification.",
         ],
         "artifacts": [
             "external_evaluation.json",
@@ -441,7 +474,8 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Evaluate V6 on locked external DARTIS data")
     parser.add_argument("--dataset-root", type=Path, required=True)
     parser.add_argument("--checkpoint", type=Path, required=True)
-    parser.add_argument("--calibration", type=Path, required=True)
+    parser.add_argument("--calibration", type=Path)
+    parser.add_argument("--backend", choices=["v6", "poseatsea"], default="v6")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--matching-iou", type=float, default=0.5)
@@ -460,6 +494,7 @@ def main(argv: list[str] | None = None) -> int:
             batch_size=args.batch_size,
             matching_iou_threshold=args.matching_iou,
             min_component_pixels=args.min_component_pixels,
+            backend=args.backend,
         )
     except Exception as exc:
         print(
