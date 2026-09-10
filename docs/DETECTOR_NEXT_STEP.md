@@ -57,6 +57,10 @@ reserved test definitively blind.
    selected against the frozen three-metric development gate. Training remains a
    user GPU task. Do not paint oil boxes as pixel masks: much of each box can be
    ordinary water.
+
+   The pilot uses SGD with a one-epoch learning-rate warmup, a four-times lower
+   backbone rate and finite-gradient checks. This replaced the initial AdamW
+   pilot after two runs improved AP50 to 18–21% but became numerically non-finite.
 3. Compare candidate localization and false alarms on the pilot validation set.
    Include coastal/open-water breakdowns and review images. Use validation for
    thresholds; never optimize the reserved test. Expand the training allocation

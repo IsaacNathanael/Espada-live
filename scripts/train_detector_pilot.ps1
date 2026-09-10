@@ -1,6 +1,7 @@
 param(
     [int]$Epochs = 8,
     [int]$BatchSize = 2,
+    [double]$LearningRate = 0.001,
     [switch]$Smoke,
     [string]$GpuPythonPath = ""
 )
@@ -22,7 +23,8 @@ $Arguments = @(
     "--status", $Status,
     "--out", (Join-Path $ProjectRoot "out\$OutputName"),
     "--epochs", $Epochs,
-    "--batch-size", $BatchSize
+    "--batch-size", $BatchSize,
+    "--learning-rate", $LearningRate
 )
 if ($Smoke) { $Arguments += "--smoke" }
 $env:PYTHONPATH = Join-Path $ProjectRoot "src"

@@ -192,7 +192,7 @@ def _write_report(path, result):
 
 
 def train(manifest, status_path, output_dir, *, epochs=8, batch_size=2,
-          learning_rate=1e-4, smoke=False):
+          learning_rate=1e-3, smoke=False):
     import torch
     from torch.utils.data import DataLoader
 
@@ -217,21 +217,52 @@ def train(manifest, status_path, output_dir, *, epochs=8, batch_size=2,
                         num_workers=0, collate_fn=collate)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = build_model(pretrained=True).to(device)
-    optimizer = torch.optim.AdamW((p for p in model.parameters() if p.requires_grad),
-                                  lr=learning_rate, weight_decay=1e-4)
+    backbone_ids = {id(parameter) for parameter in model.backbone.parameters()}
+    backbone_parameters = [parameter for parameter in model.parameters()
+                           if parameter.requires_grad and id(parameter) in backbone_ids]
+    detector_parameters = [parameter for parameter in model.parameters()
+                           if parameter.requires_grad and id(parameter) not in backbone_ids]
+    base_lrs = [learning_rate * 0.25, learning_rate]
+    optimizer = torch.optim.SGD(
+        [{"params": backbone_parameters, "lr": base_lrs[0]},
+         {"params": detector_parameters, "lr": base_lrs[1]}],
+        momentum=0.9, weight_decay=5e-4,
+    )
     output_dir.mkdir(parents=True, exist_ok=True)
     checkpoint_path = output_dir / "detector_best.pt"
-    history, best_ap = [], -1.0
+    history, best_ap, skipped_nonfinite = [], -1.0, 0
+    warmup_steps = max(1, min(len(loader), 100))
     for epoch in range(1, epochs + 1):
         model.train(); losses = []
-        for images, targets in loader:
+        for batch_index, (images, targets) in enumerate(loader):
+            if epoch == 1:
+                scale = min(1.0, (batch_index + 1) / warmup_steps)
+                for group, base_lr in zip(optimizer.param_groups, base_lrs):
+                    group["lr"] = base_lr * scale
+            else:
+                for group, base_lr in zip(optimizer.param_groups, base_lrs):
+                    group["lr"] = base_lr
             images = [image.to(device) for image in images]
             targets = [{key: value.to(device) for key, value in target.items()} for target in targets]
             loss = sum(model(images, targets).values())
-            if not torch.isfinite(loss): raise ValueError("Non-finite detector loss")
-            optimizer.zero_grad(set_to_none=True); loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 5.0); optimizer.step()
+            optimizer.zero_grad(set_to_none=True)
+            if not torch.isfinite(loss):
+                skipped_nonfinite += 1
+                if skipped_nonfinite > 3:
+                    raise ValueError("Repeated non-finite detector losses")
+                continue
+            loss.backward()
+            gradient_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), 5.0)
+            if not torch.isfinite(gradient_norm):
+                optimizer.zero_grad(set_to_none=True)
+                skipped_nonfinite += 1
+                if skipped_nonfinite > 3:
+                    raise ValueError("Repeated non-finite detector gradients")
+                continue
+            optimizer.step()
             losses.append(float(loss.detach().cpu()))
+        if not losses:
+            raise ValueError("No finite training batches completed")
         predictions, truths = predict_dataset(model, validation_data, device, batch_size=batch_size)
         ap50 = average_precision_50(predictions, truths)
         entry = {"epoch": epoch, "training_loss": float(np.mean(losses)), "validation_ap50": ap50}
@@ -254,6 +285,10 @@ def train(manifest, status_path, output_dir, *, epochs=8, batch_size=2,
         "gpu": torch.cuda.get_device_name(0) if device.type == "cuda" else None,
         "training_images": len(train_rows), "validation_images": len(validation_rows),
         "epochs_completed": epochs, "checkpoint_epoch": int(checkpoint["epoch"]),
+        "optimizer": {"name": "SGD", "detector_learning_rate": learning_rate,
+                      "backbone_learning_rate": learning_rate * 0.25,
+                      "momentum": 0.9, "warmup_steps": warmup_steps,
+                      "skipped_nonfinite_batches": skipped_nonfinite},
         "checkpoint": str(checkpoint_path.resolve()), "checkpoint_sha256": _file_sha256(checkpoint_path),
         "checkpoint_selection": "highest validation AP50",
         "validation_ap50": average_precision_50(predictions, truths),
@@ -279,7 +314,7 @@ def main(argv=None):
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--epochs", type=int, default=8)
     parser.add_argument("--batch-size", type=int, default=2)
-    parser.add_argument("--learning-rate", type=float, default=1e-4)
+    parser.add_argument("--learning-rate", type=float, default=1e-3)
     parser.add_argument("--smoke", action="store_true")
     args = parser.parse_args(argv)
     try:
