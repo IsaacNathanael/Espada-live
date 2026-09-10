@@ -203,6 +203,8 @@ Run `scripts\download_dartis_pilot.ps1 -PlanOnly` to reproduce the metadata-only
 
 This pilot supports oil-object detection from Pascal-VOC boxes; it does not create segmentation masks. See `docs\DETECTOR_NEXT_STEP.md` for the measured comparison, partition counts and the promotion boundary.
 
+After the pilot download passes, run `scripts\train_detector_pilot.ps1 -Smoke` for a one-epoch, 24-image pipeline check. It uses TorchVision's COCO-pretrained Faster R-CNN MobileNetV3-Large 320 FPN and downloads its approximately 74 MB checkpoint on the first run. If smoke execution passes, run the same command without `-Smoke` for the 8-epoch pilot. Checkpoint selection uses validation AP50; the reported decision threshold also uses validation and never reads the reserved test allocation. Outputs are written under `out\detector_pilot_smoke` and `out\detector_pilot`.
+
 ## Analyze a slick GeoJSON
 
 The input must contain one polygon with `observation_time_utc` and `detection_confidence` properties. The verified demo creates a representative input at `out\demo\slick_observation.geojson`.

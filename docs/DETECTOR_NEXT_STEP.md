@@ -50,10 +50,13 @@ reserved test definitively blind.
    It keeps reserved test images unopened, saves metadata, attribution and file
    hashes, and flags cross-partition duplicates. Run
    `scripts\download_dartis_pilot.ps1`; use `-PlanOnly` for a network-free check.
-2. Use DARTIS boxes to train an object detector for oil candidates, with no-oil
-   images providing negative examples. Select one modest pretrained detector
-   after checking its input contract and license. Keep training on the user's GPU.
-   Do not paint oil boxes as pixel masks: much of each box can be ordinary water.
+2. Implemented: the pilot trains TorchVision Faster R-CNN MobileNetV3-Large
+   320 FPN from COCO weights, with oil boxes as candidates and no-oil images as
+   negatives. Horizontal/vertical flips preserve SAR orientation invariance.
+   Checkpoints are selected by validation AP50; the confidence threshold is then
+   selected against the frozen three-metric development gate. Training remains a
+   user GPU task. Do not paint oil boxes as pixel masks: much of each box can be
+   ordinary water.
 3. Compare candidate localization and false alarms on the pilot validation set.
    Include coastal/open-water breakdowns and review images. Use validation for
    thresholds; never optimize the reserved test. Expand the training allocation
@@ -77,8 +80,9 @@ Completed: comparison interpretation, metadata partition allocation, three tests
 covering transitive scene/date overlap, mosaic dates, determinism and invalid
 input; successful preparation against all 3655 metadata records.
 
-Pending: pilot image download, annotation/duplicate review, box-detector training
-adapter and pilot evaluation. No new model training, network download or physics
+Completed after this plan was written: the 320-image pilot download and duplicate
+audit passed; the training adapter and metric checks are ready. Pending: GPU smoke
+run, full pilot training and validation review. No detector training or physics
 filter was run while preparing this code. No score target is guaranteed.
 
 Sources:
