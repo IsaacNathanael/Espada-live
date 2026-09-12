@@ -110,6 +110,13 @@ def _parser() -> argparse.ArgumentParser:
     time_search.add_argument("--environment-cache", type=Path, required=True)
     time_search.add_argument("--candidates", type=Path, required=True)
     time_search.add_argument("--out", type=Path, required=True)
+    time_search.add_argument(
+        "--ages-hours",
+        type=float,
+        nargs="+",
+        default=[1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0],
+        help="candidate slick ages to test, in hours before observation",
+    )
     replay = subparsers.add_parser(
         "replay", help="render an animated forensic replay from a completed case"
     )
@@ -307,7 +314,16 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(result, indent=2, default=str))
         return 0 if result["status"] == "PASS" else 1
     if args.command == "time-search":
-        result = search_release_window(args.slick, args.environment_cache, args.candidates, args.out)
+        ages = tuple(sorted(set(args.ages_hours)))
+        if not ages or any(age <= 0 for age in ages):
+            raise ValueError("Every candidate age must be greater than zero")
+        result = search_release_window(
+            args.slick,
+            args.environment_cache,
+            args.candidates,
+            args.out,
+            ages_hours=ages,
+        )
         print(json.dumps(result, indent=2, default=str))
         return 0 if result["status"] == "PASS" else 1
     if args.command == "replay":
