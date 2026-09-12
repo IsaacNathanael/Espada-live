@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .demo import run_demo
 from .dashboard import generate_dashboard
+from .dossier import generate_evidence_dossier
 from .ais import normalize_ais_csv
 from .attribution import write_attribution_outputs
 from .case_alignment import validate_case_alignment
@@ -89,6 +90,11 @@ def _parser() -> argparse.ArgumentParser:
     slick.add_argument("--seed", type=int, default=26143)
     dashboard = subparsers.add_parser("dashboard", help="regenerate the offline dashboard")
     dashboard.add_argument("--out", type=Path, default=Path("out/demo"))
+    dossier = subparsers.add_parser(
+        "dossier", help="build a portable evidence dossier from a completed case"
+    )
+    dossier.add_argument("--case-root", type=Path, required=True)
+    dossier.add_argument("--out", type=Path, required=True)
     sar_demo = subparsers.add_parser("sar-demo", help="run evaluated synthetic SAR segmentation")
     sar_demo.add_argument("--out", type=Path, default=Path("out/sar"))
     sar_demo.add_argument("--seed", type=int, default=26143)
@@ -270,6 +276,10 @@ def main(argv: list[str] | None = None) -> int:
         path = generate_dashboard(args.out)
         print(json.dumps({"status": "PASS", "dashboard": str(path)}, indent=2))
         return 0
+    if args.command == "dossier":
+        result = generate_evidence_dossier(args.case_root, args.out)
+        print(json.dumps(result, indent=2, default=str))
+        return 0 if result["status"] == "PASS" else 1
     if args.command == "sar-demo":
         result = run_synthetic_segmentation_demo(args.out, seed=args.seed)
         print(json.dumps(result, indent=2))

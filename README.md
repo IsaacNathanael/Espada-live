@@ -46,6 +46,30 @@ The main outputs appear in `out\demo`:
 - `ais_tracks.csv`
 - `demo_result.json`
 
+## Open the offline judge showcase
+
+After the verified demo has produced `out\demo`, double-click `ESPADA_SHOWCASE.cmd` or run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_showcase.ps1
+```
+
+This regenerates the self-contained showcase, starts a small local server at `http://127.0.0.1:4173/out/demo/dashboard.html`, and opens it without rerunning model training, live downloads, pandas, PyTorch, or the attribution simulation. It includes the animated reverse reconstruction, locked known-source reveal, measured stress-condition explorer, candidate evidence ledger, real-data adapter status, and evidence JSON export.
+
+## Run a detector-independent operational case
+
+ESPADA can begin from any analyst-approved slick polygon. The polygon may originate from the bundled SAR model, another licensed detector, an agency product, or manual expert review. This keeps the attribution engine independent of one segmentation model.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_approved_slick_case.ps1 `
+  -SlickGeoJson ".\path\to\approved_slick.geojson" `
+  -AisCsv ".\path\to\ais_positions.csv" `
+  -EnvironmentCache ".\data\cache\environment_historical.json" `
+  -AgeHours 19
+```
+
+The five gated stages audit AIS, verify time alignment, reconstruct the release zone, rank and forward-check vessels, and generate a portable `evidence_dossier.html` plus `evidence_bundle.json`. Processing safely stops when the sources do not cover the same incident window.
+
 ## Run everything
 
 This refreshes environmental data, runs the 24-case evaluation, executes the full demo, and regenerates the dashboard:
