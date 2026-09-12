@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "case_id": "sar_incident_001",
+  "mode": "sar",
+  "observation_time_utc": "2026-09-03T22:00:00Z",
+  "bbox": [71.2, 18.5, 71.8, 19.0],
+  "inputs": {
+    "sar_image": "scene.tif",
+    "ais_csv": "ais_positions.csv",
+    "environment_cache": "data/cache/environment_historical.json"
+  },
+  "analysis": {
+    "analyst_approved": false,
+    "use_classical_fallback": false,
+    "age_hours": 0,
+    "candidate_ages_hours": [1.5, 2, 3, 4, 6, 8, 10, 12, 16, 20, 24]
+  },
+  "output_directory": "out/cases/sar_incident_001"
+}
