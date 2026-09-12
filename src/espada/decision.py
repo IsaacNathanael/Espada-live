@@ -47,6 +47,7 @@ def evaluate_case_decision(case_root: Path, output_dir: Path) -> dict[str, objec
     alignment = _read(case_root / "case_alignment.json")
     ranking = _read(case_root / "ranking" / "candidates.json")
     sensitivity = _read(case_root / "sensitivity" / "sensitivity_report.json")
+    time_search = _read(case_root / "time_search" / "release_time_search.json")
     candidates = list(ranking.get("candidates", []))
     top = ranking.get("top_candidate", candidates[0] if candidates else {})
     runner_up = candidates[1] if len(candidates) > 1 else {}
@@ -56,8 +57,18 @@ def evaluate_case_decision(case_root: Path, output_dir: Path) -> dict[str, objec
     forward_error = _finite(top.get("forward_error_km"))
     data_quality = _finite(top.get("data_quality"), 0.0)
     candidate_count = int(ranking.get("candidate_count", len(candidates)))
-    top3_rate = _finite(sensitivity.get("top_3_rate"), -1.0)
-    worst_rank = int(sensitivity.get("worst_rank", 999)) if sensitivity else 999
+    if time_search:
+        stability_source = "answer-key-free release-time search"
+        top3_rate = _finite(time_search.get("top_candidate_top_3_rate"), -1.0)
+        top1_rate = _finite(time_search.get("top_candidate_rank_1_rate"), -1.0)
+        stability_candidate_matches = str(time_search.get("top_candidate_id")) == str(top.get("mmsi"))
+        worst_rank = None
+    else:
+        stability_source = "known-source sensitivity audit" if sensitivity else "not run"
+        top3_rate = _finite(sensitivity.get("top_3_rate"), -1.0)
+        top1_rate = _finite(sensitivity.get("top_1_rate"), -1.0)
+        stability_candidate_matches = bool(sensitivity)
+        worst_rank = int(sensitivity.get("worst_rank", 999)) if sensitivity else None
     priority = POLICY["priority_review"]
     limited = POLICY["limited_shortlist"]
 
@@ -100,9 +111,9 @@ def evaluate_case_decision(case_root: Path, output_dir: Path) -> dict[str, objec
         },
         {
             "gate": "assumption_stability",
-            "status": "PASS" if sensitivity and top3_rate >= priority["minimum_sensitivity_top3_rate"] and worst_rank <= priority["maximum_sensitivity_worst_rank"] else ("WARN" if not sensitivity else "STOP"),
-            "observed": {"top_3_rate": top3_rate if sensitivity else None, "worst_rank": worst_rank if sensitivity else None},
-            "requirement": ">=0.80 Top-3 retention and worst rank <=3",
+            "status": "PASS" if stability_candidate_matches and top3_rate >= priority["minimum_sensitivity_top3_rate"] and (worst_rank is None or worst_rank <= priority["maximum_sensitivity_worst_rank"]) else ("WARN" if not time_search and not sensitivity else "STOP"),
+            "observed": {"source": stability_source, "top_1_rate": top1_rate if top1_rate >= 0 else None, "top_3_rate": top3_rate if top3_rate >= 0 else None, "worst_rank": worst_rank, "candidate_matches": stability_candidate_matches},
+            "requirement": ">=0.80 Top-3 retention for the same leading candidate",
         },
     ]
     stopped = any(item["status"] == "STOP" for item in checks)
@@ -112,7 +123,7 @@ def evaluate_case_decision(case_root: Path, output_dir: Path) -> dict[str, objec
         and score_margin >= priority["minimum_score_margin"]
         and forward_error <= priority["maximum_forward_error_km"]
         and data_quality >= priority["minimum_data_quality"]
-        and bool(sensitivity)
+        and (bool(time_search) or bool(sensitivity))
     )
     limited_ready = (
         not stopped

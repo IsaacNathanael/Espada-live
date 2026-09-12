@@ -24,6 +24,7 @@ from .sentinel_catalog import SentinelSearchRequest, discover_sentinel1
 from .sentinel_process import download_sentinel1_subset
 from .slick import analyze_slick
 from .verification import VerificationConfig, run_verification
+from .time_window import search_release_window
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -102,6 +103,13 @@ def _parser() -> argparse.ArgumentParser:
     )
     decide.add_argument("--case-root", type=Path, required=True)
     decide.add_argument("--out", type=Path, required=True)
+    time_search = subparsers.add_parser(
+        "time-search", help="search candidate vessels and plausible release ages"
+    )
+    time_search.add_argument("--slick", type=Path, required=True)
+    time_search.add_argument("--environment-cache", type=Path, required=True)
+    time_search.add_argument("--candidates", type=Path, required=True)
+    time_search.add_argument("--out", type=Path, required=True)
     replay = subparsers.add_parser(
         "replay", help="render an animated forensic replay from a completed case"
     )
@@ -296,6 +304,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if result["status"] == "PASS" else 1
     if args.command == "decide":
         result = evaluate_case_decision(args.case_root, args.out)
+        print(json.dumps(result, indent=2, default=str))
+        return 0 if result["status"] == "PASS" else 1
+    if args.command == "time-search":
+        result = search_release_window(args.slick, args.environment_cache, args.candidates, args.out)
         print(json.dumps(result, indent=2, default=str))
         return 0 if result["status"] == "PASS" else 1
     if args.command == "replay":

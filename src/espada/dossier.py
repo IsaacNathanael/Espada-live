@@ -56,6 +56,7 @@ def generate_evidence_dossier(case_root: Path, output_dir: Path) -> dict[str, ob
     historical = _read_json(case_root / "evaluation" / "historical_evaluation.json")
     sensitivity = _read_json(case_root / "sensitivity" / "sensitivity_report.json")
     decision = _read_json(case_root / "decision" / "decision_gate.json")
+    time_search = _read_json(case_root / "time_search" / "release_time_search.json")
     candidates = ranking.get("candidates", [])
     top = ranking.get("top_candidate", {})
     silence = ranking.get("silence_analysis", {})
@@ -69,6 +70,7 @@ def generate_evidence_dossier(case_root: Path, output_dir: Path) -> dict[str, ob
         "historical_evaluation": case_root / "evaluation" / "historical_evaluation.json",
         "sensitivity_report": case_root / "sensitivity" / "sensitivity_report.json",
         "decision_gate": case_root / "decision" / "decision_gate.json",
+        "release_time_search": case_root / "time_search" / "release_time_search.json",
     }
     integrity = {
         key: {"path": str(path.resolve()), "sha256": digest}
@@ -91,6 +93,7 @@ def generate_evidence_dossier(case_root: Path, output_dir: Path) -> dict[str, ob
         "historical_evaluation": historical or None,
         "sensitivity_analysis": sensitivity or None,
         "operational_decision": decision or None,
+        "release_time_search": time_search or None,
         "artifact_integrity": integrity,
     }
     bundle_path = output_dir / "evidence_bundle.json"
@@ -124,6 +127,7 @@ def generate_evidence_dossier(case_root: Path, output_dir: Path) -> dict[str, ob
     quality_uri = _image_uri(case_root / "ais" / "ais_quality.png")
     sensitivity_uri = _image_uri(case_root / "sensitivity" / "sensitivity_rank_matrix.png")
     sensitivity_envelope_uri = _image_uri(case_root / "sensitivity" / "sensitivity_origin_envelope.png")
+    time_search_uri = _image_uri(case_root / "time_search" / "release_time_window.png")
     incident = alignment.get("incident_window", {})
     origin = estimate.get("estimated_origin", {})
     historical_section = ""
@@ -151,6 +155,10 @@ def generate_evidence_dossier(case_root: Path, output_dir: Path) -> dict[str, ob
             for item in decision.get("checks", [])
         )
         decision_section = f"""<article class='panel decision-card'><div><div class='eyebrow'>Human-in-the-loop decision gate</div><div class='proof-answer'>{html.escape(str(decision.get('decision', 'NOT RUN')).replace('_', ' '))}</div><p>{html.escape(str(decision.get('recommended_action', '')))}</p><div class='disclosure'>Declared engineering escalation policy—not learned confidence, accuracy, guilt probability or a legal standard.</div></div><div class='checks'>{gate_cards}</div></article>"""
+    time_search_section = ""
+    if time_search:
+        window = time_search.get("supported_age_window_hours", ["—", "—"])
+        time_search_section = f"""<article class='panel decision-card'><div><div class='eyebrow'>Answer-key-free release-time search</div><div class='proof-answer'>{html.escape(str(time_search.get('top_candidate_id', 'UNKNOWN')))}</div><p>Selected across {html.escape(str(time_search.get('scenarios_per_candidate', '—')))} vessel-age and physics scenarios. Supported spill age: <b>{html.escape(str(window[0]))}-{html.escape(str(window[1]))} hours</b> before observation.</p><div class='proof-kpis'><span><small>Rank 1 support</small><b>{_percent(time_search.get('top_candidate_rank_1_rate'))}</b></span><span><small>Top 3 support</small><b>{_percent(time_search.get('top_candidate_top_3_rate'))}</b></span><span><small>Best age</small><b>{html.escape(str(time_search.get('best_supported_age_hours', '—')))} h</b></span></div><div class='disclosure'>This is a declared hypothesis-support interval, not a calibrated posterior probability.</div></div>{f"<img src='{time_search_uri}' alt='Release-time support chart'>" if time_search_uri else ''}</article>"""
 
     dossier_html = f"""<!doctype html>
 <html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
@@ -159,6 +167,7 @@ def generate_evidence_dossier(case_root: Path, output_dir: Path) -> dict[str, ob
 </style></head><body><main><header><div class='brand'><div class='mark'>E</div><div><h1>ESPADA Evidence Dossier</h1><p>Reverse Drift Attribution · generated {created}</p></div></div><div class='status'>{html.escape(str(bundle['case_status']))}</div></header>
 <section class='hero'><article class='panel summary'><div class='eyebrow'>Probabilistic origin reconstruction</div><h2>From observed slick to <span>reviewable shortlist.</span></h2><p>ESPADA propagates an analyst-approved slick backward through environmental forcing, compares candidate vessel presence, and forward-replays each candidate before ranking.</p><div class='kpis'><div class='kpi'><small>Estimated release</small><b>{html.escape(str(incident.get('estimated_release_time_utc', estimate.get('release_time_utc', 'N/A'))))}</b></div><div class='kpi'><small>Origin longitude</small><b>{_number(origin.get('longitude'))}</b></div><div class='kpi'><small>Origin latitude</small><b>{_number(origin.get('latitude'))}</b></div><div class='kpi'><small>90% radius</small><b>{_number(estimate.get('credible_radius_90_km'), ' km')}</b></div><div class='kpi'><small>AIS positions</small><b>{html.escape(str(ais.get('valid_rows', 'N/A')))}</b></div><div class='kpi'><small>Candidate vessels</small><b>{html.escape(str(ranking.get('candidate_count', len(candidates))))}</b></div></div></article><aside class='panel top'><div class='rank-big'>TOP COMPARATIVE CANDIDATE</div><h2>{html.escape(str(top.get('vessel_name', 'No candidate')))}</h2><div class='muted'>MMSI {html.escape(str(top.get('mmsi', 'N/A')))}</div><div class='score-big'>{_percent(top.get('total_score'))}</div><div class='muted'>Forward replay error: {_number(top.get('forward_error_km'), ' km')}</div></aside></section>
 {decision_section}
+{time_search_section}
 {historical_section}
 <section class='grid'><article class='panel'><div class='head'><h3>Case alignment gate</h3><p>Processing stops if satellite, forcing and AIS do not cover one incident window.</p></div><div class='checks'>{check_cards or '<div class="muted">No alignment report found.</div>'}</div></article><article class='panel'><div class='head'><h3>Attribution map</h3><p>Reverse origin probability and reconstructed vessel tracks.</p></div>{f"<img src='{map_uri}' alt='Attribution map'>" if map_uri else ''}</article></section>
 <section class='grid'><article class='panel'><div class='head'><h3>Reverse-drift analysis</h3><p>Uncertainty ensemble, not a single deterministic release point.</p></div>{f"<img src='{drift_uri}' alt='Reverse drift analysis'>" if drift_uri else ''}</article><article class='panel'><div class='head'><h3>AIS data-quality audit</h3><p>Coverage gaps and implausible jumps are recorded before ranking.</p></div>{f"<img src='{quality_uri}' alt='AIS quality report'>" if quality_uri else ''}</article></section>
