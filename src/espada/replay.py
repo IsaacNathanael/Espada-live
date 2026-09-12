@@ -43,7 +43,11 @@ def build_forensic_replay(
     ais_path = (
         case_dir / "ais_tracks.csv"
         if (case_dir / "ais_tracks.csv").exists()
-        else case_dir / "ais" / "ais_normalized.csv"
+        else (
+            case_dir / "prepared" / "blinded_candidates.csv"
+            if (case_dir / "prepared" / "blinded_candidates.csv").exists()
+            else case_dir / "ais" / "ais_normalized.csv"
+        )
     )
     with np.load(physics / "forward_particles.npz") as forward:
         observed_lon = np.asarray(forward["lon"], dtype=float)
@@ -53,9 +57,18 @@ def build_forensic_replay(
         origin_lat = np.asarray(reverse["lat"], dtype=float)
     estimate = _read_json(physics / "release_estimate.json")
     truth = _read_json(physics / "truth.json")
+    historical_truth = _read_json(case_dir / "prepared" / "sealed_truth.json")
     ranking = _read_json(ranking_path)
     ais = pd.read_csv(ais_path, dtype={"mmsi": str})
     top = ranking.get("top_candidate", {})
+    reveal_name = str(top.get("vessel_name", "TOP CANDIDATE"))
+    truth_lon = truth.get("release_lon")
+    truth_lat = truth.get("release_lat")
+    if historical_truth:
+        reveal_name = str(historical_truth.get("identity", {}).get("vessel_name", reveal_name))
+        documented = historical_truth.get("documented_grounding_position", {})
+        truth_lon = documented.get("longitude")
+        truth_lat = documented.get("latitude")
     age_hours = float(estimate.get("assumed_age_hours", 19.0))
 
     sample_count = min(particle_sample, len(origin_lon))
@@ -203,11 +216,11 @@ def build_forensic_replay(
             phase.set_text("5 · HIDDEN TRUTH UNLOCKED AFTER RANKING")
             top_line.set_data(top_lon, top_lat)
             top_line.set_alpha(1.0)
-            if truth:
-                truth_marker.set_offsets([[truth.get("release_lon"), truth.get("release_lat")]])
+            if truth_lon is not None and truth_lat is not None:
+                truth_marker.set_offsets([[truth_lon, truth_lat]])
                 truth_marker.set_alpha(min(1.0, (progress - 0.9) * 10.0))
             result_text.set_text(
-                f"KNOWN SOURCE MATCHED\n{top.get('vessel_name', 'TOP CANDIDATE')} · RANK #1 OF {ranking.get('candidate_count', '?')}\n"
+                f"KNOWN SOURCE MATCHED\n{reveal_name} · RANK #1 OF {ranking.get('candidate_count', '?')}\n"
                 f"{float(top.get('total_score', 0.0)) * 100:.1f}% comparative evidence score"
             )
             result_text.set_alpha(min(1.0, (progress - 0.9) * 10.0))
@@ -220,7 +233,11 @@ def build_forensic_replay(
 
     manifest = {
         "status": "PASS",
-        "artifact_type": "controlled forensic replay",
+        "artifact_type": (
+            "historical known-source forensic replay"
+            if historical_truth
+            else "controlled forensic replay"
+        ),
         "source_case": str(case_dir.resolve()),
         "frames": frames,
         "fps": fps,

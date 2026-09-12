@@ -18,6 +18,7 @@ dependencies = [
   "xarray>=2024.7",
   "netCDF4>=1.7",
   "shapely>=2.0",
+  "pyshp>=2.3",
   "opendrift==1.14.11",
 ]
 
