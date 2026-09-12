@@ -9,6 +9,7 @@ from pathlib import Path
 from .demo import run_demo
 from .dashboard import generate_dashboard
 from .dossier import generate_evidence_dossier
+from .decision import evaluate_case_decision
 from .ais import normalize_ais_csv
 from .attribution import write_attribution_outputs
 from .case_alignment import validate_case_alignment
@@ -96,6 +97,11 @@ def _parser() -> argparse.ArgumentParser:
     )
     dossier.add_argument("--case-root", type=Path, required=True)
     dossier.add_argument("--out", type=Path, required=True)
+    decide = subparsers.add_parser(
+        "decide", help="apply the declared analyst-escalation policy to a completed case"
+    )
+    decide.add_argument("--case-root", type=Path, required=True)
+    decide.add_argument("--out", type=Path, required=True)
     replay = subparsers.add_parser(
         "replay", help="render an animated forensic replay from a completed case"
     )
@@ -286,6 +292,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "dossier":
         result = generate_evidence_dossier(args.case_root, args.out)
+        print(json.dumps(result, indent=2, default=str))
+        return 0 if result["status"] == "PASS" else 1
+    if args.command == "decide":
+        result = evaluate_case_decision(args.case_root, args.out)
         print(json.dumps(result, indent=2, default=str))
         return 0 if result["status"] == "PASS" else 1
     if args.command == "replay":

@@ -46,7 +46,7 @@ def test_dossier_keeps_ranking_and_safety_language(tmp_path: Path) -> None:
 
 def test_dossier_includes_historical_proof_and_integrity(tmp_path: Path) -> None:
     case = tmp_path / "case"
-    for name in ("drift", "ais", "ranking", "evaluation", "sensitivity"):
+    for name in ("drift", "ais", "ranking", "evaluation", "sensitivity", "decision"):
         (case / name).mkdir(parents=True)
     (case / "case_alignment.json").write_text(
         json.dumps({"status": "PASS", "checks": {"sources_align": True}}),
@@ -64,6 +64,10 @@ def test_dossier_includes_historical_proof_and_integrity(tmp_path: Path) -> None
         json.dumps({"verdict": "ROBUST SHORTLIST", "top_1_rate": 0.69, "top_3_rate": 1.0, "worst_rank": 2}),
         encoding="utf-8",
     )
+    (case / "decision" / "decision_gate.json").write_text(
+        json.dumps({"decision": "PRIORITY_ANALYST_REVIEW", "recommended_action": "Escalate to a human investigator.", "checks": [{"gate": "incident_alignment", "status": "PASS"}]}),
+        encoding="utf-8",
+    )
 
     result = generate_evidence_dossier(case, tmp_path / "dossier")
 
@@ -73,4 +77,5 @@ def test_dossier_includes_historical_proof_and_integrity(tmp_path: Path) -> None
     assert "MV Wakashio ranked #1 of 5" in page
     assert "ROBUST SHORTLIST" in page
     assert "Evidence integrity register" in page
+    assert "PRIORITY ANALYST REVIEW" in page
     assert len(bundle["artifact_integrity"]["candidate_ranking"]["sha256"]) == 64
