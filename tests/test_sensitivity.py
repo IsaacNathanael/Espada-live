@@ -69,3 +69,5 @@ def test_sensitivity_writes_complete_report(tmp_path: Path) -> None:
     assert result["scenarios"] == 1
     assert (tmp_path / "result" / "sensitivity_report.html").exists()
     assert (tmp_path / "result" / "sensitivity_rank_matrix.png").exists()
+    assert (tmp_path / "result" / "sensitivity_origin_envelope.png").exists()
+    assert "documented_source_inside_90pct_radius" in result["assumption_aware_origin"]

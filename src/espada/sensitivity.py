@@ -61,6 +61,8 @@ def run_historical_sensitivity(
     observation_naive = observation.observation_time.to_pydatetime().replace(tzinfo=None)
 
     scenarios: list[dict[str, object]] = []
+    all_origin_lon: list[np.ndarray] = []
+    all_origin_lat: list[np.ndarray] = []
     for age in ages_hours:
         release = observation.observation_time - pd.Timedelta(hours=age)
         history = environment.frame[
@@ -85,6 +87,8 @@ def run_historical_sensitivity(
                 )
                 estimated_lon = float(np.mean(origin_lon))
                 estimated_lat = float(np.mean(origin_lat))
+                all_origin_lon.append(origin_lon)
+                all_origin_lat.append(origin_lat)
                 x, y = local_xy_m(origin_lon, origin_lat, estimated_lon, estimated_lat)
                 radius_90 = float(np.quantile(np.hypot(x, y) / 1000.0, 0.90))
                 forcing = Forcing(
@@ -129,6 +133,8 @@ def run_historical_sensitivity(
                         - best_other["total_score"],
                         "forward_error_km": target["forward_error_km"],
                         "origin_error_km": origin_error,
+                        "estimated_origin_longitude": estimated_lon,
+                        "estimated_origin_latitude": estimated_lat,
                         "credible_radius_90_km": radius_90,
                         "known_position_inside_90pct_radius": origin_error <= radius_90,
                         "top_candidate_id": scored[0]["mmsi"],
@@ -140,6 +146,17 @@ def run_historical_sensitivity(
     top1_rate = float((frame["target_rank"] == 1).mean())
     top3_rate = float((frame["target_rank"] <= 3).mean())
     coverage_rate = float(frame["known_position_inside_90pct_radius"].mean())
+    joint_lon = np.concatenate(all_origin_lon)
+    joint_lat = np.concatenate(all_origin_lat)
+    robust_lon = float(np.mean(joint_lon))
+    robust_lat = float(np.mean(joint_lat))
+    joint_x, joint_y = local_xy_m(joint_lon, joint_lat, robust_lon, robust_lat)
+    joint_distance_km = np.hypot(joint_x, joint_y) / 1000.0
+    robust_radius_50 = float(np.quantile(joint_distance_km, 0.50))
+    robust_radius_90 = float(np.quantile(joint_distance_km, 0.90))
+    robust_radius_95 = float(np.quantile(joint_distance_km, 0.95))
+    robust_error = haversine_km(robust_lon, robust_lat, ground_lon, ground_lat)
+    robust_contains_source = robust_error <= robust_radius_90
     if top1_rate >= 0.80 and top3_rate == 1.0:
         verdict = "ROBUST TOP-1"
         interpretation = "The documented source remains first across most declared perturbations."
@@ -189,6 +206,48 @@ def run_historical_sensitivity(
     fig.savefig(chart_path, dpi=180, facecolor=fig.get_facecolor())
     plt.close(fig)
 
+    centroid_x, centroid_y = local_xy_m(
+        frame["estimated_origin_longitude"].to_numpy(),
+        frame["estimated_origin_latitude"].to_numpy(),
+        robust_lon,
+        robust_lat,
+    )
+    source_x, source_y = local_xy_m(
+        np.asarray([ground_lon]), np.asarray([ground_lat]), robust_lon, robust_lat
+    )
+    fig, axis = plt.subplots(figsize=(7.2, 6.2), constrained_layout=True, facecolor="#020a0c")
+    axis.set_facecolor("#071c21")
+    scatter = axis.scatter(
+        centroid_x / 1000.0,
+        centroid_y / 1000.0,
+        c=frame["age_hours"],
+        cmap="viridis",
+        s=52,
+        alpha=0.82,
+        edgecolors="#d7fff8",
+        linewidths=0.35,
+        label="Scenario origin centroids",
+    )
+    axis.scatter([0], [0], marker="x", s=90, color="#61f2d1", linewidths=2.2, label="Mixture centre")
+    axis.scatter(source_x / 1000.0, source_y / 1000.0, marker="*", s=230, color="#ffbd4a", edgecolors="#2b1900", label="Documented source")
+    axis.add_patch(plt.Circle((0, 0), robust_radius_90, fill=False, color="#61f2d1", linewidth=2, linestyle="--", label="Assumption-aware 90% radius"))
+    axis.axhline(0, color="#31535a", linewidth=0.7)
+    axis.axvline(0, color="#31535a", linewidth=0.7)
+    axis.set_aspect("equal", adjustable="datalim")
+    axis.set_xlabel("East of mixture centre (km)", color="#91aaa6")
+    axis.set_ylabel("North of mixture centre (km)", color="#91aaa6")
+    axis.set_title("Origin uncertainty across all declared assumptions", color="#eafffb", fontsize=15)
+    axis.tick_params(colors="#91aaa6")
+    for spine in axis.spines.values():
+        spine.set_color("#17434b")
+    colorbar = fig.colorbar(scatter, ax=axis, shrink=0.78)
+    colorbar.set_label("Assumed slick age (h)", color="#91aaa6")
+    colorbar.ax.tick_params(colors="#91aaa6")
+    axis.legend(loc="best", facecolor="#082128", edgecolor="#17434b", labelcolor="#dff8f4", fontsize=8)
+    envelope_path = output_dir / "sensitivity_origin_envelope.png"
+    fig.savefig(envelope_path, dpi=180, facecolor=fig.get_facecolor())
+    plt.close(fig)
+
     worst = frame.sort_values(
         ["target_rank", "score_margin_to_best_other"], ascending=[False, True]
     ).head(8)
@@ -218,6 +277,16 @@ def run_historical_sensitivity(
         "median_rank": float(frame["target_rank"].median()),
         "known_position_inside_90pct_radius_rate": coverage_rate,
         "median_origin_error_km": float(frame["origin_error_km"].median()),
+        "assumption_aware_origin": {
+            "longitude": robust_lon,
+            "latitude": robust_lat,
+            "credible_radius_50_km": robust_radius_50,
+            "credible_radius_90_km": robust_radius_90,
+            "credible_radius_95_km": robust_radius_95,
+            "documented_source_error_km": robust_error,
+            "documented_source_inside_90pct_radius": robust_contains_source,
+            "method": "equal-weight mixture of particle endpoints from all declared scenarios",
+        },
         "limitations": [
             "Sensitivity rates describe this one reconstruction and are not population accuracy.",
             "The sweep perturbs current magnitude, windage and spill age; it does not cover every model structural error.",
@@ -227,17 +296,19 @@ def run_historical_sensitivity(
         "artifacts": {
             "scenario_csv": str(csv_path.resolve()),
             "rank_matrix": str(chart_path.resolve()),
+            "origin_envelope": str(envelope_path.resolve()),
         },
     }
     json_path = output_dir / "sensitivity_report.json"
     json_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     limitations_html = "".join(f"<li>{html.escape(item)}</li>" for item in report["limitations"])
     chart_uri = _image_uri(chart_path)
+    envelope_uri = _image_uri(envelope_path)
     html_path = output_dir / "sensitivity_report.html"
     html_path.write_text(
         f"""<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>ESPADA · Robustness audit</title><style>
         :root{{--bg:#020a0c;--panel:#072128;--line:#17434b;--ink:#eafffb;--muted:#91aaa6;--mint:#61f2d1;--amber:#ffbd4a}}*{{box-sizing:border-box}}body{{margin:0;background:radial-gradient(circle at 15% 0,#104047 0,transparent 34%),var(--bg);color:var(--ink);font-family:Inter,Segoe UI,sans-serif}}main{{width:min(1120px,calc(100% - 28px));margin:auto;padding:36px 0 60px}}.tag{{color:var(--mint);font-size:11px;font-weight:900;letter-spacing:.16em}}h1{{font:500 clamp(38px,6vw,70px)/.98 Georgia,serif;margin:14px 0}}h1 em{{color:var(--mint);font-style:normal}}p,li{{color:var(--muted);line-height:1.6}}.card{{background:linear-gradient(145deg,#092a31,#05161a);border:1px solid var(--line);border-radius:18px;padding:21px}}.hero{{display:grid;grid-template-columns:1.1fr .9fr;gap:14px;align-items:stretch}}.verdict{{display:flex;flex-direction:column;justify-content:center}}.verdict b{{font:500 37px Georgia,serif;color:var(--amber)}}.metrics{{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:15px 0}}.metric small{{display:block;color:var(--muted);font-size:10px;text-transform:uppercase}}.metric strong{{display:block;margin-top:7px;font:500 28px Georgia,serif}}img{{width:100%;display:block;border-radius:12px;margin-top:10px}}.grid{{display:grid;grid-template-columns:1.25fr .75fr;gap:14px;margin-top:14px}}table{{width:100%;border-collapse:collapse}}th,td{{padding:10px;border-top:1px solid var(--line);font-size:12px;text-align:left}}th{{color:var(--muted)}}.warn{{border-left:3px solid var(--amber);padding:13px 16px;background:rgba(255,189,74,.06);color:#e8d5a9;font-size:12px}}@media(max-width:760px){{.hero,.grid{{grid-template-columns:1fr}}.metrics{{grid-template-columns:1fr 1fr}}}}
-        </style></head><body><main><span class='tag'>ESPADA · ASSUMPTION STRESS TEST</span><section class='hero'><div><h1>Does the answer survive <em>uncertainty?</em></h1><p>Forty-five reruns vary spill age, current magnitude and windage. Every run keeps vessel identities blinded.</p></div><div class='card verdict'><b>{verdict}</b><p>{html.escape(interpretation)}</p></div></section><section class='metrics'><div class='card metric'><small>Top-1 stability</small><strong>{100*top1_rate:.1f}%</strong></div><div class='card metric'><small>Top-3 retention</small><strong>{100*top3_rate:.1f}%</strong></div><div class='card metric'><small>Worst rank</small><strong>#{int(frame['target_rank'].max())}</strong></div><div class='card metric'><small>90% zone coverage</small><strong>{100*coverage_rate:.1f}%</strong></div></section><section class='card'><h2>Rank stability matrix</h2><p>Green cells are rank #1. Each panel applies a different current-speed multiplier.</p><img src='{chart_uri}' alt='Wakashio sensitivity rank matrix'></section><section class='grid'><div class='card'><h2>Most difficult assumptions</h2><table><thead><tr><th>Age</th><th>Current</th><th>Windage</th><th>Rank</th><th>Score</th><th>Origin error</th></tr></thead><tbody>{worst_rows}</tbody></table></div><div class='card'><h2>Interpret correctly</h2><div class='warn'>This is robustness for one known-source case—not “model accuracy.” It shows whether a conclusion collapses when reasonable assumptions change.</div><ul>{limitations_html}</ul></div></section></main></body></html>""",
+        </style></head><body><main><span class='tag'>ESPADA · ASSUMPTION STRESS TEST</span><section class='hero'><div><h1>Does the answer survive <em>uncertainty?</em></h1><p>Forty-five reruns vary spill age, current magnitude and windage. Every run keeps vessel identities blinded.</p></div><div class='card verdict'><b>{verdict}</b><p>{html.escape(interpretation)}</p></div></section><section class='metrics'><div class='card metric'><small>Top-1 stability</small><strong>{100*top1_rate:.1f}%</strong></div><div class='card metric'><small>Top-3 retention</small><strong>{100*top3_rate:.1f}%</strong></div><div class='card metric'><small>Worst rank</small><strong>#{int(frame['target_rank'].max())}</strong></div><div class='card metric'><small>Mixture 90% envelope</small><strong>{'PASS' if robust_contains_source else 'OUTSIDE'}</strong></div></section><section class='card'><h2>Rank stability matrix</h2><p>Green cells are rank #1. Each panel applies a different current-speed multiplier.</p><img src='{chart_uri}' alt='Wakashio sensitivity rank matrix'></section><section class='grid'><div class='card'><h2>Assumption-aware origin envelope</h2><p>Combining all declared scenarios widens uncertainty to include parameter uncertainty, not only particle diffusion. The documented point is {robust_error:.2f} km from the mixture centre; the 90% radius is {robust_radius_90:.2f} km.</p><img src='{envelope_uri}' alt='Assumption-aware origin uncertainty'></div><div class='card'><h2>Interpret correctly</h2><div class='warn'>Individual per-scenario 90% zones contain the source in {100*coverage_rate:.1f}% of runs. This exposes why unknown physics assumptions must be included in the final uncertainty envelope.</div><ul>{limitations_html}</ul></div></section><section class='card' style='margin-top:14px'><h2>Most difficult assumptions</h2><table><thead><tr><th>Age</th><th>Current</th><th>Windage</th><th>Rank</th><th>Score</th><th>Origin error</th></tr></thead><tbody>{worst_rows}</tbody></table></section></main></body></html>""",
         encoding="utf-8",
     )
     report["artifacts"]["html_report"] = str(html_path.resolve())
