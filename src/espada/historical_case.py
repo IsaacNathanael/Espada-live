@@ -149,7 +149,7 @@ def build_blinded_candidates(
 
     target_id = _candidate_id(WAKASHIO_MMSI)
     target_times = pd.date_range(
-        OBSERVATION_TIME - timedelta(hours=4),
+        OBSERVATION_TIME - timedelta(hours=12),
         OBSERVATION_TIME,
         freq="1h",
     )
