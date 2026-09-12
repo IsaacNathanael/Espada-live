@@ -70,6 +70,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\run_approved_slick_case.ps1 `
 
 The five gated stages audit AIS, verify time alignment, reconstruct the release zone, rank and forward-check vessels, and generate a portable `evidence_dossier.html` plus `evidence_bundle.json`. Processing safely stops when the sources do not cover the same incident window.
 
+The ranking stage also performs a coverage-aware AIS silence test. For every significant track gap, it checks whether nearby peer vessels continued reporting inside the same space-time window. The output classifies the gap as peer-supported, coverage-unresolved, mixed, or absent. This classification is evidence-quality context only: it never increases a vessel's attribution score and never claims deliberate AIS disabling.
+
 ## Run everything
 
 This refreshes environmental data, runs the 24-case evaluation, executes the full demo, and regenerates the dashboard:

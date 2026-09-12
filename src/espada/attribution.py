@@ -21,6 +21,7 @@ import pandas as pd
 from .geo import haversine_km, local_xy_m
 from .models import Forcing, parse_utc
 from .physics import advect_diffuse_constant
+from .silence import analyze_coverage_aware_silence
 
 
 REQUIRED_AIS_COLUMNS = {
@@ -43,6 +44,7 @@ def _score_track(
     observed_centroid: tuple[float, float],
     forcing: Forcing,
     expected_rows: int,
+    silence_report: dict | None = None,
 ) -> dict:
     timestamps = pd.to_datetime(track["timestamp_utc"], utc=True).dt.tz_localize(None)
     lons = track["longitude"].to_numpy(dtype=float)
@@ -103,6 +105,13 @@ def _score_track(
     gap_penalty = min(0.35, max(0.0, maximum_gap - gap_threshold) / 360.0)
     data_quality = float(np.clip(coverage_quality * (1.0 - 0.25 * interpolated_fraction - gap_penalty), 0.0, 1.0))
     total_score = float(np.clip(joint[best_index] + 0.05 * data_quality, 0.0, 1.0))
+    silence_report = silence_report or {
+        "classification": "not_evaluated",
+        "significant_gaps": 0,
+        "gaps_with_local_peer_reception": 0,
+        "maximum_gap_minutes": maximum_gap,
+        "interpretation": "Coverage-aware silence analysis was not available.",
+    }
     return {
         "mmsi": str(track["mmsi"].iloc[0]),
         "vessel_name": str(track["vessel_name"].iloc[0]),
@@ -112,10 +121,17 @@ def _score_track(
         "forward_error_km": float(forward_errors[best_index]),
         "data_quality": data_quality,
         "gap_threshold_minutes": gap_threshold,
+        "silence_classification": silence_report["classification"],
+        "significant_gaps": silence_report["significant_gaps"],
+        "gaps_with_local_peer_reception": silence_report[
+            "gaps_with_local_peer_reception"
+        ],
+        "silence_interpretation": silence_report["interpretation"],
         "best_match_time_utc": timestamps.iloc[best_index].strftime("%Y-%m-%dT%H:%M:%SZ"),
         "evidence": [
             "Space-time proximity to the inferred release distribution.",
             "Forward trajectory consistency with the observed slick centroid.",
+            "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
         ],
         "limitations": [
             (
@@ -159,6 +175,8 @@ def rank_candidates(
     forcing = Forcing.from_dict(estimate["believed_forcing"])
     expected_rows = int(ais.groupby("mmsi").size().max())
 
+    silence = analyze_coverage_aware_silence(ais)
+    silence_by_mmsi = {item["mmsi"]: item for item in silence["vessels"]}
     candidates = [
         _score_track(
             track,
@@ -170,13 +188,14 @@ def rank_candidates(
             observed_centroid,
             forcing,
             expected_rows,
+            silence_by_mmsi.get(str(track["mmsi"].iloc[0])),
         )
         for _, track in ais.groupby("mmsi", sort=False)
     ]
     candidates.sort(key=lambda item: item["total_score"], reverse=True)
     for rank, candidate in enumerate(candidates, start=1):
         candidate["rank"] = rank
-    return candidates, ais, origin_lon, origin_lat, observed_centroid
+    return candidates, ais, origin_lon, origin_lat, observed_centroid, silence
 
 
 def _plot_attribution(
@@ -243,7 +262,7 @@ def write_attribution_outputs(
 ) -> dict:
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    candidates, ais, origin_lon, origin_lat, observed_centroid = rank_candidates(
+    candidates, ais, origin_lon, origin_lat, observed_centroid, silence = rank_candidates(
         ais_path,
         reverse_endpoints_path,
         release_estimate_path,
@@ -255,6 +274,7 @@ def write_attribution_outputs(
         "candidate_count": len(candidates),
         "top_candidate": candidates[0],
         "candidates": candidates,
+        "silence_analysis": silence,
         "warning": (
             "Synthetic validation output; candidate ranking is not a finding of guilt."
             if synthetic
@@ -262,6 +282,9 @@ def write_attribution_outputs(
         ),
     }
     (output_dir / "candidates.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
+    (output_dir / "ais_silence_analysis.json").write_text(
+        json.dumps(silence, indent=2), encoding="utf-8"
+    )
     _plot_attribution(
         output_dir / "attribution_map.png",
         candidates,

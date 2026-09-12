@@ -40,3 +40,5 @@ def test_dossier_keeps_ranking_and_safety_language(tmp_path: Path) -> None:
     assert bundle["ranking"]["top_candidate"]["mmsi"] == "419000123"
     assert "not a finding" in page
     assert "MV TEST" in page
+    assert "Coverage-aware AIS silence test" in page
+    assert "Silence classification never increases" in page
