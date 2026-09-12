@@ -6,13 +6,15 @@ param(
     [Parameter(Mandatory = $true)][double]$MinLatitude,
     [Parameter(Mandatory = $true)][double]$MaxLongitude,
     [Parameter(Mandatory = $true)][double]$MaxLatitude,
-    [double]$AgeHours = 19.0,
+    [double]$AgeHours = 0.0,
+    [double[]]$CandidateAgesHours = @(1.5, 2, 3, 4, 6, 8, 10, 12, 16, 20, 24),
     [switch]$AnalystApproved,
     [switch]$UseClassicalFallback,
     [string]$ModelCheckpoint = "",
     [string]$CalibrationPath = "",
     [int]$InferenceBatchSize = 4,
     [string]$EnvironmentCache = "",
+    [string]$OutputDirectory = "",
     [string]$GpuPythonPath = "",
     [string]$PythonPath = ""
 )
@@ -59,12 +61,10 @@ if (-not $EnvironmentCache) {
 if (-not (Test-Path -LiteralPath $EnvironmentCache)) {
     throw "A date-matched Copernicus environment cache is missing."
 }
+$ResolvedEnvironment = Resolve-Path -LiteralPath $EnvironmentCache -ErrorAction Stop
 
-$CaseRoot = Join-Path $ProjectRoot "out\real_case"
+$CaseRoot = if ($OutputDirectory) { [System.IO.Path]::GetFullPath($OutputDirectory) } else { Join-Path $ProjectRoot "out\real_case" }
 $SarOutput = Join-Path $CaseRoot "sar"
-$DriftOutput = Join-Path $CaseRoot "drift"
-$AisOutput = Join-Path $CaseRoot "ais"
-$RankingOutput = Join-Path $CaseRoot "ranking"
 $env:PYTHONPATH = Join-Path $ProjectRoot "src"
 $env:MPLCONFIGDIR = Join-Path $ProjectRoot ".mpl-cache"
 
@@ -102,26 +102,19 @@ if (-not $AnalystApproved) {
     Write-Output "If the outlined region is a credible slick, rerun this command with -AnalystApproved."
     exit 0
 }
-& $PythonPath -m espada.cli ais --input $ResolvedAis --out $AisOutput
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-& $PythonPath -m espada.cli case-check `
-    --slick (Join-Path $SarOutput "slick_observation.geojson") `
-    --environment-cache $EnvironmentCache `
-    --ais (Join-Path $AisOutput "ais_normalized.csv") `
-    --age-hours $AgeHours `
-    --out (Join-Path $CaseRoot "case_alignment.json")
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "Case stopped: SAR, environment and AIS dates are not aligned. Review case_alignment.json."
-    exit $LASTEXITCODE
+$ApprovedRunner = Join-Path $PSScriptRoot "run_approved_slick_case.ps1"
+$ApprovedArguments = @{
+    SlickGeoJson = Join-Path $SarOutput "slick_observation.geojson"
+    AisCsv = $ResolvedAis.Path
+    EnvironmentCache = $ResolvedEnvironment.Path
+    AgeHours = $AgeHours
+    CandidateAgesHours = $CandidateAgesHours
+    OutputDirectory = $CaseRoot
+    PythonPath = $PythonPath
 }
-& $PythonPath -m espada.cli slick `
-    --input (Join-Path $SarOutput "slick_observation.geojson") `
-    --environment-cache $EnvironmentCache --out $DriftOutput --age-hours $AgeHours
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-& $PythonPath -m espada.cli rank-ais `
-    --ais (Join-Path $AisOutput "ais_normalized.csv") --case $DriftOutput --out $RankingOutput
+& $ApprovedRunner @ApprovedArguments
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-Write-Output "REAL CASE COMPLETE. Review:"
-Write-Output (Join-Path $RankingOutput "candidates.json")
-Write-Output (Join-Path $RankingOutput "attribution_map.png")
+Write-Output "REAL SAR-TO-DOSSIER CASE COMPLETE. Review:"
+Write-Output (Join-Path $CaseRoot "dossier\evidence_dossier.html")
+Write-Output (Join-Path $CaseRoot "decision\decision_gate.html")

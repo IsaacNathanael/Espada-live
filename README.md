@@ -347,7 +347,7 @@ The combined cache is `data\cache\environment_historical.json`; its status and g
 
 ## Run a complete uploaded case
 
-`scripts\run_real_case.ps1` joins a prepared SAR PNG/TIFF, its WGS84 bounds, observation time, Copernicus forcing and an AIS CSV. It runs calibrated V6 inference by default, pauses for human review when a candidate exists, and stops rather than fabricating a polygon when no slick is detected. The resulting mask, drift estimate, quality report and vessel ranking are saved under `out\real_case`.
+`scripts\run_real_case.ps1` joins a prepared SAR PNG/TIFF, its WGS84 bounds, observation time, Copernicus forcing and an AIS CSV. It runs calibrated V6 inference by default, pauses for human review when a candidate exists, and stops rather than fabricating a polygon when no slick is detected. After approval it searches plausible release times, audits and ranks AIS tracks, applies the analyst decision gate, and creates the portable evidence dossier under `out\real_case`.
 
 Before reverse drift or ranking, the runner writes `case_alignment.json` and stops unless the environmental series covers the full assumed spill age and AIS positions exist within two hours of the inferred release time. This prevents convincing-looking results made from mismatched dates.
 
