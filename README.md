@@ -54,7 +54,7 @@ After the verified demo has produced `out\demo`, double-click `ESPADA_SHOWCASE.c
 powershell -ExecutionPolicy Bypass -File .\scripts\run_showcase.ps1
 ```
 
-This regenerates the self-contained showcase, starts a small local server at `http://127.0.0.1:4173/out/demo/dashboard.html`, and opens it without rerunning model training, live downloads, pandas, PyTorch, or the attribution simulation. It includes the animated reverse reconstruction, locked known-source reveal, measured stress-condition explorer, candidate evidence ledger, real-data adapter status, and evidence JSON export.
+This regenerates the self-contained showcase and starts a localhost-only evidence engine at `http://127.0.0.1:4173/out/demo/dashboard.html`. The saved evidence views require no training or downloads. In **Case Lab → Known-source test**, the browser can also trigger a fresh local reverse-physics and AIS-ranking run, then display its measured result. The showcase includes the animated reconstruction, locked truth reveal, stress-condition explorer, candidate ledger, adapter status, and evidence JSON export.
 
 ## Run a detector-independent operational case
 

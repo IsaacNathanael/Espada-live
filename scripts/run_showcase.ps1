@@ -59,24 +59,32 @@ Write-Host "ESPADA SHOWCASE READY" -ForegroundColor Green
 Write-Host "The page is self-contained and works offline." -ForegroundColor Cyan
 
 $ShowcaseUrl = "http://127.0.0.1:$Port/out/demo/dashboard.html"
+$HealthUrl = "http://127.0.0.1:$Port/api/health"
 $ServerReady = $false
 try {
-    $response = Invoke-WebRequest -UseBasicParsing -Uri $ShowcaseUrl -TimeoutSec 2
-    $ServerReady = $response.StatusCode -eq 200 -and $response.Content -match "ESPADA"
+    $response = Invoke-WebRequest -UseBasicParsing -Uri $HealthUrl -TimeoutSec 2
+    $ServerReady = $response.StatusCode -eq 200 -and $response.Content -match "ESPADA local evidence engine"
 }
 catch {
     $ServerReady = $false
 }
 
 if (-not $ServerReady) {
+    $pidFile = Join-Path $ProjectRoot "work\showcase_server.pid"
+    if (Test-Path -LiteralPath $pidFile) {
+        $oldPid = Get-Content -LiteralPath $pidFile -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($oldPid -match '^\d+$') {
+            $oldProcess = Get-Process -Id ([int]$oldPid) -ErrorAction SilentlyContinue
+            if ($oldProcess) {
+                Stop-Process -Id $oldProcess.Id -Force
+                Start-Sleep -Milliseconds 250
+            }
+        }
+    }
     $serverArguments = @(
-        "-m",
-        "http.server",
-        "$Port",
-        "--bind",
-        "127.0.0.1",
-        "--directory",
-        $ProjectRoot
+        "-m", "espada.showcase_server",
+        "--root", $ProjectRoot,
+        "--port", "$Port"
     )
     $server = Start-Process -FilePath $PythonPath -ArgumentList $serverArguments -WindowStyle Hidden -PassThru
     $pidDirectory = Join-Path $ProjectRoot "work"
@@ -85,8 +93,8 @@ if (-not $ServerReady) {
 
     foreach ($attempt in 1..20) {
         try {
-            $response = Invoke-WebRequest -UseBasicParsing -Uri $ShowcaseUrl -TimeoutSec 2
-            if ($response.StatusCode -eq 200 -and $response.Content -match "ESPADA") {
+            $response = Invoke-WebRequest -UseBasicParsing -Uri $HealthUrl -TimeoutSec 2
+            if ($response.StatusCode -eq 200 -and $response.Content -match "ESPADA local evidence engine") {
                 $ServerReady = $true
                 break
             }

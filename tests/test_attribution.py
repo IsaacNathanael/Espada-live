@@ -62,6 +62,8 @@ def test_offline_demo_finds_known_source_without_ranker_answer_key(tmp_path: Pat
     assert "Stress lab" in dashboard
     assert "Case Lab" in dashboard
     assert "Run operational preflight" in dashboard
+    assert "Execute fresh known-source case" in dashboard
+    assert "LOCAL ENGINE CONNECTED" in dashboard
     assert "ATTRIBUTION CORRECTLY WITHHELD" in dashboard
     assert "Reveal known source" in dashboard
     assert "Export evidence" in dashboard
