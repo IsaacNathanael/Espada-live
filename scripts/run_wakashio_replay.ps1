@@ -34,12 +34,12 @@ $EnvironmentFile = Join-Path $ProjectRoot "data\cache\environment_historical.jso
 $SlickShape = Join-Path $DatasetRoot "extracted\ST2_20200806_OilSpillExtent_ReefPointeEsny.shp"
 
 if ($RefreshSources -or -not (Test-Path -LiteralPath $SlickShape)) {
-    Write-Host "1/7 Downloading the 0.9 MB official UNOSAT vector bundle..." -ForegroundColor Cyan
+    Write-Host "1/9 Downloading the 0.9 MB official UNOSAT vector bundle..." -ForegroundColor Cyan
     & $PythonPath -m espada.historical_case download-unosat --out $DatasetRoot
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 if ($RefreshSources -or -not (Test-Path -LiteralPath $AisFile)) {
-    Write-Host "2/7 Downloading delayed historical AIS evidence..." -ForegroundColor Cyan
+    Write-Host "2/9 Downloading delayed historical AIS evidence..." -ForegroundColor Cyan
     & $PythonPath -m espada.cli ais-history `
         --bbox 57.60 -20.55 57.85 -20.25 `
         --start 2020-08-05T00:00:00Z --end 2020-08-06T12:00:00Z `
@@ -47,7 +47,7 @@ if ($RefreshSources -or -not (Test-Path -LiteralPath $AisFile)) {
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 if ($RefreshSources -or -not (Test-Path -LiteralPath $EnvironmentFile)) {
-    Write-Host "3/7 Downloading date-matched currents and wind..." -ForegroundColor Cyan
+    Write-Host "3/9 Downloading date-matched currents and wind..." -ForegroundColor Cyan
     & (Join-Path $PSScriptRoot "sync_case_environment.ps1") `
         -DatasetId "cmems_mod_glo_phy_my_0.083deg_P1D-m" `
         -StartUtc "2020-08-05T00:00:00Z" -EndUtc "2020-08-11T00:00:00Z" `
@@ -57,12 +57,12 @@ if ($RefreshSources -or -not (Test-Path -LiteralPath $EnvironmentFile)) {
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 
-Write-Host "4/7 Preparing blinded historical candidates..." -ForegroundColor Cyan
+Write-Host "4/9 Preparing blinded historical candidates..." -ForegroundColor Cyan
 & $PythonPath -m espada.historical_case prepare `
     --unosat-shp $SlickShape --gfw-ais $AisFile --out (Join-Path $CaseRoot "prepared")
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-Write-Host "5/7 Running reverse drift and alignment gates..." -ForegroundColor Cyan
+Write-Host "5/9 Running reverse drift and alignment gates..." -ForegroundColor Cyan
 & $PythonPath -m espada.cli case-check `
     --slick (Join-Path $CaseRoot "prepared\slick.geojson") `
     --environment-cache $EnvironmentFile `
@@ -75,17 +75,30 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     --age-hours 1.5 --particles 4000 --members 30
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-Write-Host "6/7 Ranking pseudonymized candidates..." -ForegroundColor Cyan
+Write-Host "6/9 Ranking pseudonymized candidates..." -ForegroundColor Cyan
 & $PythonPath -m espada.cli rank-ais `
     --ais (Join-Path $CaseRoot "prepared\blinded_candidates.csv") `
     --case (Join-Path $CaseRoot "drift") --out (Join-Path $CaseRoot "ranking")
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-Write-Host "7/7 Opening the sealed identity and scoring the answer..." -ForegroundColor Cyan
+Write-Host "7/9 Opening the sealed identity and scoring the answer..." -ForegroundColor Cyan
 & $PythonPath -m espada.historical_case reveal `
     --ranking (Join-Path $CaseRoot "ranking\candidates.json") `
     --truth (Join-Path $CaseRoot "prepared\sealed_truth.json") `
     --out (Join-Path $CaseRoot "evaluation")
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+Write-Host "8/9 Stress-testing 45 physics assumptions..." -ForegroundColor Cyan
+& $PythonPath -m espada.sensitivity `
+    --slick (Join-Path $CaseRoot "prepared\slick.geojson") `
+    --environment-cache $EnvironmentFile `
+    --candidates (Join-Path $CaseRoot "prepared\blinded_candidates.csv") `
+    --truth (Join-Path $CaseRoot "prepared\sealed_truth.json") `
+    --out (Join-Path $CaseRoot "sensitivity")
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+Write-Host "9/9 Sealing the portable evidence dossier..." -ForegroundColor Cyan
+& $PythonPath -m espada.cli dossier --case-root $CaseRoot --out (Join-Path $CaseRoot "dossier")
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & $PythonPath -m espada.cli replay `
     --case $CaseRoot --out (Join-Path $CaseRoot "replay") --frames 64 --fps 14
@@ -96,3 +109,4 @@ Write-Host "HISTORICAL KNOWN-SOURCE MILESTONE COMPLETE" -ForegroundColor Green
 Write-Host "Open:" -ForegroundColor Yellow
 Write-Host (Join-Path $CaseRoot "evaluation\historical_evaluation_report.html")
 Write-Host (Join-Path $CaseRoot "replay\espada_forensic_replay.gif")
+Write-Host (Join-Path $CaseRoot "dossier\evidence_dossier.html")
