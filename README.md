@@ -72,6 +72,16 @@ The five gated stages audit AIS, verify time alignment, reconstruct the release 
 
 The ranking stage also performs a coverage-aware AIS silence test. For every significant track gap, it checks whether nearby peer vessels continued reporting inside the same space-time window. The output classifies the gap as peer-supported, coverage-unresolved, mixed, or absent. This classification is evidence-quality context only: it never increases a vessel's attribution score and never claims deliberate AIS disabling.
 
+## Build the forensic replay
+
+Generate a reusable animated replay from the computed particle distributions and AIS ranking:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build_forensic_replay.ps1
+```
+
+The output is `out\forensic_replay\espada_forensic_replay.gif`. It shows the observed slick, backward particle ensemble, origin probability, top candidate track and delayed known-source reveal. Inter-frame motion is explicitly an explanatory interpolation between computed endpoints; the endpoint distributions and ranking are saved model outputs.
+
 ## Run everything
 
 This refreshes environmental data, runs the 24-case evaluation, executes the full demo, and regenerates the dashboard:

@@ -16,6 +16,7 @@ from .environment import load_environment, sync_historical_wind, write_environme
 from .evaluation import EvaluationConfig, run_synthetic_evaluation
 from .historical_ais import HistoricalAISRequest, fetch_gfw_presence, parse_utc_datetime
 from .live_ais import AISBoundingBox, capture_aisstream
+from .replay import build_forensic_replay
 from .ml_dataset import audit_dataset
 from .sar import load_sar_image, run_segmentation, run_synthetic_segmentation_demo
 from .sentinel_catalog import SentinelSearchRequest, discover_sentinel1
@@ -95,6 +96,13 @@ def _parser() -> argparse.ArgumentParser:
     )
     dossier.add_argument("--case-root", type=Path, required=True)
     dossier.add_argument("--out", type=Path, required=True)
+    replay = subparsers.add_parser(
+        "replay", help="render an animated forensic replay from a completed case"
+    )
+    replay.add_argument("--case", type=Path, required=True)
+    replay.add_argument("--out", type=Path, default=Path("out/replay"))
+    replay.add_argument("--frames", type=int, default=64)
+    replay.add_argument("--fps", type=int, default=14)
     sar_demo = subparsers.add_parser("sar-demo", help="run evaluated synthetic SAR segmentation")
     sar_demo.add_argument("--out", type=Path, default=Path("out/sar"))
     sar_demo.add_argument("--seed", type=int, default=26143)
@@ -278,6 +286,12 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "dossier":
         result = generate_evidence_dossier(args.case_root, args.out)
+        print(json.dumps(result, indent=2, default=str))
+        return 0 if result["status"] == "PASS" else 1
+    if args.command == "replay":
+        result = build_forensic_replay(
+            args.case, args.out, frames=args.frames, fps=args.fps
+        )
         print(json.dumps(result, indent=2, default=str))
         return 0 if result["status"] == "PASS" else 1
     if args.command == "sar-demo":
