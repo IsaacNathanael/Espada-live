@@ -159,8 +159,16 @@ if (-not $DatasetId) {
         "cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i"
     }
 }
+$CurrentStart = $EvidenceStart
+$CurrentEnd = $EvidenceEnd
+if ($DatasetId -match 'P1D') {
+    # Daily datasets timestamp each field at midnight. Expand to complete UTC
+    # days so a partial-day request cannot collapse to only one time sample.
+    $CurrentStart = $AcquisitionTime.AddHours(-$MaximumSlickAgeHours - 2).UtcDateTime.Date.ToString("yyyy-MM-ddTHH:mm:ssZ")
+    $CurrentEnd = $AcquisitionTime.UtcDateTime.Date.AddDays(1).ToString("yyyy-MM-ddTHH:mm:ssZ")
+}
 & $CmemsPython -m espada.copernicus download `
-    --start $EvidenceStart --end $EvidenceEnd --dataset-id $DatasetId `
+    --start $CurrentStart --end $CurrentEnd --dataset-id $DatasetId `
     --min-lon $MinLongitude --max-lon $MaxLongitude --min-lat $MinLatitude --max-lat $MaxLatitude `
     --out $CurrentFile
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -204,6 +212,7 @@ $Result = [ordered]@{
     case_id = $CaseId
     selected_scene = $Catalog.recommended_scene
     evidence_window_utc = @($EvidenceStart, $EvidenceEnd)
+    current_download_window_utc = @($CurrentStart, $CurrentEnd)
     dataset_id = $DatasetId
     case_file = $CaseDefinitionPath
     quicklook = Join-Path $SarDirectory "sentinel1_vv_quicklook.png"

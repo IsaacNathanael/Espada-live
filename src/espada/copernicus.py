@@ -158,7 +158,14 @@ def _point_series(
         selections[depth_name] = 0.0
     if selections:
         data = data.sel(selections, method="nearest")
-    data = data.squeeze(drop=True)
+    # Preserve a singleton time axis. Daily reanalysis subsets can legitimately
+    # contain one timestamp; squeezing every singleton dimension would turn the
+    # series into a scalar and incorrectly report that time is missing.
+    singleton_spatial_dims = [
+        name for name in data.dims if name != time_name and data.sizes[name] == 1
+    ]
+    if singleton_spatial_dims:
+        data = data.squeeze(singleton_spatial_dims, drop=True)
     extra_dims = [name for name in data.dims if name != time_name]
     if extra_dims:
         raise ValueError(f"Unexpected dimensions remain in {variable}: {extra_dims}")

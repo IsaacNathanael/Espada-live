@@ -119,6 +119,23 @@ def test_normalize_currents_selects_surface_point_and_interpolates_hourly(tmp_pa
     assert bundle.temporal_resolution.startswith("hourly linear")
 
 
+def test_single_daily_timestamp_is_not_misreported_as_missing_time(tmp_path: Path) -> None:
+    raw = tmp_path / "single.nc"
+    cache = tmp_path / "copernicus.json"
+    wind = tmp_path / "wind.json"
+    _write_wind_cache(wind)
+    dataset = xr.Dataset(
+        {
+            "uo": (("time", "depth", "latitude", "longitude"), np.ones((1, 1, 1, 1)), {"units": "m/s"}),
+            "vo": (("time", "depth", "latitude", "longitude"), np.ones((1, 1, 1, 1)), {"units": "m/s"}),
+        },
+        coords={"time": [pd.Timestamp("2026-09-03")], "depth": [0.494], "latitude": [18.75], "longitude": [71.5]},
+    )
+    dataset.to_netcdf(raw, engine="scipy")
+    with pytest.raises(ValueError, match="at least two valid time steps"):
+        normalize_currents(raw, cache, wind_cache_path=wind)
+
+
 def test_invalid_request_is_rejected() -> None:
     with pytest.raises(ValueError, match="before"):
         CopernicusRequest(
