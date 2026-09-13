@@ -188,6 +188,8 @@ After the generated SAR boundary has been independently reviewed, run its case a
 
 To isolate that coverage failure, `scripts\run_corsica_counterfactual.ps1` adds one disclosed synthetic source-consistent track to the real 76-vessel background, seals its identity, reruns the unchanged ranker, and reveals the answer only afterward. This is a counterfactual component test—not real AIS and not an independent source-recovery claim.
 
+For a stronger simulation, `scripts\run_digital_twin.ps1` selects pseudonymized real vessel tracks, creates hidden synthetic releases with time-varying real currents and wind, models a continuous release plus diffusion, applies AIS dropout/position-noise and physics-mismatch stresses, and scores recovery only after inference. It is a controlled digital twin—not real-spill attribution accuracy.
+
 ## Prepare and train the SAR model
 
 Download and audit the labelled Sentinel-1 data:
