@@ -19,6 +19,7 @@ import numpy as np
 import pandas as pd
 from scipy.spatial import cKDTree
 
+from .coast import CoastMask, load_coast_mask
 from .geo import haversine_km, local_xy_m
 from .models import Forcing, parse_utc
 from .physics import advect_diffuse_constant, advect_diffuse_spatial_timeseries
@@ -136,6 +137,7 @@ def _score_track(
     spatial_current_grid: SpatialCurrentGrid | None = None,
     forcing_history: pd.DataFrame | None = None,
     spatial_current_multiplier: float = 1.0,
+    coast_mask: CoastMask | None = None,
 ) -> dict:
     observed_track = track
     scoring_track, interpolation_used, interpolation_gap_hours = _interpolate_release_position(
@@ -206,6 +208,7 @@ def _score_track(
                 windage=forcing.windage,
                 diffusivity_m2s=0.0,
                 current_multiplier=spatial_current_multiplier,
+                coast_mask=coast_mask,
             )
         else:
             predicted_lon, predicted_lat = advect_diffuse_constant(
@@ -238,6 +241,7 @@ def _score_track(
                 windage=forcing.windage,
                 diffusivity_m2s=dispersive.diffusivity_m2s,
                 current_multiplier=spatial_current_multiplier,
+                coast_mask=coast_mask,
             )
         else:
             cloud_lon, cloud_lat = advect_diffuse_constant(
@@ -313,6 +317,11 @@ def _score_track(
                 if spatial_current_grid is not None
                 else "Forward replay used the case-mean surface current."
             ),
+            *(
+                ["Forward particle steps ending on supplied land polygons were rejected."]
+                if coast_mask is not None
+                else []
+            ),
             "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
             (
                 "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
@@ -371,6 +380,8 @@ def rank_candidates(
     provenance = estimate.get("forcing_provenance", {})
     grid_path = provenance.get("spatial_current_grid")
     spatial_grid = load_spatial_current_grid(Path(grid_path)) if grid_path else None
+    land_path = provenance.get("land_mask")
+    coast_mask = load_coast_mask(Path(land_path)) if land_path else None
     history_path = Path(release_estimate_path).parent / "forcing_history.csv"
     forcing_history = pd.read_csv(history_path) if spatial_grid and history_path.exists() else None
     if forcing_history is not None:
@@ -394,6 +405,8 @@ def rank_candidates(
             silence_by_mmsi.get(str(track["mmsi"].iloc[0])),
             spatial_grid,
             forcing_history,
+            1.0,
+            coast_mask,
         )
         for _, track in ais.groupby("mmsi", sort=False)
     ]

@@ -5,6 +5,7 @@ from typing import Sequence
 
 import numpy as np
 
+from .coast import CoastMask
 from .geo import local_xy_m, lonlat_from_local_m
 from .models import Forcing
 from .spatial_current import SpatialCurrentGrid
@@ -102,6 +103,7 @@ def advect_diffuse_spatial_timeseries(
     current_bias_east_ms: float = 0.0,
     current_bias_north_ms: float = 0.0,
     reverse: bool = False,
+    coast_mask: CoastMask | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Integrate particles through time- and location-varying surface currents.
 
@@ -140,8 +142,15 @@ def advect_diffuse_spatial_timeseries(
         # This is the local tangent-plane convention and avoids introducing a
         # small northward-motion bias into longitude displacement.
         safe_cosine = np.maximum(np.cos(np.deg2rad(latitude)), 1e-6)
-        latitude = latitude + np.rad2deg(dy / 6_371_008.8)
-        longitude = longitude + np.rad2deg(dx / (6_371_008.8 * safe_cosine))
+        proposed_latitude = latitude + np.rad2deg(dy / 6_371_008.8)
+        proposed_longitude = longitude + np.rad2deg(dx / (6_371_008.8 * safe_cosine))
+        if coast_mask is not None:
+            blocked = coast_mask.contains(proposed_longitude, proposed_latitude)
+            longitude = np.where(blocked, longitude, proposed_longitude)
+            latitude = np.where(blocked, latitude, proposed_latitude)
+        else:
+            longitude = proposed_longitude
+            latitude = proposed_latitude
     return longitude, latitude
 
 

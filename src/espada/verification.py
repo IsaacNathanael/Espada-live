@@ -19,6 +19,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from .coast import CoastMask
 from .geo import haversine_km, local_xy_m
 from .models import Forcing, format_utc
 from .physics import (
@@ -140,6 +141,7 @@ def infer_origins_spatial_timeseries(
     windage: float = 0.02,
     diffusivity_m2s: float = 12.0,
     current_multiplier: float = 1.0,
+    coast_mask: CoastMask | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Infer origins while sampling Copernicus current at every particle."""
     if observed_lon.size == 0 or observed_lon.shape != observed_lat.shape:
@@ -168,6 +170,7 @@ def infer_origins_spatial_timeseries(
             current_bias_east_ms=float(rng.normal(0.0, 0.05)),
             current_bias_north_ms=float(rng.normal(0.0, 0.04)),
             reverse=True,
+            coast_mask=coast_mask,
         )
         origins_lon.append(lon)
         origins_lat.append(lat)

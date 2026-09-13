@@ -3,6 +3,7 @@ param(
     [Parameter(Mandatory = $true)][string]$AisCsv,
     [Parameter(Mandatory = $true)][string]$EnvironmentCache,
     [string]$SpatialCurrentGrid = "",
+    [string]$LandMask = "",
     [double]$AgeHours = 0.0,
     [double[]]$CandidateAgesHours = @(1.5, 2, 3, 4, 6, 8, 10, 12, 16, 20, 24),
     [string]$OutputDirectory = "",
@@ -18,6 +19,11 @@ $ResolvedEnvironment = Resolve-Path -LiteralPath $EnvironmentCache -ErrorAction 
 $ResolvedSpatialCurrentGrid = $null
 if ($SpatialCurrentGrid) {
     $ResolvedSpatialCurrentGrid = Resolve-Path -LiteralPath $SpatialCurrentGrid -ErrorAction Stop
+}
+$ResolvedLandMask = $null
+if ($LandMask) {
+    $ResolvedLandMask = Resolve-Path -LiteralPath $LandMask -ErrorAction Stop
+    if (-not $ResolvedSpatialCurrentGrid) { throw "LandMask requires SpatialCurrentGrid." }
 }
 
 if (-not $PythonPath) {
@@ -62,6 +68,7 @@ $TimeSearchArguments = @(
 if ($ResolvedSpatialCurrentGrid) {
     $TimeSearchArguments += @("--spatial-current-grid", $ResolvedSpatialCurrentGrid.Path)
 }
+if ($ResolvedLandMask) { $TimeSearchArguments += @("--land-mask", $ResolvedLandMask.Path) }
 & $PythonPath @TimeSearchArguments
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
@@ -92,6 +99,7 @@ $SlickArguments = @(
 if ($ResolvedSpatialCurrentGrid) {
     $SlickArguments += @("--spatial-current-grid", $ResolvedSpatialCurrentGrid.Path)
 }
+if ($ResolvedLandMask) { $SlickArguments += @("--land-mask", $ResolvedLandMask.Path) }
 & $PythonPath @SlickArguments
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 

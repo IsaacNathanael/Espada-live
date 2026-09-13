@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 from shapely.geometry import MultiPoint, MultiPolygon, Polygon
 
+from .coast import load_coast_mask
 from .environment import load_cache
 from .geo import Polygonal, local_xy_m, polygon_from_geojson, sample_polygon, write_polygon_geojson
 from .models import Forcing
@@ -133,6 +134,7 @@ def analyze_slick(
     ensemble_members: int = 20,
     seed: int = 26143,
     spatial_current_grid: Path | None = None,
+    land_mask: Path | None = None,
 ) -> dict[str, object]:
     if age_hours <= 0 or particles <= 0 or ensemble_members <= 0:
         raise ValueError("Age, particle count, and ensemble member count must be positive")
@@ -149,6 +151,9 @@ def analyze_slick(
     observed_lon, observed_lat = sample_polygon(observation.polygon, particles, rng)
     step_seconds = age_hours * 3600.0 / len(history)
     grid = load_spatial_current_grid(spatial_current_grid) if spatial_current_grid else None
+    coast = load_coast_mask(land_mask) if land_mask else None
+    if coast and not grid:
+        raise ValueError("A land mask currently requires a spatial current grid")
     if grid:
         if not grid.covers(release_time, observation.observation_time):
             raise ValueError(
@@ -165,6 +170,7 @@ def analyze_slick(
             step_seconds=step_seconds,
             seed=seed + 1,
             ensemble_members=ensemble_members,
+            coast_mask=coast,
         )
     else:
         origin_lon, origin_lat = infer_origins_timeseries(
@@ -247,6 +253,8 @@ def analyze_slick(
             "spatial_mode": "particle-local bilinear currents" if grid else "single-location currents",
             "spatial_current_grid": str(grid.path) if grid else None,
             "spatial_grid_bounds": list(grid.bounds) if grid else None,
+            "land_mask": str(coast.path) if coast else None,
+            "coast_policy": "reject particle steps ending on land" if coast else None,
         },
         "assumption": "Release age is supplied by the analyst and must be sensitivity-tested.",
     }
@@ -268,6 +276,7 @@ def analyze_slick(
             "temporal_resolution": environment.temporal_resolution,
             "spatial_mode": "particle-local bilinear currents" if grid else "single-location currents",
             "spatial_current_grid": str(grid.path) if grid else None,
+            "land_mask": str(coast.path) if coast else None,
         },
         "assumed_age_hours": age_hours,
         "estimated_release_time_utc": release_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -283,6 +292,7 @@ def analyze_slick(
                 [
                     "Currents vary through time and space; wind varies through time at one analysis location.",
                     "Particles outside the downloaded current subset use its nearest boundary cell.",
+                    *(["Particle steps ending on supplied land polygons are rejected."] if coast else []),
                 ]
                 if grid
                 else ["Current and wind vary through time but use one analysis location."]

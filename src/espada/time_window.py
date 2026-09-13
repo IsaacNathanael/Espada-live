@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 
 from .attribution import _observed_cloud_xy_km, _score_track
+from .coast import load_coast_mask
 from .environment import load_cache
 from .geo import local_xy_m, sample_polygon
 from .models import Forcing
@@ -40,6 +41,7 @@ def search_release_window(
     ensemble_members: int = 6,
     seed: int = 26143,
     spatial_current_grid: Path | None = None,
+    land_mask: Path | None = None,
 ) -> dict[str, object]:
     """Search vessel and release-age hypotheses without receiving an answer key."""
     observation = load_slick(slick_path)
@@ -56,6 +58,9 @@ def search_release_window(
     silence_by_id = {item["mmsi"]: item for item in silence["vessels"]}
     observation_naive = observation.observation_time.to_pydatetime().replace(tzinfo=None)
     grid = load_spatial_current_grid(spatial_current_grid) if spatial_current_grid else None
+    coast = load_coast_mask(land_mask) if land_mask else None
+    if coast and not grid:
+        raise ValueError("A land mask currently requires a spatial current grid")
     if grid and not grid.covers_bounds(tuple(float(value) for value in observation.polygon.bounds)):
         raise ValueError("Spatial current grid does not cover the observed slick bounds")
     rows: list[dict[str, object]] = []
@@ -83,6 +88,7 @@ def search_release_window(
                         ensemble_members=ensemble_members,
                         windage=windage,
                         current_multiplier=current_multiplier,
+                        coast_mask=coast,
                     )
                 else:
                     origin_lon, origin_lat = infer_origins_timeseries(
@@ -122,6 +128,7 @@ def search_release_window(
                         grid,
                         varied if grid else None,
                         current_multiplier,
+                        coast,
                     )
                     for _, track in candidates.groupby("mmsi", sort=False)
                 ]
@@ -212,6 +219,7 @@ def search_release_window(
             else "joint vessel and release-age hypothesis search with current and windage perturbations"
         ),
         "spatial_current_grid": str(grid.path) if grid else None,
+        "land_mask": str(coast.path) if coast else None,
         "answer_key_accessed": False,
         "scenarios_per_candidate": int(summary.iloc[0]["scenarios"]),
         "ages_tested_hours": sorted(float(value) for value in frame["age_hours"].unique()),
@@ -260,8 +268,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--candidates", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--spatial-current-grid", type=Path)
+    parser.add_argument("--land-mask", type=Path)
     args = parser.parse_args(argv)
-    print(json.dumps(search_release_window(args.slick, args.environment_cache, args.candidates, args.out, spatial_current_grid=args.spatial_current_grid), indent=2))
+    print(json.dumps(search_release_window(args.slick, args.environment_cache, args.candidates, args.out, spatial_current_grid=args.spatial_current_grid, land_mask=args.land_mask), indent=2))
     return 0
 
 

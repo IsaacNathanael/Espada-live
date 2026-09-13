@@ -87,6 +87,7 @@ def _parser() -> argparse.ArgumentParser:
     slick.add_argument("--input", type=Path, required=True)
     slick.add_argument("--environment-cache", type=Path, required=True)
     slick.add_argument("--spatial-current-grid", type=Path)
+    slick.add_argument("--land-mask", type=Path)
     slick.add_argument("--out", type=Path, default=Path("out/slick"))
     slick.add_argument("--age-hours", type=float, default=19.0)
     slick.add_argument("--particles", type=int, default=2_000)
@@ -110,6 +111,7 @@ def _parser() -> argparse.ArgumentParser:
     time_search.add_argument("--slick", type=Path, required=True)
     time_search.add_argument("--environment-cache", type=Path, required=True)
     time_search.add_argument("--spatial-current-grid", type=Path)
+    time_search.add_argument("--land-mask", type=Path)
     time_search.add_argument("--candidates", type=Path, required=True)
     time_search.add_argument("--out", type=Path, required=True)
     time_search.add_argument(
@@ -301,6 +303,7 @@ def main(argv: list[str] | None = None) -> int:
             ensemble_members=args.members,
             seed=args.seed,
             spatial_current_grid=args.spatial_current_grid,
+            land_mask=args.land_mask,
         )
         print(json.dumps(result, indent=2, default=str))
         return 0 if result["status"] == "PASS" else 1
@@ -327,6 +330,7 @@ def main(argv: list[str] | None = None) -> int:
             args.out,
             ages_hours=ages,
             spatial_current_grid=args.spatial_current_grid,
+            land_mask=args.land_mask,
         )
         print(json.dumps(result, indent=2, default=str))
         return 0 if result["status"] == "PASS" else 1

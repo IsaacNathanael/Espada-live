@@ -15,6 +15,7 @@ param(
     [int]$InferenceBatchSize = 4,
     [string]$EnvironmentCache = "",
     [string]$SpatialCurrentGrid = "",
+    [string]$LandMask = "",
     [string]$OutputDirectory = "",
     [string]$GpuPythonPath = "",
     [string]$PythonPath = ""
@@ -114,6 +115,7 @@ $ApprovedArguments = @{
     PythonPath = $PythonPath
 }
 if ($SpatialCurrentGrid) { $ApprovedArguments.SpatialCurrentGrid = $SpatialCurrentGrid }
+if ($LandMask) { $ApprovedArguments.LandMask = $LandMask }
 & $ApprovedRunner @ApprovedArguments
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
