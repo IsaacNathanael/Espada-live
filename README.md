@@ -192,6 +192,16 @@ For a stronger simulation, `scripts\run_digital_twin.ps1` selects pseudonymized 
 
 The ranker can reconstruct a release-time position only when two AIS observations safely bracket a gap of at most six hours. The reconstructed point is explicitly marked as interpolated, receives a score penalty, and is never described as received AIS evidence.
 
+## Open the operations dashboard
+
+The map-first everyday interface is separate from the technical judge dashboard. It keeps the real Sentinel-1 input, animated ships, reverse-drift replay, Top-3 shortlist, timeline and current/wind conditions on one screen, while provenance and detailed evidence stay behind click-through panels:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start_operations_dashboard.ps1
+```
+
+The Run button performs a fresh local candidate ranking when the localhost engine is connected and falls back to an explicitly labelled saved-evidence replay when opened as a portable file.
+
 ## Prepare and train the SAR model
 
 Download and audit the labelled Sentinel-1 data:

@@ -9,6 +9,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from .demo import run_demo
+from .attribution import rank_candidates
 
 
 class ShowcaseHandler(SimpleHTTPRequestHandler):
@@ -31,7 +32,7 @@ class ShowcaseHandler(SimpleHTTPRequestHandler):
                 {
                     "status": "PASS",
                     "service": "ESPADA local evidence engine",
-                    "capabilities": ["known-source-run", "static-showcase"],
+                    "capabilities": ["known-source-run", "operations-ranking", "static-showcase"],
                     "network_scope": "127.0.0.1 only",
                 },
             )
@@ -39,7 +40,7 @@ class ShowcaseHandler(SimpleHTTPRequestHandler):
         super().do_GET()
 
     def do_POST(self) -> None:  # noqa: N802 - stdlib handler API
-        if self.path != "/api/run-known-source":
+        if self.path not in {"/api/run-known-source", "/api/run-operations"}:
             self._json(404, {"status": "FAIL", "error": "Unknown endpoint"})
             return
         length = int(self.headers.get("Content-Length", "0"))
@@ -55,6 +56,27 @@ class ShowcaseHandler(SimpleHTTPRequestHandler):
             self._json(409, {"status": "BUSY", "error": "An evidence run is already active"})
             return
         try:
+            if self.path == "/api/run-operations":
+                run = self.project_root / "out/external_validation/corsica_2018/counterfactual_ais/run"
+                started = time.perf_counter()
+                candidates, *_ = rank_candidates(
+                    run / "ais/ais_normalized.csv",
+                    run / "drift/reverse_endpoints.npz",
+                    run / "drift/release_estimate.json",
+                    run / "drift/forward_particles.npz",
+                )
+                self._json(
+                    200,
+                    {
+                        "status": "PASS",
+                        "run_type": "fresh local candidate ranking from saved evidence inputs",
+                        "elapsed_seconds": round(time.perf_counter() - started, 2),
+                        "candidate_count": len(candidates),
+                        "top_candidates": candidates[:3],
+                        "warning": "Hybrid validation result; not a finding of guilt.",
+                    },
+                )
+                return
             seed = int(request.get("seed", 26143))
             seed = max(0, min(seed, 2_147_483_647))
             output = self.project_root / "out" / "interactive_known_source"
