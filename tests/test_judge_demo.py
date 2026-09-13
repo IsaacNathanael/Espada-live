@@ -20,8 +20,19 @@ def test_judge_demo_links_every_evidence_view(tmp_path: Path) -> None:
     document = output.read_text(encoding="utf-8")
     assert result["status"] == "PASS"
     assert result["views"] == 6
+    assert result["presenter_steps"] == 5
     assert "System scorecard" in document
     assert "Forensic replay" in document
     assert "Safe abstention" in document
     assert "Interactive laboratory" in document
-    assert all(token in document for token in ("href=", "READY", "not guilt probabilities"))
+    assert all(
+        token in document
+        for token in (
+            "href=",
+            "READY",
+            "not guilt probabilities",
+            "START PRESENTER MODE",
+            "Known source recovered",
+            "Unsafe claim refused",
+        )
+    )

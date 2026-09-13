@@ -54,7 +54,7 @@ For the complete five-minute judge route, run this single command:
 powershell -ExecutionPolicy Bypass -File .\scripts\start_judge_demo.ps1
 ```
 
-It reuses the validated artifacts, starts the local evidence server, and opens the command center at `http://127.0.0.1:4173/out/judge_demo/index.html`. Use `-RecomputeValidation` only when you intentionally want to rerun all three validation layers. Comparative candidate scores shown in the reports are evidence-fit scores, not guilt probabilities.
+It reuses the validated artifacts, starts the local evidence server, and opens the command center at `http://127.0.0.1:4173/out/judge_demo/index.html`. **Start Presenter Mode** provides a timed five-step explanation with direct evidence links. Use `-RecomputeValidation` only when you intentionally want to rerun all three validation layers. Comparative candidate scores shown in the reports are evidence-fit scores, not guilt probabilities.
 
 After the verified demo has produced `out\demo`, double-click `ESPADA_SHOWCASE.cmd` or run:
 
