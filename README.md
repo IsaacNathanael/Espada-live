@@ -186,6 +186,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\prepare_corsica_validation.ps
 
 After the generated SAR boundary has been independently reviewed, run its case and then reveal the registered source using `scripts\evaluate_corsica_validation.ps1`. This is a retrospective preregistered holdout—not an external blind trial. The current public GFW extract omits CSL Virginia's registered MMSI, so source recovery is honestly recorded as an input-coverage failure; ESPADA's abstention remains a safety pass. A licensed raw AIS archive is required to make the source rankable.
 
+To isolate that coverage failure, `scripts\run_corsica_counterfactual.ps1` adds one disclosed synthetic source-consistent track to the real 76-vessel background, seals its identity, reruns the unchanged ranker, and reveals the answer only afterward. This is a counterfactual component test—not real AIS and not an independent source-recovery claim.
+
 ## Prepare and train the SAR model
 
 Download and audit the labelled Sentinel-1 data:
