@@ -72,6 +72,7 @@ $Plan = [ordered]@{
         "Copernicus Data Space Sentinel-1 GRD catalogue and Process API",
         "Copernicus Marine surface currents",
         "Open-Meteo historical forecast wind",
+        "Natural Earth 1:10m land polygons",
         $(if ($ExistingAisCsv) { "user-provided AIS CSV" } else { "Global Fishing Watch vessel presence" })
     )
     output_directory = $CaseRoot
@@ -115,7 +116,7 @@ if (-not (Test-Path -LiteralPath $CmemsPython)) {
 $env:PYTHONPATH = Join-Path $ProjectRoot "src"
 $env:MPLCONFIGDIR = Join-Path $ProjectRoot ".mpl-cache"
 
-Write-Host "1/5 Discovering a Sentinel-1 scene that covers the target..." -ForegroundColor Cyan
+Write-Host "1/6 Discovering a Sentinel-1 scene that covers the target..." -ForegroundColor Cyan
 & $PythonPath -m espada.cli sar-discover `
     --start $SearchStart --end $SearchEnd --bbox @Bbox `
     --target $TargetLongitude $TargetLatitude --out $CatalogDirectory
@@ -131,7 +132,7 @@ $AcquisitionUtc = $AcquisitionTime.ToString("yyyy-MM-ddTHH:mm:ssZ")
 $EvidenceStart = $AcquisitionTime.AddHours(-$MaximumSlickAgeHours - 2).ToString("yyyy-MM-ddTHH:mm:ssZ")
 $EvidenceEnd = $AcquisitionTime.AddHours(2).ToString("yyyy-MM-ddTHH:mm:ssZ")
 
-Write-Host "2/5 Collecting vessel evidence for the aligned time window..." -ForegroundColor Cyan
+Write-Host "2/6 Collecting vessel evidence for the aligned time window..." -ForegroundColor Cyan
 if ($ExistingAisCsv) {
     $AisCsv = $ResolvedExistingAis
 } else {
@@ -144,7 +145,7 @@ if ($ExistingAisCsv) {
     $AisCsv = Join-Path $AisDirectory "ais_normalized.csv"
 }
 
-Write-Host "3/5 Downloading date-matched wind and ocean currents..." -ForegroundColor Cyan
+Write-Host "3/6 Downloading date-matched wind and ocean currents..." -ForegroundColor Cyan
 $WindCache = Join-Path $EnvironmentDirectory "wind.json"
 $CurrentFile = Join-Path $EnvironmentDirectory "currents.nc"
 $EnvironmentCache = Join-Path $EnvironmentDirectory "environment.json"
@@ -179,12 +180,19 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & $PythonPath -m espada.cli environment --mode cache --cache $EnvironmentCache --out $EnvironmentDirectory
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-Write-Host "4/5 Downloading a calibrated Sentinel-1 VV subset..." -ForegroundColor Cyan
+Write-Host "4/6 Preparing a clipped Natural Earth land mask..." -ForegroundColor Cyan
+$LandMask = Join-Path $EnvironmentDirectory "land_mask.geojson"
+& $PythonPath -m espada.coast_download `
+    --bbox @Bbox --output $LandMask `
+    --cache (Join-Path $ProjectRoot "data\cache\natural_earth\ne_10m_land.zip")
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+Write-Host "5/6 Downloading a calibrated Sentinel-1 VV subset..." -ForegroundColor Cyan
 & $PythonPath -m espada.cli sar-download `
     --catalog $CatalogPath --bbox @Bbox --width $Width --height $Height --out $SarDirectory
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-Write-Host "5/5 Writing the executable case definition..." -ForegroundColor Cyan
+Write-Host "6/6 Writing the executable case definition..." -ForegroundColor Cyan
 $RunDirectory = Join-Path $CaseRoot "run"
 $CaseDefinition = [ordered]@{
     schema_version = 1
@@ -197,6 +205,7 @@ $CaseDefinition = [ordered]@{
         ais_csv = $AisCsv
         environment_cache = $EnvironmentCache
         spatial_current_grid = $CurrentFile
+        land_mask = $LandMask
     }
     analysis = [ordered]@{
         analyst_approved = $false
