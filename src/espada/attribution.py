@@ -35,6 +35,46 @@ REQUIRED_AIS_COLUMNS = {
 }
 
 
+def _interpolate_release_position(
+    track: pd.DataFrame, release_time: datetime, *, maximum_gap_hours: float = 6.0
+) -> tuple[pd.DataFrame, bool, float | None]:
+    """Add one scoring-only position when observations safely bracket release time."""
+    ordered = track.copy()
+    times = pd.to_datetime(ordered["timestamp_utc"], utc=True).dt.tz_localize(None)
+    target = pd.Timestamp(release_time)
+    if target.tzinfo is not None:
+        target = target.tz_convert("UTC").tz_localize(None)
+    if (times == target).any():
+        return ordered, False, 0.0
+    before = np.flatnonzero((times < target).to_numpy())
+    after = np.flatnonzero((times > target).to_numpy())
+    if not len(before) or not len(after):
+        return ordered, False, None
+    left_index = int(before[-1])
+    right_index = int(after[0])
+    gap_hours = (times.iloc[right_index] - times.iloc[left_index]).total_seconds() / 3600.0
+    if gap_hours <= 0 or gap_hours > maximum_gap_hours:
+        return ordered, False, gap_hours
+    fraction = (target - times.iloc[left_index]).total_seconds() / (
+        times.iloc[right_index] - times.iloc[left_index]
+    ).total_seconds()
+    row = ordered.iloc[left_index].copy()
+    row["timestamp_utc"] = target.strftime("%Y-%m-%dT%H:%M:%SZ")
+    row["longitude"] = float(ordered.iloc[left_index]["longitude"]) + fraction * (
+        float(ordered.iloc[right_index]["longitude"])
+        - float(ordered.iloc[left_index]["longitude"])
+    )
+    row["latitude"] = float(ordered.iloc[left_index]["latitude"]) + fraction * (
+        float(ordered.iloc[right_index]["latitude"])
+        - float(ordered.iloc[left_index]["latitude"])
+    )
+    row["is_interpolated"] = True
+    if "source" in row:
+        row["source"] = f"{row['source']}; scoring-only linear gap interpolation"
+    augmented = pd.concat([ordered, row.to_frame().T], ignore_index=True)
+    return augmented, True, gap_hours
+
+
 def _observed_cloud_xy_km(
     observed_lon: np.ndarray,
     observed_lat: np.ndarray,
@@ -93,9 +133,13 @@ def _score_track(
     expected_rows: int,
     silence_report: dict | None = None,
 ) -> dict:
-    timestamps = pd.to_datetime(track["timestamp_utc"], utc=True).dt.tz_localize(None)
-    lons = track["longitude"].to_numpy(dtype=float)
-    lats = track["latitude"].to_numpy(dtype=float)
+    observed_track = track
+    scoring_track, interpolation_used, interpolation_gap_hours = _interpolate_release_position(
+        observed_track, release_time
+    )
+    timestamps = pd.to_datetime(scoring_track["timestamp_utc"], utc=True).dt.tz_localize(None)
+    lons = scoring_track["longitude"].to_numpy(dtype=float)
+    lats = scoring_track["latitude"].to_numpy(dtype=float)
     x, y = local_xy_m(lons, lats, estimated_lon, estimated_lat)
     spatial_km = np.sqrt(x**2 + y**2) / 1000.0
     time_hours = np.abs((timestamps - release_time).dt.total_seconds().to_numpy() / 3600.0)
@@ -172,18 +216,21 @@ def _score_track(
     )
     joint = 0.55 * presence_by_point + 0.40 * forward_combined
     best_index = int(np.argmax(joint))
-    coverage_quality = min(1.0, len(track) / max(expected_rows, 1))
-    interpolated_fraction = float(track["is_interpolated"].astype(str).str.lower().isin({"true", "1", "yes"}).mean())
-    maximum_gap = float(track["gap_before_minutes"].max()) if "gap_before_minutes" in track else 0.0
+    coverage_quality = min(1.0, len(observed_track) / max(expected_rows, 1))
+    interpolated_fraction = float(observed_track["is_interpolated"].astype(str).str.lower().isin({"true", "1", "yes"}).mean())
+    maximum_gap = float(observed_track["gap_before_minutes"].max()) if "gap_before_minutes" in observed_track else 0.0
     sampling_interval = 0.0
-    if "sampling_interval_minutes" in track:
-        sampling = pd.to_numeric(track["sampling_interval_minutes"], errors="coerce")
+    if "sampling_interval_minutes" in observed_track:
+        sampling = pd.to_numeric(observed_track["sampling_interval_minutes"], errors="coerce")
         valid_sampling = sampling.loc[sampling > 0]
         sampling_interval = float(valid_sampling.median()) if not valid_sampling.empty else 0.0
     gap_threshold = max(30.0, sampling_interval * 1.5)
     gap_penalty = min(0.35, max(0.0, maximum_gap - gap_threshold) / 360.0)
     data_quality = float(np.clip(coverage_quality * (1.0 - 0.25 * interpolated_fraction - gap_penalty), 0.0, 1.0))
-    total_score = float(np.clip(joint[best_index] + 0.05 * data_quality, 0.0, 1.0))
+    interpolation_penalty = 0.015 if interpolation_used else 0.0
+    total_score = float(
+        np.clip(joint[best_index] + 0.05 * data_quality - interpolation_penalty, 0.0, 1.0)
+    )
     silence_report = silence_report or {
         "classification": "not_evaluated",
         "significant_gaps": 0,
@@ -192,8 +239,8 @@ def _score_track(
         "interpretation": "Coverage-aware silence analysis was not available.",
     }
     return {
-        "mmsi": str(track["mmsi"].iloc[0]),
-        "vessel_name": str(track["vessel_name"].iloc[0]),
+        "mmsi": str(observed_track["mmsi"].iloc[0]),
+        "vessel_name": str(observed_track["vessel_name"].iloc[0]),
         "total_score": total_score,
         "presence_score": presence_score,
         "forward_consistency": float(forward_combined[best_index]),
@@ -202,6 +249,9 @@ def _score_track(
         "forward_shape_consistency": float(forward_shape_scores[best_index]),
         "forward_shape_error_km": float(forward_shape_errors[best_index]),
         "data_quality": data_quality,
+        "release_position_interpolated": interpolation_used,
+        "interpolation_gap_hours": interpolation_gap_hours,
+        "interpolation_score_penalty": interpolation_penalty,
         "gap_threshold_minutes": gap_threshold,
         "silence_classification": silence_report["classification"],
         "significant_gaps": silence_report["significant_gaps"],
@@ -214,13 +264,19 @@ def _score_track(
             "Space-time proximity to the inferred release distribution.",
             "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
             "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+            (
+                "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
+                if interpolation_used
+                else "No release-time gap interpolation was used."
+            ),
         ],
         "limitations": [
             (
                 "Synthetic AIS validation fixture."
-                if str(track.get("source", pd.Series([""])).iloc[0]).startswith("synthetic")
+                if str(observed_track.get("source", pd.Series([""])).iloc[0]).startswith("synthetic")
                 else "AIS identity and reception completeness require independent verification."
             ),
+            "Interpolated positions are hypotheses, not received AIS messages.",
             "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
             "AIS gaps do not receive a deliberate-behaviour bonus.",
         ],

@@ -190,6 +190,8 @@ To isolate that coverage failure, `scripts\run_corsica_counterfactual.ps1` adds 
 
 For a stronger simulation, `scripts\run_digital_twin.ps1` selects pseudonymized real vessel tracks, creates hidden synthetic releases with time-varying real currents and wind, models a continuous release plus diffusion, applies AIS dropout/position-noise and physics-mismatch stresses, and scores recovery only after inference. It is a controlled digital twin—not real-spill attribution accuracy.
 
+The ranker can reconstruct a release-time position only when two AIS observations safely bracket a gap of at most six hours. The reconstructed point is explicitly marked as interpolated, receives a score penalty, and is never described as received AIS evidence.
+
 ## Prepare and train the SAR model
 
 Download and audit the labelled Sentinel-1 data:

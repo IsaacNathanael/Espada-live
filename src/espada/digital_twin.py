@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 
 from .attribution import rank_candidates
+from .decision import POLICY
 from .environment import load_cache
 from .geo import haversine_km
 from .physics import advect_diffuse_timeseries
@@ -96,8 +97,8 @@ def _simulate_slick(
     particles: int,
     windage: float,
     diffusivity_m2s: float,
-) -> tuple[np.ndarray, np.ndarray, tuple[float, float]]:
-    truth_position = _interpolated_position(track, release_time)
+) -> tuple[np.ndarray, np.ndarray, list[tuple[float, float]]]:
+    release_corridor: list[tuple[float, float]] = []
     all_lon: list[np.ndarray] = []
     all_lat: list[np.ndarray] = []
     # Three cohorts approximate a 90-minute continuous release.
@@ -110,6 +111,7 @@ def _simulate_slick(
         if len(history) < 2:
             raise ValueError("Environmental cache does not cover the digital-twin interval")
         source_lon, source_lat = _interpolated_position(track, cohort_time)
+        release_corridor.append((source_lon, source_lat))
         cohort_size = particles // 3
         duration_seconds = (observation_time - cohort_time).total_seconds()
         step_seconds = duration_seconds / len(history)
@@ -127,7 +129,7 @@ def _simulate_slick(
         )
         all_lon.append(lon)
         all_lat.append(lat)
-    return np.concatenate(all_lon), np.concatenate(all_lat), truth_position
+    return np.concatenate(all_lon), np.concatenate(all_lat), release_corridor
 
 
 def _disturb_ais(
@@ -204,7 +206,7 @@ def run_digital_twin_suite(
         source_track = ais.loc[ais["mmsi"].astype(str) == trial["mmsi"]]
         windage = 0.03 if condition in {"windage mismatch", "combined stress"} else 0.02
         diffusivity = 20.0 if condition in {"diffusion mismatch", "combined stress"} else 12.0
-        observed_lon, observed_lat, truth_position = _simulate_slick(
+        observed_lon, observed_lat, release_corridor = _simulate_slick(
             source_track,
             environment,
             trial["release_time"],
@@ -243,10 +245,32 @@ def run_digital_twin_suite(
             case_dir / "drift" / "forward_particles.npz",
         )
         match = next(item for item in candidates if item["mmsi"] == target_id)
+        top = candidates[0]
+        runner_up = candidates[1]
+        score_margin = float(top["total_score"] - runner_up["total_score"])
+        priority = POLICY["priority_review"]
+        numeric_priority_ready = bool(
+            float(top["total_score"]) >= priority["minimum_top_score"]
+            and score_margin >= priority["minimum_score_margin"]
+            and float(top["forward_error_km"]) <= priority["maximum_forward_error_km"]
+            and float(top["forward_shape_error_km"])
+            <= priority["maximum_forward_shape_error_km"]
+            and float(top["data_quality"]) >= priority["minimum_data_quality"]
+        )
         estimate = analysis["estimated_origin"]
-        origin_error = haversine_km(
-            truth_position[0],
-            truth_position[1],
+        origin_error = min(
+            haversine_km(
+                point[0], point[1], float(estimate["longitude"]), float(estimate["latitude"])
+            )
+            for point in release_corridor
+        )
+        corridor_center = (
+            float(np.mean([point[0] for point in release_corridor])),
+            float(np.mean([point[1] for point in release_corridor])),
+        )
+        centroid_error = haversine_km(
+            corridor_center[0],
+            corridor_center[1],
             float(estimate["longitude"]),
             float(estimate["latitude"]),
         )
@@ -261,16 +285,22 @@ def run_digital_twin_suite(
                 "top_1": int(match["rank"]) == 1,
                 "top_3": int(match["rank"]) <= 3,
                 "origin_error_km": origin_error,
+                "release_corridor_centroid_error_km": centroid_error,
                 "forward_error_km": float(match["forward_error_km"]),
                 "comparative_score": float(match["total_score"]),
+                "top_score_margin": score_margin,
+                "numeric_priority_gates_passed": numeric_priority_ready,
+                "unsafe_false_priority": numeric_priority_ready and int(match["rank"]) != 1,
                 "truth_windage": windage,
                 "truth_diffusivity_m2s": diffusivity,
             }
         )
     frame = pd.DataFrame(rows)
     frame.to_csv(output_dir / "digital_twin_cases.csv", index=False)
+    top_3_rate = float(frame["top_3"].mean())
+    false_priorities = int(frame["unsafe_false_priority"].sum())
     summary = {
-        "status": "PASS" if float(frame["top_3"].mean()) >= 0.8 else "REVIEW",
+        "status": "PASS" if top_3_rate >= 0.8 and false_priorities == 0 else "REVIEW",
         "evaluation": "controlled digital-twin suite",
         "data_composition": {
             "slicks": "synthetic continuous-release particle simulations",
@@ -279,7 +309,13 @@ def run_digital_twin_suite(
         },
         "cases": len(frame),
         "top_1_rate": float(frame["top_1"].mean()),
-        "top_3_rate": float(frame["top_3"].mean()),
+        "top_3_rate": top_3_rate,
+        "safety": {
+            "unsafe_false_priority_count": false_priorities,
+            "passed": false_priorities == 0,
+            "interpretation": "A wrong leading candidate must not pass the numeric priority-review gates.",
+        },
+        "origin_error_definition": "minimum distance from estimated origin to the 90-minute true release corridor",
         "median_origin_error_km": float(frame["origin_error_km"].median()),
         "p90_origin_error_km": float(frame["origin_error_km"].quantile(0.9)),
         "anti_leakage": "The ranker receives pseudonymized tracks and never receives the selected source identity.",

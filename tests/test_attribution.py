@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 
-from espada.attribution import _symmetric_cloud_error_km, rank_candidates
+from espada.attribution import _interpolate_release_position, _symmetric_cloud_error_km, rank_candidates
 from espada.demo import run_demo
 from espada.synthetic_ais import generate_synthetic_ais
 from espada.verification import VerificationConfig, run_verification
@@ -46,6 +46,28 @@ def test_shape_error_distinguishes_matching_and_displaced_clouds() -> None:
     )
     assert matching < 0.01
     assert displaced > 100.0
+
+
+def test_release_position_interpolation_is_bounded_and_labelled() -> None:
+    frame = pd.DataFrame(
+        {
+            "timestamp_utc": ["2026-01-01T00:00:00Z", "2026-01-01T04:00:00Z"],
+            "mmsi": ["111111111", "111111111"],
+            "vessel_name": ["Blind", "Blind"],
+            "longitude": [10.0, 10.4],
+            "latitude": [20.0, 20.2],
+            "is_interpolated": [False, False],
+            "source": ["test", "test"],
+        }
+    )
+    augmented, used, gap = _interpolate_release_position(
+        frame, pd.Timestamp("2026-01-01T02:00:00Z").to_pydatetime()
+    )
+    synthetic = augmented.loc[augmented["is_interpolated"].astype(bool)]
+    assert used is True
+    assert gap == 4.0
+    assert abs(float(synthetic.iloc[0]["longitude"]) - 10.2) < 1e-9
+    assert "scoring-only" in str(synthetic.iloc[0]["source"])
 
 
 def test_synthetic_ais_has_fourteen_vessels_and_a_real_gap(tmp_path: Path) -> None:
