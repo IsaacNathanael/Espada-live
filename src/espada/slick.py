@@ -15,17 +15,17 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from shapely.geometry import MultiPoint, Polygon
+from shapely.geometry import MultiPoint, MultiPolygon, Polygon
 
 from .environment import load_cache
-from .geo import local_xy_m, polygon_from_geojson, sample_polygon, write_polygon_geojson
+from .geo import Polygonal, local_xy_m, polygon_from_geojson, sample_polygon, write_polygon_geojson
 from .models import Forcing
 from .verification import infer_origins_timeseries
 
 
 @dataclass(frozen=True)
 class SlickObservation:
-    polygon: Polygon
+    polygon: Polygonal
     observation_time: pd.Timestamp
     detection_confidence: float
     source: str
@@ -36,7 +36,7 @@ def load_slick(path: Path) -> SlickObservation:
     path = Path(path)
     polygon, properties = polygon_from_geojson(path)
     if polygon.is_empty or not polygon.is_valid or polygon.area <= 0:
-        raise ValueError("Slick GeoJSON must contain one valid, non-empty polygon")
+        raise ValueError("Slick GeoJSON must contain a valid, non-empty polygon or multipolygon")
     min_lon, min_lat, max_lon, max_lat = polygon.bounds
     if min_lon < -180 or max_lon > 180 or min_lat < -90 or max_lat > 90:
         raise ValueError("Slick coordinates fall outside valid longitude/latitude bounds")
@@ -70,7 +70,7 @@ def load_slick(path: Path) -> SlickObservation:
     )
 
 
-def _polygon_area_km2(polygon: Polygon) -> float:
+def _polygon_area_km2(polygon: Polygonal) -> float:
     ref_lon = float(polygon.centroid.x)
     ref_lat = float(polygon.centroid.y)
 
@@ -79,8 +79,11 @@ def _polygon_area_km2(polygon: Polygon) -> float:
         x, y = local_xy_m(points[:, 0], points[:, 1], ref_lon, ref_lat)
         return 0.5 * abs(float(np.dot(x, np.roll(y, 1)) - np.dot(y, np.roll(x, 1))))
 
-    area_m2 = ring_area(polygon.exterior.coords)
-    area_m2 -= sum(ring_area(interior.coords) for interior in polygon.interiors)
+    parts = polygon.geoms if isinstance(polygon, MultiPolygon) else (polygon,)
+    area_m2 = 0.0
+    for part in parts:
+        area_m2 += ring_area(part.exterior.coords)
+        area_m2 -= sum(ring_area(interior.coords) for interior in part.interiors)
     return max(area_m2, 0.0) / 1_000_000.0
 
 
@@ -173,8 +176,14 @@ def analyze_slick(
     fig, (slick_axis, origin_axis) = plt.subplots(
         1, 2, figsize=(12, 5.4), constrained_layout=True
     )
-    exterior = np.asarray(observation.polygon.exterior.coords)
-    slick_axis.fill(exterior[:, 0], exterior[:, 1], color="#087F7B", alpha=0.28)
+    polygon_parts = (
+        observation.polygon.geoms
+        if isinstance(observation.polygon, MultiPolygon)
+        else (observation.polygon,)
+    )
+    for part in polygon_parts:
+        exterior = np.asarray(part.exterior.coords)
+        slick_axis.fill(exterior[:, 0], exterior[:, 1], color="#087F7B", alpha=0.28)
     slick_axis.scatter(observed_lon, observed_lat, s=3, alpha=0.18, color="#087F7B")
     slick_axis.set_title("Observed slick polygon")
     density = origin_axis.hist2d(origin_lon, origin_lat, bins=70, cmap="YlOrRd")

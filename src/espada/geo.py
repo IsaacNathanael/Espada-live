@@ -6,10 +6,12 @@ from pathlib import Path
 from typing import Iterable
 
 import numpy as np
-from shapely.geometry import Polygon, mapping, shape
+from shapely import union_all
+from shapely.geometry import GeometryCollection, MultiPolygon, Polygon, mapping, shape
 
 
 EARTH_RADIUS_M = 6_371_008.8
+Polygonal = Polygon | MultiPolygon
 
 
 def local_xy_m(
@@ -61,16 +63,30 @@ def interpolate_track(
     )
 
 
-def polygon_from_geojson(path: Path) -> tuple[Polygon, dict]:
+def _polygonal_geometry(geometry: object) -> Polygonal:
+    if isinstance(geometry, (Polygon, MultiPolygon)):
+        return geometry
+    if isinstance(geometry, GeometryCollection):
+        parts: list[Polygon] = []
+        for part in geometry.geoms:
+            if isinstance(part, Polygon):
+                parts.append(part)
+            elif isinstance(part, MultiPolygon):
+                parts.extend(part.geoms)
+        merged = union_all(parts) if parts else None
+        if isinstance(merged, (Polygon, MultiPolygon)):
+            return merged
+    raise ValueError("GeoJSON geometry must be a Polygon or MultiPolygon")
+
+
+def polygon_from_geojson(path: Path) -> tuple[Polygonal, dict]:
     document = json.loads(path.read_text(encoding="utf-8"))
     feature = document["features"][0]
-    polygon = shape(feature["geometry"])
-    if not isinstance(polygon, Polygon):
-        polygon = polygon.convex_hull
+    polygon = _polygonal_geometry(shape(feature["geometry"]))
     return polygon, feature.get("properties", {})
 
 
-def write_polygon_geojson(path: Path, polygon: Polygon, properties: dict) -> None:
+def write_polygon_geojson(path: Path, polygon: Polygonal, properties: dict) -> None:
     document = {
         "type": "FeatureCollection",
         "features": [
@@ -98,7 +114,11 @@ def write_line_geojson(path: Path, coordinates: Iterable[tuple[float, float]], p
     path.write_text(json.dumps(document, indent=2), encoding="utf-8")
 
 
-def sample_polygon(polygon: Polygon, count: int, rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray]:
+def _sample_single_polygon(
+    polygon: Polygon, count: int, rng: np.random.Generator
+) -> tuple[np.ndarray, np.ndarray]:
+    if count == 0:
+        return np.asarray([], dtype=float), np.asarray([], dtype=float)
     min_lon, min_lat, max_lon, max_lat = polygon.bounds
     accepted_lon: list[float] = []
     accepted_lat: list[float] = []
@@ -113,3 +133,24 @@ def sample_polygon(polygon: Polygon, count: int, rng: np.random.Generator) -> tu
         accepted_lat.extend(lats[keep].tolist())
     return np.asarray(accepted_lon[:count]), np.asarray(accepted_lat[:count])
 
+
+def sample_polygon(
+    polygon: Polygonal, count: int, rng: np.random.Generator
+) -> tuple[np.ndarray, np.ndarray]:
+    if isinstance(polygon, Polygon):
+        return _sample_single_polygon(polygon, count, rng)
+    parts = [part for part in polygon.geoms if not part.is_empty and part.area > 0]
+    if not parts:
+        raise ValueError("MultiPolygon contains no sampleable regions")
+    areas = np.asarray([part.area for part in parts], dtype=float)
+    allocations = rng.multinomial(count, areas / areas.sum())
+    longitude: list[np.ndarray] = []
+    latitude: list[np.ndarray] = []
+    for part, allocation in zip(parts, allocations, strict=True):
+        lons, lats = _sample_single_polygon(part, int(allocation), rng)
+        longitude.append(lons)
+        latitude.append(lats)
+    lons = np.concatenate(longitude)
+    lats = np.concatenate(latitude)
+    order = rng.permutation(count)
+    return lons[order], lats[order]

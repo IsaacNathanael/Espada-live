@@ -6,7 +6,7 @@ from pathlib import Path
 
 import requests
 from shapely import coverage_union_all, make_valid, union_all
-from shapely.geometry import MultiPolygon, Polygon, mapping
+from shapely.geometry import GeometryCollection, MultiPolygon, Polygon, mapping
 
 
 def _request_json(url: str, params: dict[str, object]) -> dict:
@@ -76,15 +76,17 @@ def import_arcgis_polygon_layer(
         merged = union_all(polygons)
     components = list(merged.geoms) if isinstance(merged, MultiPolygon) else [merged]
     components = [part for part in components if isinstance(part, Polygon) and not part.is_empty]
-    selected = max(components, key=lambda part: part.area)
     total_area = sum(part.area for part in components)
-    selected = selected.simplify(simplify_degrees, preserve_topology=True)
-    selected = make_valid(selected)
-    if isinstance(selected, MultiPolygon):
-        selected = max(selected.geoms, key=lambda part: part.area)
-    if not isinstance(selected, Polygon) or selected.is_empty or not selected.is_valid:
-        raise RuntimeError("The selected ArcGIS geometry could not be repaired into one valid polygon")
+    retained = merged.simplify(simplify_degrees, preserve_topology=True)
+    retained = make_valid(retained)
+    if isinstance(retained, GeometryCollection):
+        retained = union_all(
+            [part for part in retained.geoms if isinstance(part, (Polygon, MultiPolygon))]
+        )
+    if not isinstance(retained, (Polygon, MultiPolygon)) or retained.is_empty or not retained.is_valid:
+        raise RuntimeError("The ArcGIS geometry could not be repaired into valid polygonal geometry")
 
+    retained_area_fraction = min(max(retained.area / total_area, 0.0), 1.0) if total_area else 0.0
     properties = {
         "observation_time_utc": observation_time_utc,
         "detection_confidence": float(detection_confidence),
@@ -94,16 +96,17 @@ def import_arcgis_polygon_layer(
         "source_layer_name": metadata.get("name"),
         "source_description": metadata.get("description", ""),
         "source_copyright": metadata.get("copyrightText", ""),
-        "selection": "largest connected polygon from the published layer",
+        "selection": "all connected polygons from the published layer",
         "source_feature_count": expected_count,
         "connected_components": len(components),
-        "selected_area_fraction": selected.area / total_area if total_area else 0.0,
+        "selected_area_fraction": retained_area_fraction,
+        "retained_area_fraction": retained_area_fraction,
         "caveat": "Published as a possible oil slick and subject to ground verification.",
     }
     document = {
         "type": "FeatureCollection",
         "features": [
-            {"type": "Feature", "properties": properties, "geometry": mapping(selected)}
+            {"type": "Feature", "properties": properties, "geometry": mapping(retained)}
         ],
     }
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -115,11 +118,11 @@ def import_arcgis_polygon_layer(
         "downloaded_polygon_count": len(polygons),
         "connected_components": len(components),
         "selected_area_fraction": properties["selected_area_fraction"],
-        "bounds": list(selected.bounds),
+        "bounds": list(retained.bounds),
         "review_status": review_status,
         "limitations": [
             "The source describes the layer as a possible oil slick subject to ground verification.",
-            "ESPADA selects the largest connected region because the current drift engine accepts one polygon.",
+            "ESPADA retains every connected region and samples them in proportion to mapped area.",
             "This external expert mapping is not an ESPADA V6 model detection.",
         ],
     }
