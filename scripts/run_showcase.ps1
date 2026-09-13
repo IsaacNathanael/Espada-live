@@ -1,7 +1,8 @@
 param(
     [string]$PythonPath = "",
     [int]$Port = 4173,
-    [switch]$NoOpen
+    [switch]$NoOpen,
+    [switch]$UseExistingDashboard
 )
 
 $ErrorActionPreference = "Stop"
@@ -49,9 +50,16 @@ $env:PYTHONPATH = Join-Path $ProjectRoot "src"
 $demoDirectory = Join-Path $ProjectRoot "out\demo"
 $escapedDemoDirectory = $demoDirectory.Replace("'", "''")
 
-& $PythonPath -c "from pathlib import Path; from espada.dashboard import generate_dashboard; print(generate_dashboard(Path(r'$escapedDemoDirectory')))"
-if ($LASTEXITCODE -ne 0) {
-    throw "The showcase could not be generated."
+if ($UseExistingDashboard) {
+    if (-not (Test-Path -LiteralPath $DashboardPath)) {
+        throw "The existing showcase page is missing: $DashboardPath"
+    }
+}
+else {
+    & $PythonPath -c "from pathlib import Path; from espada.dashboard import generate_dashboard; print(generate_dashboard(Path(r'$escapedDemoDirectory')))"
+    if ($LASTEXITCODE -ne 0) {
+        throw "The showcase could not be generated."
+    }
 }
 
 Write-Host ""
