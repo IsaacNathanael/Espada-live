@@ -20,8 +20,9 @@ from .attribution import rank_candidates
 from .decision import POLICY
 from .environment import load_cache
 from .geo import haversine_km
-from .physics import advect_diffuse_timeseries
+from .physics import advect_diffuse_spatial_timeseries, advect_diffuse_timeseries
 from .slick import analyze_slick, write_slick_from_particles
+from .spatial_current import SpatialCurrentGrid, load_spatial_current_grid
 
 
 CONDITIONS = (
@@ -97,6 +98,7 @@ def _simulate_slick(
     particles: int,
     windage: float,
     diffusivity_m2s: float,
+    spatial_current_grid: SpatialCurrentGrid | None = None,
 ) -> tuple[np.ndarray, np.ndarray, list[tuple[float, float]]]:
     release_corridor: list[tuple[float, float]] = []
     all_lon: list[np.ndarray] = []
@@ -115,18 +117,32 @@ def _simulate_slick(
         cohort_size = particles // 3
         duration_seconds = (observation_time - cohort_time).total_seconds()
         step_seconds = duration_seconds / len(history)
-        lon, lat = advect_diffuse_timeseries(
-            np.full(cohort_size, source_lon),
-            np.full(cohort_size, source_lat),
-            history["current_east_ms"].to_numpy(),
-            history["current_north_ms"].to_numpy(),
-            history["wind_east_ms"].to_numpy(),
-            history["wind_north_ms"].to_numpy(),
-            step_seconds,
-            rng,
-            windage=windage,
-            diffusivity_m2s=diffusivity_m2s,
-        )
+        if spatial_current_grid is not None:
+            lon, lat = advect_diffuse_spatial_timeseries(
+                np.full(cohort_size, source_lon),
+                np.full(cohort_size, source_lat),
+                history["time_utc"].tolist(),
+                history["wind_east_ms"].to_numpy(),
+                history["wind_north_ms"].to_numpy(),
+                step_seconds,
+                spatial_current_grid,
+                rng,
+                windage=windage,
+                diffusivity_m2s=diffusivity_m2s,
+            )
+        else:
+            lon, lat = advect_diffuse_timeseries(
+                np.full(cohort_size, source_lon),
+                np.full(cohort_size, source_lat),
+                history["current_east_ms"].to_numpy(),
+                history["current_north_ms"].to_numpy(),
+                history["wind_east_ms"].to_numpy(),
+                history["wind_north_ms"].to_numpy(),
+                step_seconds,
+                rng,
+                windage=windage,
+                diffusivity_m2s=diffusivity_m2s,
+            )
         all_lon.append(lon)
         all_lat.append(lat)
     return np.concatenate(all_lon), np.concatenate(all_lat), release_corridor
@@ -183,6 +199,7 @@ def run_digital_twin_suite(
     cases: int = 6,
     particles: int = 1500,
     seed: int = 26143,
+    spatial_current_grid: Path | None = None,
 ) -> dict[str, object]:
     if not 1 <= cases <= len(CONDITIONS) or particles < 300:
         raise ValueError("Use 1-6 cases and at least 300 particles")
@@ -194,8 +211,15 @@ def run_digital_twin_suite(
     ais["timestamp_utc"] = pd.to_datetime(ais["timestamp_utc"], utc=True)
     environment_bundle = load_cache(environment_path)
     environment = environment_bundle.frame
+    current_grid = (
+        load_spatial_current_grid(spatial_current_grid) if spatial_current_grid else None
+    )
     observation_time = min(ais["timestamp_utc"].max(), environment["time_utc"].max()) - pd.Timedelta(hours=2)
     trials = _select_trials(ais, observation_time, cases)
+    if current_grid:
+        earliest_release = min(trial["release_time"] for trial in trials)
+        if not current_grid.covers(earliest_release, observation_time):
+            raise ValueError("Spatial current grid does not cover the digital-twin trials")
     blinded, mapping = _blind_ais(ais)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -215,6 +239,7 @@ def run_digital_twin_suite(
             particles=particles,
             windage=windage,
             diffusivity_m2s=diffusivity,
+            spatial_current_grid=current_grid,
         )
         case_dir = output_dir / f"case-{index:02d}"
         slick_path = write_slick_from_particles(
@@ -237,6 +262,7 @@ def run_digital_twin_suite(
             particles=800,
             ensemble_members=8,
             seed=seed + index * 101 + 1,
+            spatial_current_grid=spatial_current_grid,
         )
         candidates, *_ = rank_candidates(
             candidate_path,
@@ -305,6 +331,11 @@ def run_digital_twin_suite(
         "data_composition": {
             "slicks": "synthetic continuous-release particle simulations",
             "currents": environment_bundle.source,
+            "current_sampling": (
+                "particle-local bilinear Copernicus grid"
+                if current_grid
+                else "time-varying current at one analysis point"
+            ),
             "traffic": f"pseudonymized real GFW background; {int(ais['mmsi'].nunique())} vessels",
         },
         "cases": len(frame),
@@ -334,13 +365,20 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run realistic ESPADA digital-twin cases")
     parser.add_argument("--ais", type=Path, required=True)
     parser.add_argument("--environment", type=Path, required=True)
+    parser.add_argument("--spatial-current-grid", type=Path)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--cases", type=int, default=6)
     parser.add_argument("--particles", type=int, default=1500)
     parser.add_argument("--seed", type=int, default=26143)
     args = parser.parse_args()
     result = run_digital_twin_suite(
-        args.ais, args.environment, args.out, cases=args.cases, particles=args.particles, seed=args.seed
+        args.ais,
+        args.environment,
+        args.out,
+        cases=args.cases,
+        particles=args.particles,
+        seed=args.seed,
+        spatial_current_grid=args.spatial_current_grid,
     )
     print(json.dumps(result, indent=2))
     return 0

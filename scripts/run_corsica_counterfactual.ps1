@@ -21,6 +21,7 @@ $Experiment = Join-Path $Base "counterfactual_ais"
 $HybridAis = Join-Path $Experiment "hybrid_ais.csv"
 $Registry = Join-Path $Experiment "sealed_synthetic_target.json"
 $Run = Join-Path $Experiment "run"
+$CurrentGrid = Join-Path $Base "environment\currents.nc"
 $env:PYTHONPATH = Join-Path $ProjectRoot "src"
 
 Write-Host "1/3 Adding one sealed synthetic source track to the real AIS background..." -ForegroundColor Cyan
@@ -36,6 +37,7 @@ Write-Host "2/3 Running the normal pipeline without opening the sealed target...
     -SlickGeoJson (Join-Path $OriginalRun "sar\slick_observation.geojson") `
     -AisCsv $HybridAis `
     -EnvironmentCache (Join-Path $Base "environment\environment.json") `
+    -SpatialCurrentGrid $CurrentGrid `
     -AgeHours 10 `
     -CandidateAgesHours @(6, 8, 10, 12, 16, 20, 24, 30) `
     -OutputDirectory $Run `
