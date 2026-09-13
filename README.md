@@ -176,6 +176,16 @@ This recomputes the 24 synthetic stress cases, the identity-blinded Wakashio kno
 
 The working attribution core is not ML: it is physics plus transparent evidence scoring. SAR segmentation now uses the calibrated Sentinel-1-pretrained V6 attention U-Net by default and retains adaptive thresholding as an explicit fallback. Synthetic evaluation measures the physics-and-ranking pipeline; it is not a claim of real-world accuracy.
 
+## Run the preregistered Corsica holdout
+
+The 2018 CSL Virginia spill is registered before evaluation from the official BEA Mer investigation, REMPEC incident record, Cedre description and ESA Sentinel-1 observation. Prepare its small aligned data subsets with:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\prepare_corsica_validation.ps1
+```
+
+After the generated SAR boundary has been independently reviewed, run its case and then reveal the registered source using `scripts\evaluate_corsica_validation.ps1`. This is a retrospective preregistered holdout—not an external blind trial. The current public GFW extract omits CSL Virginia's registered MMSI, so source recovery is honestly recorded as an input-coverage failure; ESPADA's abstention remains a safety pass. A licensed raw AIS archive is required to make the source rankable.
+
 ## Prepare and train the SAR model
 
 Download and audit the labelled Sentinel-1 data:

@@ -1,0 +1,42 @@
+{
+  "schema": "espada.preregistered-holdout.v1",
+  "case_id": "corsica_2018",
+  "evaluation_class": "retrospective preregistered holdout; not an external blind trial",
+  "incident": {
+    "name": "CSL Virginia / Ulysse collision",
+    "release_time_utc": "2018-10-07T05:02:00Z",
+    "release_longitude": 9.475,
+    "release_latitude": 43.246667,
+    "pollutant": "bunker fuel",
+    "quantity_reported_m3": 520
+  },
+  "observation": {
+    "sensor": "Copernicus Sentinel-1",
+    "time_utc": "2018-10-08T05:28:00Z",
+    "reported_slick_length_km": 20,
+    "bbox_wgs84": [8.95, 43.0, 9.75, 43.6]
+  },
+  "sealed_target": {
+    "vessel_name": "CSL Virginia",
+    "mmsi": "636019009",
+    "imo": "9289568"
+  },
+  "acceptance": {
+    "target_rank_at_most": 3,
+    "origin_error_km_at_most": 15,
+    "ranking_must_exist_before_truth_reveal": true,
+    "decision_must_respect_evidence_gates": true
+  },
+  "sources": {
+    "official_investigation": "https://www.bea-mer.developpement-durable.gouv.fr/IMG/pdf/beamer-fr_csl_virginia_-_ulysse__fr-en__2018.pdf",
+    "incident_registry": "https://www.rempec.org/en/our-work/pollution-preparedness-and-response/response/accident-map/2018-corsica-oil-spill",
+    "spill_description": "https://cedre.fr/en/resources/incident-information-sheets/csl-virginia",
+    "sentinel_observation": "https://www.esa.int/ESA_Multimedia/Images/2018/10/Oil_spill_spread"
+  },
+  "limitations": [
+    "The incident identity is public; blinding is enforced procedurally by withholding this registry from the ranker.",
+    "The Sentinel slick still requires analyst approval before attribution.",
+    "Global Fishing Watch vessel presence is hourly and grid-centred rather than raw AIS.",
+    "This case becomes development evidence after its first result is examined."
+  ]
+}

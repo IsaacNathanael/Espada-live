@@ -29,6 +29,8 @@ from .models import Forcing, format_utc
 MARINE_ENDPOINT = "https://marine-api.open-meteo.com/v1/marine"
 WEATHER_ENDPOINT = "https://api.open-meteo.com/v1/forecast"
 HISTORICAL_WEATHER_ENDPOINT = "https://historical-forecast-api.open-meteo.com/v1/forecast"
+HISTORICAL_REANALYSIS_ENDPOINT = "https://archive-api.open-meteo.com/v1/archive"
+HISTORICAL_FORECAST_START = pd.Timestamp("2021-03-23T00:00:00Z")
 REQUIRED_COLUMNS = {
     "time_utc",
     "latitude",
@@ -108,8 +110,13 @@ def build_historical_wind_url(
     end_time = _utc_timestamp(end, "historical wind end")
     if start_time >= end_time:
         raise ValueError("historical wind start must be before end")
+    endpoint = (
+        HISTORICAL_REANALYSIS_ENDPOINT
+        if start_time < HISTORICAL_FORECAST_START
+        else HISTORICAL_WEATHER_ENDPOINT
+    )
     return _api_url(
-        HISTORICAL_WEATHER_ENDPOINT,
+        endpoint,
         {
             "latitude": latitude,
             "longitude": longitude,
@@ -234,7 +241,11 @@ def sync_historical_wind(
         raise ValueError("Historical wind response does not cover the requested window")
     records = frame.copy()
     records["time_utc"] = records["time_utc"].dt.strftime("%Y-%m-%dT%H:%M:%SZ")
-    source = "Open-Meteo Historical Forecast API wind"
+    source = (
+        "Open-Meteo Historical Weather API reanalysis wind"
+        if url.startswith(HISTORICAL_REANALYSIS_ENDPOINT)
+        else "Open-Meteo Historical Forecast API wind"
+    )
     records["source"] = source
     payload = {
         "schema_version": "1.0",
@@ -245,9 +256,9 @@ def sync_historical_wind(
         "requested_end_utc": end_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "selection": {"latitude": latitude, "longitude": longitude},
         "temporal_resolution": "hourly",
-        "attribution": "Open-Meteo Historical Forecast API.",
+        "attribution": "Open-Meteo historical forecast or reanalysis API, selected by date coverage.",
         "limitations": [
-            "Archived numerical forecasts are model estimates, not direct wind observations.",
+            "Archived forecast and reanalysis values are model estimates, not direct wind observations.",
             "Point sampling does not represent every wind variation across the slick area.",
         ],
         "samples": records.to_dict(orient="records"),

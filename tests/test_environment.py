@@ -113,6 +113,17 @@ def test_historical_wind_requires_timezone() -> None:
         build_historical_wind_url(18.7, 71.4, "2026-08-29", "2026-08-30T00:00:00Z")
 
 
+def test_historical_wind_uses_reanalysis_before_forecast_archive() -> None:
+    url = build_historical_wind_url(
+        43.246167,
+        9.4795,
+        "2018-10-07T03:00:00Z",
+        "2018-10-08T08:00:00Z",
+    )
+    assert "archive-api.open-meteo.com" in url
+    assert "start_date=2018-10-07" in url
+
+
 def test_demo_can_use_a_real_cache_contract(tmp_path: Path) -> None:
     marine, weather = _responses()
     replies = iter([marine, weather])

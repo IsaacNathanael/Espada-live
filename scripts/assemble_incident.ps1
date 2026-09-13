@@ -201,7 +201,7 @@ $CaseDefinition = [ordered]@{
         analyst_approved = $false
         use_classical_fallback = $false
         age_hours = 0
-        candidate_ages_hours = @(1.5, 2, 3, 4, 6, 8, 10, 12, 16, 20, 24) | Where-Object { $_ -le $MaximumSlickAgeHours }
+        candidate_ages_hours = @(1.5, 2, 3, 4, 6, 8, 10, 12, 16, 20, 24, 30, 36, 48, 72) | Where-Object { $_ -le $MaximumSlickAgeHours }
     }
     output_directory = $RunDirectory
 }
