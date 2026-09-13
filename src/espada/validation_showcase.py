@@ -35,6 +35,7 @@ def _gate_rows(decision: dict) -> str:
         "comparative_score": "Comparative score",
         "candidate_separation": "Leader separation",
         "forward_replay": "Forward replay",
+        "forward_shape_replay": "Slick-shape replay",
         "track_data_quality": "AIS track quality",
         "assumption_stability": "Assumption stability",
     }

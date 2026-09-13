@@ -10,11 +10,12 @@ from pathlib import Path
 
 POLICY = {
     "name": "ESPADA analyst-escalation policy",
-    "version": "1.0",
+    "version": "1.1",
     "priority_review": {
         "minimum_top_score": 0.60,
         "minimum_score_margin": 0.15,
         "maximum_forward_error_km": 3.0,
+        "maximum_forward_shape_error_km": 3.0,
         "minimum_data_quality": 0.40,
         "minimum_sensitivity_top3_rate": 0.80,
         "maximum_sensitivity_worst_rank": 3,
@@ -23,6 +24,7 @@ POLICY = {
         "minimum_top_score": 0.40,
         "minimum_score_margin": 0.05,
         "maximum_forward_error_km": 8.0,
+        "maximum_forward_shape_error_km": 8.0,
     },
 }
 
@@ -55,6 +57,7 @@ def evaluate_case_decision(case_root: Path, output_dir: Path) -> dict[str, objec
     second_score = _finite(runner_up.get("total_score"), -math.inf)
     score_margin = top_score - second_score if math.isfinite(second_score) else 0.0
     forward_error = _finite(top.get("forward_error_km"))
+    forward_shape_error = _finite(top.get("forward_shape_error_km"))
     data_quality = _finite(top.get("data_quality"), 0.0)
     candidate_count = int(ranking.get("candidate_count", len(candidates)))
     if time_search:
@@ -104,6 +107,12 @@ def evaluate_case_decision(case_root: Path, output_dir: Path) -> dict[str, objec
             "requirement": f"<={priority['maximum_forward_error_km']:.1f} km for priority review",
         },
         {
+            "gate": "forward_shape_replay",
+            "status": "PASS" if forward_shape_error <= priority["maximum_forward_shape_error_km"] else ("WARN" if forward_shape_error <= limited["maximum_forward_shape_error_km"] else "STOP"),
+            "observed": forward_shape_error,
+            "requirement": f"<={priority['maximum_forward_shape_error_km']:.1f} km particle-cloud shape error for priority review",
+        },
+        {
             "gate": "track_data_quality",
             "status": "PASS" if data_quality >= 0.60 else ("WARN" if data_quality >= priority["minimum_data_quality"] else "STOP"),
             "observed": data_quality,
@@ -122,6 +131,7 @@ def evaluate_case_decision(case_root: Path, output_dir: Path) -> dict[str, objec
         and top_score >= priority["minimum_top_score"]
         and score_margin >= priority["minimum_score_margin"]
         and forward_error <= priority["maximum_forward_error_km"]
+        and forward_shape_error <= priority["maximum_forward_shape_error_km"]
         and data_quality >= priority["minimum_data_quality"]
         and (bool(time_search) or bool(sensitivity))
     )
@@ -130,6 +140,7 @@ def evaluate_case_decision(case_root: Path, output_dir: Path) -> dict[str, objec
         and top_score >= limited["minimum_top_score"]
         and score_margin >= limited["minimum_score_margin"]
         and forward_error <= limited["maximum_forward_error_km"]
+        and forward_shape_error <= limited["maximum_forward_shape_error_km"]
     )
     if priority_ready:
         decision = "PRIORITY_ANALYST_REVIEW"
@@ -153,6 +164,7 @@ def evaluate_case_decision(case_root: Path, output_dir: Path) -> dict[str, objec
             "comparative_score": top_score,
             "score_margin": score_margin,
             "forward_error_km": forward_error,
+            "forward_shape_error_km": forward_shape_error,
             "data_quality": data_quality,
         },
         "checks": checks,
@@ -171,7 +183,7 @@ def evaluate_case_decision(case_root: Path, output_dir: Path) -> dict[str, objec
     safety = "".join(f"<li>{html.escape(item)}</li>" for item in result["safety"])
     html_path = output_dir / "decision_gate.html"
     html_path.write_text(
-        f"""<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>ESPADA Decision Gate</title><style>:root{{--bg:#020a0c;--panel:#082128;--line:#17434b;--ink:#eafffb;--muted:#91aaa6;--mint:#61f2d1;--amber:#ffbd4a;--red:#fb7185}}*{{box-sizing:border-box}}body{{margin:0;background:radial-gradient(circle at 15% 0,#104047 0,transparent 35%),var(--bg);color:var(--ink);font:14px/1.55 Inter,Segoe UI,sans-serif}}main{{width:min(1040px,calc(100% - 28px));margin:auto;padding:36px 0 60px}}.tag{{color:var(--mint);font-size:10px;font-weight:900;letter-spacing:.17em}}h1{{font:500 clamp(37px,6vw,68px)/1 Georgia,serif;margin:14px 0}}h1 em{{color:var(--mint);font-style:normal}}p,li{{color:var(--muted)}}.panel{{padding:20px;border:1px solid var(--line);border-radius:17px;background:linear-gradient(145deg,#092a31,#05161a);margin-top:14px}}.decision{{display:grid;grid-template-columns:1.2fr .8fr;gap:14px}}.decision strong{{display:block;color:var(--amber);font:500 30px Georgia,serif}}.metrics{{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}}.metrics div{{padding:12px;border:1px solid var(--line);border-radius:10px}}small{{display:block;color:var(--muted);font-size:9px;text-transform:uppercase}}.metrics b{{display:block;margin-top:5px;font-size:19px}}table{{width:100%;border-collapse:collapse}}th,td{{padding:10px;border-top:1px solid var(--line);text-align:left;font-size:11px}}th{{color:var(--muted)}}.pass{{color:var(--mint)}}.warn{{color:var(--amber)}}.stop{{color:var(--red)}}.warning{{border-left:3px solid var(--amber);padding:12px 15px;background:rgba(255,189,74,.06);color:#e8d5a9}}@media(max-width:720px){{.decision{{grid-template-columns:1fr}}.metrics{{grid-template-columns:1fr}}}}</style></head><body><main><span class='tag'>ESPADA · HUMAN-IN-THE-LOOP CONTROL</span><h1>Know when to <em>stop.</em></h1><section class='decision'><div class='panel'><small>Operational decision</small><strong>{decision.replace('_', ' ')}</strong><p>{html.escape(action)}</p></div><div class='panel metrics'><div><small>Top score</small><b>{100*top_score:.1f}%</b></div><div><small>Separation</small><b>{100*score_margin:.1f} pts</b></div><div><small>Forward error</small><b>{forward_error:.2f} km</b></div></div></section><section class='panel'><h2>Evidence gates</h2><table><thead><tr><th>Gate</th><th>Status</th><th>Observed</th><th>Policy</th></tr></thead><tbody>{rows}</tbody></table></section><section class='panel'><h2>Safety boundary</h2><div class='warning'>These thresholds control escalation to an analyst. They are not learned confidence, accuracy, guilt probability or a legal standard.</div><ul>{safety}</ul></section></main></body></html>""",
+        f"""<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>ESPADA Decision Gate</title><style>:root{{--bg:#020a0c;--panel:#082128;--line:#17434b;--ink:#eafffb;--muted:#91aaa6;--mint:#61f2d1;--amber:#ffbd4a;--red:#fb7185}}*{{box-sizing:border-box}}body{{margin:0;background:radial-gradient(circle at 15% 0,#104047 0,transparent 35%),var(--bg);color:var(--ink);font:14px/1.55 Inter,Segoe UI,sans-serif}}main{{width:min(1040px,calc(100% - 28px));margin:auto;padding:36px 0 60px}}.tag{{color:var(--mint);font-size:10px;font-weight:900;letter-spacing:.17em}}h1{{font:500 clamp(37px,6vw,68px)/1 Georgia,serif;margin:14px 0}}h1 em{{color:var(--mint);font-style:normal}}p,li{{color:var(--muted)}}.panel{{padding:20px;border:1px solid var(--line);border-radius:17px;background:linear-gradient(145deg,#092a31,#05161a);margin-top:14px}}.decision{{display:grid;grid-template-columns:1.2fr .8fr;gap:14px}}.decision strong{{display:block;color:var(--amber);font:500 30px Georgia,serif}}.metrics{{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}}.metrics div{{padding:12px;border:1px solid var(--line);border-radius:10px}}small{{display:block;color:var(--muted);font-size:9px;text-transform:uppercase}}.metrics b{{display:block;margin-top:5px;font-size:19px}}table{{width:100%;border-collapse:collapse}}th,td{{padding:10px;border-top:1px solid var(--line);text-align:left;font-size:11px}}th{{color:var(--muted)}}.pass{{color:var(--mint)}}.warn{{color:var(--amber)}}.stop{{color:var(--red)}}.warning{{border-left:3px solid var(--amber);padding:12px 15px;background:rgba(255,189,74,.06);color:#e8d5a9}}@media(max-width:720px){{.decision{{grid-template-columns:1fr}}.metrics{{grid-template-columns:1fr}}}}</style></head><body><main><span class='tag'>ESPADA · HUMAN-IN-THE-LOOP CONTROL</span><h1>Know when to <em>stop.</em></h1><section class='decision'><div class='panel'><small>Operational decision</small><strong>{decision.replace('_', ' ')}</strong><p>{html.escape(action)}</p></div><div class='panel metrics'><div><small>Top score</small><b>{100*top_score:.1f}%</b></div><div><small>Separation</small><b>{100*score_margin:.1f} pts</b></div><div><small>Centroid error</small><b>{forward_error:.2f} km</b></div><div><small>Shape error</small><b>{forward_shape_error:.2f} km</b></div></div></section><section class='panel'><h2>Evidence gates</h2><table><thead><tr><th>Gate</th><th>Status</th><th>Observed</th><th>Policy</th></tr></thead><tbody>{rows}</tbody></table></section><section class='panel'><h2>Safety boundary</h2><div class='warning'>These thresholds control escalation to an analyst. They are not learned confidence, accuracy, guilt probability or a legal standard.</div><ul>{safety}</ul></section></main></body></html>""",
         encoding="utf-8",
     )
     result["artifacts"] = {"json": str(json_path.resolve()), "html": str(html_path.resolve())}
