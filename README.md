@@ -158,6 +158,14 @@ powershell -ExecutionPolicy Bypass -File .\scripts\run_evaluation.ps1
 
 This evaluates 24 hidden-truth cases across current bias, wind bias, AIS dropout, position noise, combined stress, and nominal conditions. Open `out\evaluation\evaluation_report.html` for the results and graphs.
 
+## Run the complete system validation
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_validation_suite.ps1
+```
+
+This recomputes the 24 synthetic stress cases, the identity-blinded Wakashio known-source replay, and the Princess Empress evidence-limited abstention. It then creates `out\system_validation\system_scorecard.html`. Add `-UseExistingResults` for a fast report-only rebuild.
+
 The working attribution core is not ML: it is physics plus transparent evidence scoring. SAR segmentation now uses the calibrated Sentinel-1-pretrained V6 attention U-Net by default and retains adaptive thresholding as an explicit fallback. Synthetic evaluation measures the physics-and-ranking pipeline; it is not a claim of real-world accuracy.
 
 ## Prepare and train the SAR model
