@@ -14,6 +14,7 @@ param(
     [string]$CalibrationPath = "",
     [int]$InferenceBatchSize = 4,
     [string]$EnvironmentCache = "",
+    [string]$SpatialCurrentGrid = "",
     [string]$OutputDirectory = "",
     [string]$GpuPythonPath = "",
     [string]$PythonPath = ""
@@ -112,6 +113,7 @@ $ApprovedArguments = @{
     OutputDirectory = $CaseRoot
     PythonPath = $PythonPath
 }
+if ($SpatialCurrentGrid) { $ApprovedArguments.SpatialCurrentGrid = $SpatialCurrentGrid }
 & $ApprovedRunner @ApprovedArguments
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 

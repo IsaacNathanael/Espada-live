@@ -7,6 +7,7 @@ import numpy as np
 
 from .geo import local_xy_m, lonlat_from_local_m
 from .models import Forcing
+from .spatial_current import SpatialCurrentGrid
 
 
 def advect_diffuse_constant(
@@ -83,6 +84,65 @@ def advect_diffuse_timeseries(
     x = x + rng.normal(0.0, sigma, size=lon_array.shape)
     y = y + rng.normal(0.0, sigma, size=lat_array.shape)
     return lonlat_from_local_m(x, y, ref_lon, ref_lat)
+
+
+def advect_diffuse_spatial_timeseries(
+    lon: np.ndarray | float,
+    lat: np.ndarray | float,
+    timestamps: Sequence[object],
+    wind_east_ms: np.ndarray,
+    wind_north_ms: np.ndarray,
+    step_seconds: np.ndarray | float,
+    current_grid: SpatialCurrentGrid,
+    rng: np.random.Generator,
+    *,
+    windage: float = 0.02,
+    diffusivity_m2s: float = 12.0,
+    current_multiplier: float = 1.0,
+    current_bias_east_ms: float = 0.0,
+    current_bias_north_ms: float = 0.0,
+    reverse: bool = False,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Integrate particles through time- and location-varying surface currents.
+
+    Wind remains a time-varying point series. Currents are sampled bilinearly at
+    every particle location and linearly between native Copernicus timestamps.
+    """
+    wind_east = np.asarray(wind_east_ms, dtype=float)
+    wind_north = np.asarray(wind_north_ms, dtype=float)
+    if wind_east.ndim != 1 or wind_north.ndim != 1 or wind_east.shape != wind_north.shape:
+        raise ValueError("Wind series must be one-dimensional and aligned")
+    if len(timestamps) != len(wind_east) or len(wind_east) == 0:
+        raise ValueError("Current timestamps and wind series must be non-empty and aligned")
+    steps = np.broadcast_to(np.asarray(step_seconds, dtype=float), wind_east.shape)
+    if not np.isfinite(np.concatenate([wind_east, wind_north, steps])).all() or np.any(steps <= 0):
+        raise ValueError("Wind values must be finite and step durations positive")
+    if not np.isfinite([windage, diffusivity_m2s, current_multiplier, current_bias_east_ms, current_bias_north_ms]).all():
+        raise ValueError("Spatial forcing settings must be finite")
+    if diffusivity_m2s < 0:
+        raise ValueError("Diffusivity cannot be negative")
+
+    longitude = np.atleast_1d(np.asarray(lon, dtype=float)).copy()
+    latitude = np.atleast_1d(np.asarray(lat, dtype=float)).copy()
+    if longitude.shape != latitude.shape or longitude.size == 0:
+        raise ValueError("Longitude and latitude must be non-empty and aligned")
+    direction = -1.0 if reverse else 1.0
+    order = range(len(wind_east) - 1, -1, -1) if reverse else range(len(wind_east))
+    for index in order:
+        east, north = current_grid.sample(longitude, latitude, timestamps[index])
+        east = current_multiplier * east + current_bias_east_ms + windage * wind_east[index]
+        north = current_multiplier * north + current_bias_north_ms + windage * wind_north[index]
+        duration = float(steps[index])
+        sigma = np.sqrt(2.0 * diffusivity_m2s * duration)
+        dx = direction * east * duration + rng.normal(0.0, sigma, size=longitude.shape)
+        dy = direction * north * duration + rng.normal(0.0, sigma, size=latitude.shape)
+        # Use the latitude at the start of the step for the east/west scale.
+        # This is the local tangent-plane convention and avoids introducing a
+        # small northward-motion bias into longitude displacement.
+        safe_cosine = np.maximum(np.cos(np.deg2rad(latitude)), 1e-6)
+        latitude = latitude + np.rad2deg(dy / 6_371_008.8)
+        longitude = longitude + np.rad2deg(dx / (6_371_008.8 * safe_cosine))
+    return longitude, latitude
 
 
 def run_opendrift_constant(

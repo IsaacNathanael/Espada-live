@@ -405,7 +405,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\assemble_incident.ps1 `
   -MinLongitude 71.25 -MinLatitude 18.55 -MaxLongitude 71.65 -MaxLatitude 18.90 -PlanOnly
 ```
 
-Remove `-PlanOnly` to discover and crop Sentinel-1, collect delayed historical vessel presence, and download aligned wind and surface currents. The assembler creates `out\incidents\incident_001\case.json`; run that file through `scripts\run_case.ps1`. For incidents newer than roughly 96 hours, supply a licensed/current AIS CSV with `-ExistingAisCsv` because Global Fishing Watch is delayed.
+Remove `-PlanOnly` to discover and crop Sentinel-1, collect delayed historical vessel presence, and download aligned wind and surface currents. The assembler creates `out\incidents\incident_001\case.json`; run that file through `scripts\run_case.ps1`. The generated case retains the full Copernicus NetCDF subset: every reverse particle samples a current at its own position using bilinear spatial and linear temporal interpolation. Wind remains a time-varying point estimate. For incidents newer than roughly 96 hours, supply a licensed/current AIS CSV with `-ExistingAisCsv` because Global Fishing Watch is delayed.
 
 `scripts\run_real_case.ps1` joins a prepared SAR PNG/TIFF, its WGS84 bounds, observation time, Copernicus forcing and an AIS CSV. It runs calibrated V6 inference by default, pauses for human review when a candidate exists, and stops rather than fabricating a polygon when no slick is detected. After approval it searches plausible release times, audits and ranks AIS tracks, applies the analyst decision gate, and creates the portable evidence dossier under `out\real_case`.
 
@@ -428,4 +428,4 @@ powershell -ExecutionPolicy Bypass -File .\scripts\run_real_case.ps1 `
 
 ## Scientific limitation
 
-The fast backend now integrates hourly current and wind vectors through time while treating them as spatially uniform near the case. It is still a controlled verification harness, not an operational ocean forecast. The next scientific upgrade is spatially varying Copernicus grids through a validated OpenDrift reader.
+The case pipeline now integrates time-varying wind and particle-local, spatially varying Copernicus currents. It is still an investigative approximation rather than an operational ocean forecast: wind is point-sampled, coast/shore interaction and weathering are not modelled, and particles leaving the downloaded subset use its nearest boundary cell. A future production upgrade should validate these outputs against an OpenDrift reader and regional observations.

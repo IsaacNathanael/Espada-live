@@ -21,7 +21,13 @@ import pandas as pd
 
 from .geo import haversine_km, local_xy_m
 from .models import Forcing, format_utc
-from .physics import advect_diffuse_constant, advect_diffuse_timeseries, run_opendrift_constant
+from .physics import (
+    advect_diffuse_constant,
+    advect_diffuse_spatial_timeseries,
+    advect_diffuse_timeseries,
+    run_opendrift_constant,
+)
+from .spatial_current import SpatialCurrentGrid
 
 
 @dataclass(frozen=True)
@@ -115,6 +121,52 @@ def infer_origins_timeseries(
             rng,
             windage=windage,
             diffusivity_m2s=diffusivity_m2s,
+            reverse=True,
+        )
+        origins_lon.append(lon)
+        origins_lat.append(lat)
+    return np.concatenate(origins_lon), np.concatenate(origins_lat)
+
+
+def infer_origins_spatial_timeseries(
+    observed_lon: np.ndarray,
+    observed_lat: np.ndarray,
+    believed_series: pd.DataFrame,
+    current_grid: SpatialCurrentGrid,
+    *,
+    step_seconds: float,
+    seed: int,
+    ensemble_members: int,
+    windage: float = 0.02,
+    diffusivity_m2s: float = 12.0,
+    current_multiplier: float = 1.0,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Infer origins while sampling Copernicus current at every particle."""
+    if observed_lon.size == 0 or observed_lon.shape != observed_lat.shape:
+        raise ValueError("Observed longitude and latitude arrays must be non-empty and aligned")
+    required = {"time_utc", "wind_east_ms", "wind_north_ms"}
+    if required - set(believed_series.columns) or believed_series.empty:
+        raise ValueError("Believed spatial forcing series is incomplete")
+    if step_seconds <= 0 or ensemble_members <= 0:
+        raise ValueError("Step duration and ensemble member count must be positive")
+    rng = np.random.default_rng(seed)
+    origins_lon: list[np.ndarray] = []
+    origins_lat: list[np.ndarray] = []
+    for _ in range(ensemble_members):
+        lon, lat = advect_diffuse_spatial_timeseries(
+            observed_lon,
+            observed_lat,
+            believed_series["time_utc"].tolist(),
+            believed_series["wind_east_ms"].to_numpy(dtype=float) + rng.normal(0.0, 1.0),
+            believed_series["wind_north_ms"].to_numpy(dtype=float) + rng.normal(0.0, 0.8),
+            step_seconds,
+            current_grid,
+            rng,
+            windage=windage,
+            diffusivity_m2s=diffusivity_m2s,
+            current_multiplier=current_multiplier,
+            current_bias_east_ms=float(rng.normal(0.0, 0.05)),
+            current_bias_north_ms=float(rng.normal(0.0, 0.04)),
             reverse=True,
         )
         origins_lon.append(lon)

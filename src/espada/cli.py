@@ -86,6 +86,7 @@ def _parser() -> argparse.ArgumentParser:
     slick = subparsers.add_parser("slick", help="analyze an observed slick GeoJSON")
     slick.add_argument("--input", type=Path, required=True)
     slick.add_argument("--environment-cache", type=Path, required=True)
+    slick.add_argument("--spatial-current-grid", type=Path)
     slick.add_argument("--out", type=Path, default=Path("out/slick"))
     slick.add_argument("--age-hours", type=float, default=19.0)
     slick.add_argument("--particles", type=int, default=2_000)
@@ -108,6 +109,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     time_search.add_argument("--slick", type=Path, required=True)
     time_search.add_argument("--environment-cache", type=Path, required=True)
+    time_search.add_argument("--spatial-current-grid", type=Path)
     time_search.add_argument("--candidates", type=Path, required=True)
     time_search.add_argument("--out", type=Path, required=True)
     time_search.add_argument(
@@ -298,6 +300,7 @@ def main(argv: list[str] | None = None) -> int:
             particles=args.particles,
             ensemble_members=args.members,
             seed=args.seed,
+            spatial_current_grid=args.spatial_current_grid,
         )
         print(json.dumps(result, indent=2, default=str))
         return 0 if result["status"] == "PASS" else 1
@@ -323,6 +326,7 @@ def main(argv: list[str] | None = None) -> int:
             args.candidates,
             args.out,
             ages_hours=ages,
+            spatial_current_grid=args.spatial_current_grid,
         )
         print(json.dumps(result, indent=2, default=str))
         return 0 if result["status"] == "PASS" else 1

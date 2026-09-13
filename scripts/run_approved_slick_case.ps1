@@ -2,6 +2,7 @@ param(
     [Parameter(Mandatory = $true)][string]$SlickGeoJson,
     [Parameter(Mandatory = $true)][string]$AisCsv,
     [Parameter(Mandatory = $true)][string]$EnvironmentCache,
+    [string]$SpatialCurrentGrid = "",
     [double]$AgeHours = 0.0,
     [double[]]$CandidateAgesHours = @(1.5, 2, 3, 4, 6, 8, 10, 12, 16, 20, 24),
     [string]$OutputDirectory = "",
@@ -14,6 +15,10 @@ $WorkspaceRoot = Split-Path -Parent (Split-Path -Parent $ProjectRoot)
 $ResolvedSlick = Resolve-Path -LiteralPath $SlickGeoJson -ErrorAction Stop
 $ResolvedAis = Resolve-Path -LiteralPath $AisCsv -ErrorAction Stop
 $ResolvedEnvironment = Resolve-Path -LiteralPath $EnvironmentCache -ErrorAction Stop
+$ResolvedSpatialCurrentGrid = $null
+if ($SpatialCurrentGrid) {
+    $ResolvedSpatialCurrentGrid = Resolve-Path -LiteralPath $SpatialCurrentGrid -ErrorAction Stop
+}
 
 if (-not $PythonPath) {
     $candidates = @(
@@ -54,6 +59,9 @@ $TimeSearchArguments = @(
     "--out", $TimeSearchOutput,
     "--ages-hours"
 ) + @($SearchAges | ForEach-Object { $_.ToString([System.Globalization.CultureInfo]::InvariantCulture) })
+if ($ResolvedSpatialCurrentGrid) {
+    $TimeSearchArguments += @("--spatial-current-grid", $ResolvedSpatialCurrentGrid.Path)
+}
 & $PythonPath @TimeSearchArguments
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
@@ -74,11 +82,17 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "4/7 Reconstructing the probable release zone..." -ForegroundColor Cyan
-& $PythonPath -m espada.cli slick `
-    --input $ResolvedSlick.Path `
-    --environment-cache $ResolvedEnvironment.Path `
-    --out $DriftOutput `
-    --age-hours $SelectedAgeHours
+$SlickArguments = @(
+    "-m", "espada.cli", "slick",
+    "--input", $ResolvedSlick.Path,
+    "--environment-cache", $ResolvedEnvironment.Path,
+    "--out", $DriftOutput,
+    "--age-hours", $SelectedAgeHours.ToString([System.Globalization.CultureInfo]::InvariantCulture)
+)
+if ($ResolvedSpatialCurrentGrid) {
+    $SlickArguments += @("--spatial-current-grid", $ResolvedSpatialCurrentGrid.Path)
+}
+& $PythonPath @SlickArguments
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "5/7 Ranking and forward-verifying vessel tracks..." -ForegroundColor Cyan

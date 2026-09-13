@@ -21,8 +21,9 @@ from scipy.spatial import cKDTree
 
 from .geo import haversine_km, local_xy_m
 from .models import Forcing, parse_utc
-from .physics import advect_diffuse_constant
+from .physics import advect_diffuse_constant, advect_diffuse_spatial_timeseries
 from .silence import analyze_coverage_aware_silence
+from .spatial_current import SpatialCurrentGrid, load_spatial_current_grid
 
 
 REQUIRED_AIS_COLUMNS = {
@@ -132,6 +133,9 @@ def _score_track(
     forcing: Forcing,
     expected_rows: int,
     silence_report: dict | None = None,
+    spatial_current_grid: SpatialCurrentGrid | None = None,
+    forcing_history: pd.DataFrame | None = None,
+    spatial_current_multiplier: float = 1.0,
 ) -> dict:
     observed_track = track
     scoring_track, interpolation_used, interpolation_gap_hours = _interpolate_release_position(
@@ -178,13 +182,39 @@ def _score_track(
             forward_shape_errors.append(float("inf"))
             continue
         rng = np.random.default_rng(10_000 + point_index)
-        predicted_lon, predicted_lat = advect_diffuse_constant(
-            lon,
-            lat,
-            duration_hours * 3600.0,
-            deterministic,
-            rng,
-        )
+        local_history = None
+        if spatial_current_grid is not None and forcing_history is not None:
+            start_utc = pd.Timestamp(timestamp)
+            start_utc = start_utc.tz_localize("UTC") if start_utc.tzinfo is None else start_utc.tz_convert("UTC")
+            end_utc = pd.Timestamp(observation_time)
+            end_utc = end_utc.tz_localize("UTC") if end_utc.tzinfo is None else end_utc.tz_convert("UTC")
+            local_history = forcing_history[
+                (forcing_history["time_utc"] >= start_utc)
+                & (forcing_history["time_utc"] < end_utc)
+            ]
+        if local_history is not None and not local_history.empty:
+            spatial_step = duration_hours * 3600.0 / len(local_history)
+            predicted_lon, predicted_lat = advect_diffuse_spatial_timeseries(
+                lon,
+                lat,
+                local_history["time_utc"].tolist(),
+                local_history["wind_east_ms"].to_numpy(dtype=float),
+                local_history["wind_north_ms"].to_numpy(dtype=float),
+                spatial_step,
+                spatial_current_grid,
+                rng,
+                windage=forcing.windage,
+                diffusivity_m2s=0.0,
+                current_multiplier=spatial_current_multiplier,
+            )
+        else:
+            predicted_lon, predicted_lat = advect_diffuse_constant(
+                lon,
+                lat,
+                duration_hours * 3600.0,
+                deterministic,
+                rng,
+            )
         error_km = haversine_km(
             float(predicted_lon[0]),
             float(predicted_lat[0]),
@@ -195,13 +225,28 @@ def _score_track(
         forward_scores.append(float(np.exp(-0.5 * (error_km / 8.0) ** 2)))
 
         cloud_size = 128
-        cloud_lon, cloud_lat = advect_diffuse_constant(
-            np.full(cloud_size, lon),
-            np.full(cloud_size, lat),
-            duration_hours * 3600.0,
-            dispersive,
-            np.random.default_rng(20_000 + point_index),
-        )
+        if local_history is not None and not local_history.empty:
+            cloud_lon, cloud_lat = advect_diffuse_spatial_timeseries(
+                np.full(cloud_size, lon),
+                np.full(cloud_size, lat),
+                local_history["time_utc"].tolist(),
+                local_history["wind_east_ms"].to_numpy(dtype=float),
+                local_history["wind_north_ms"].to_numpy(dtype=float),
+                duration_hours * 3600.0 / len(local_history),
+                spatial_current_grid,
+                np.random.default_rng(20_000 + point_index),
+                windage=forcing.windage,
+                diffusivity_m2s=dispersive.diffusivity_m2s,
+                current_multiplier=spatial_current_multiplier,
+            )
+        else:
+            cloud_lon, cloud_lat = advect_diffuse_constant(
+                np.full(cloud_size, lon),
+                np.full(cloud_size, lat),
+                duration_hours * 3600.0,
+                dispersive,
+                np.random.default_rng(20_000 + point_index),
+            )
         shape_error_km = _symmetric_cloud_error_km(
             cloud_lon,
             cloud_lat,
@@ -263,6 +308,11 @@ def _score_track(
         "evidence": [
             "Space-time proximity to the inferred release distribution.",
             "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+            (
+                "Forward replay sampled particle-local Copernicus surface currents."
+                if spatial_current_grid is not None
+                else "Forward replay used the case-mean surface current."
+            ),
             "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
             (
                 "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
@@ -318,6 +368,13 @@ def rank_candidates(
     estimated_lon = float(estimate["estimated_origin"]["longitude"])
     estimated_lat = float(estimate["estimated_origin"]["latitude"])
     forcing = Forcing.from_dict(estimate["believed_forcing"])
+    provenance = estimate.get("forcing_provenance", {})
+    grid_path = provenance.get("spatial_current_grid")
+    spatial_grid = load_spatial_current_grid(Path(grid_path)) if grid_path else None
+    history_path = Path(release_estimate_path).parent / "forcing_history.csv"
+    forcing_history = pd.read_csv(history_path) if spatial_grid and history_path.exists() else None
+    if forcing_history is not None:
+        forcing_history["time_utc"] = pd.to_datetime(forcing_history["time_utc"], utc=True)
     expected_rows = int(ais.groupby("mmsi").size().max())
 
     silence = analyze_coverage_aware_silence(ais)
@@ -335,6 +392,8 @@ def rank_candidates(
             forcing,
             expected_rows,
             silence_by_mmsi.get(str(track["mmsi"].iloc[0])),
+            spatial_grid,
+            forcing_history,
         )
         for _, track in ais.groupby("mmsi", sort=False)
     ]

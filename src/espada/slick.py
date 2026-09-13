@@ -20,7 +20,8 @@ from shapely.geometry import MultiPoint, MultiPolygon, Polygon
 from .environment import load_cache
 from .geo import Polygonal, local_xy_m, polygon_from_geojson, sample_polygon, write_polygon_geojson
 from .models import Forcing
-from .verification import infer_origins_timeseries
+from .spatial_current import load_spatial_current_grid
+from .verification import infer_origins_spatial_timeseries, infer_origins_timeseries
 
 
 @dataclass(frozen=True)
@@ -131,6 +132,7 @@ def analyze_slick(
     particles: int = 2_000,
     ensemble_members: int = 20,
     seed: int = 26143,
+    spatial_current_grid: Path | None = None,
 ) -> dict[str, object]:
     if age_hours <= 0 or particles <= 0 or ensemble_members <= 0:
         raise ValueError("Age, particle count, and ensemble member count must be positive")
@@ -146,14 +148,33 @@ def analyze_slick(
     rng = np.random.default_rng(seed)
     observed_lon, observed_lat = sample_polygon(observation.polygon, particles, rng)
     step_seconds = age_hours * 3600.0 / len(history)
-    origin_lon, origin_lat = infer_origins_timeseries(
-        observed_lon,
-        observed_lat,
-        history,
-        step_seconds=step_seconds,
-        seed=seed + 1,
-        ensemble_members=ensemble_members,
-    )
+    grid = load_spatial_current_grid(spatial_current_grid) if spatial_current_grid else None
+    if grid:
+        if not grid.covers(release_time, observation.observation_time):
+            raise ValueError(
+                "Spatial current grid does not cover the requested slick-age window: "
+                f"{grid.time_start} to {grid.time_end}"
+            )
+        if not grid.covers_bounds(tuple(float(value) for value in observation.polygon.bounds)):
+            raise ValueError("Spatial current grid does not cover the observed slick bounds")
+        origin_lon, origin_lat = infer_origins_spatial_timeseries(
+            observed_lon,
+            observed_lat,
+            history,
+            grid,
+            step_seconds=step_seconds,
+            seed=seed + 1,
+            ensemble_members=ensemble_members,
+        )
+    else:
+        origin_lon, origin_lat = infer_origins_timeseries(
+            observed_lon,
+            observed_lat,
+            history,
+            step_seconds=step_seconds,
+            seed=seed + 1,
+            ensemble_members=ensemble_members,
+        )
     estimated_lon = float(np.mean(origin_lon))
     estimated_lat = float(np.mean(origin_lat))
     x, y = local_xy_m(origin_lon, origin_lat, estimated_lon, estimated_lat)
@@ -163,6 +184,9 @@ def analyze_slick(
     np.savez_compressed(output_dir / "observed_particles.npz", lon=observed_lon, lat=observed_lat)
     np.savez_compressed(output_dir / "forward_particles.npz", lon=observed_lon, lat=observed_lat)
     np.savez_compressed(output_dir / "reverse_endpoints.npz", lon=origin_lon, lat=origin_lat)
+    forcing_history = history.copy()
+    forcing_history["time_utc"] = forcing_history["time_utc"].dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+    forcing_history.to_csv(output_dir / "forcing_history.csv", index=False)
     write_polygon_geojson(
         output_dir / "slick_normalized.geojson",
         observation.polygon,
@@ -220,6 +244,9 @@ def analyze_slick(
             "source": environment.source,
             "forcing_steps": len(history),
             "temporal_resolution": environment.temporal_resolution,
+            "spatial_mode": "particle-local bilinear currents" if grid else "single-location currents",
+            "spatial_current_grid": str(grid.path) if grid else None,
+            "spatial_grid_bounds": list(grid.bounds) if grid else None,
         },
         "assumption": "Release age is supplied by the analyst and must be sensitivity-tested.",
     }
@@ -239,6 +266,8 @@ def analyze_slick(
             "source": environment.source,
             "forcing_steps": len(history),
             "temporal_resolution": environment.temporal_resolution,
+            "spatial_mode": "particle-local bilinear currents" if grid else "single-location currents",
+            "spatial_current_grid": str(grid.path) if grid else None,
         },
         "assumed_age_hours": age_hours,
         "estimated_release_time_utc": release_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -250,7 +279,14 @@ def analyze_slick(
         "interpretation": "Processing PASS means the input contract and inference completed; it is not an accuracy score.",
         "limitations": [
             "Spill age is supplied by the analyst for this milestone.",
-            "Current and wind vary through time but use one analysis location.",
+            *(
+                [
+                    "Currents vary through time and space; wind varies through time at one analysis location.",
+                    "Particles outside the downloaded current subset use its nearest boundary cell.",
+                ]
+                if grid
+                else ["Current and wind vary through time but use one analysis location."]
+            ),
             "The slick polygon must come from a validated detector or analyst review.",
         ],
         "artifacts": [
@@ -258,6 +294,7 @@ def analyze_slick(
             "observed_particles.npz",
             "forward_particles.npz",
             "reverse_endpoints.npz",
+            "forcing_history.csv",
             "release_estimate.json",
             "slick_reverse_analysis.png",
             "slick_analysis.json",

@@ -5,7 +5,8 @@
   "inputs": {
     "slick_geojson": "approved_slick.geojson",
     "ais_csv": "ais_positions.csv",
-    "environment_cache": "data/cache/environment_historical.json"
+    "environment_cache": "data/cache/environment_historical.json",
+    "spatial_current_grid": "data/raw/copernicus_currents_historical.nc"
   },
   "analysis": {
     "age_hours": 0,

@@ -196,6 +196,7 @@ $CaseDefinition = [ordered]@{
         sar_image = Join-Path $SarDirectory "sentinel1_vv.tif"
         ais_csv = $AisCsv
         environment_cache = $EnvironmentCache
+        spatial_current_grid = $CurrentFile
     }
     analysis = [ordered]@{
         analyst_approved = $false

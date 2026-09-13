@@ -17,9 +17,10 @@ from .attribution import _observed_cloud_xy_km, _score_track
 from .environment import load_cache
 from .geo import local_xy_m, sample_polygon
 from .models import Forcing
+from .spatial_current import load_spatial_current_grid
 from .silence import analyze_coverage_aware_silence
 from .slick import load_slick
-from .verification import infer_origins_timeseries
+from .verification import infer_origins_spatial_timeseries, infer_origins_timeseries
 
 
 def _image_uri(path: Path) -> str:
@@ -38,6 +39,7 @@ def search_release_window(
     particles: int = 400,
     ensemble_members: int = 6,
     seed: int = 26143,
+    spatial_current_grid: Path | None = None,
 ) -> dict[str, object]:
     """Search vessel and release-age hypotheses without receiving an answer key."""
     observation = load_slick(slick_path)
@@ -53,6 +55,9 @@ def search_release_window(
     silence = analyze_coverage_aware_silence(candidates)
     silence_by_id = {item["mmsi"]: item for item in silence["vessels"]}
     observation_naive = observation.observation_time.to_pydatetime().replace(tzinfo=None)
+    grid = load_spatial_current_grid(spatial_current_grid) if spatial_current_grid else None
+    if grid and not grid.covers_bounds(tuple(float(value) for value in observation.polygon.bounds)):
+        raise ValueError("Spatial current grid does not cover the observed slick bounds")
     rows: list[dict[str, object]] = []
 
     for age in ages_hours:
@@ -60,20 +65,35 @@ def search_release_window(
         history = environment.frame[(environment.frame["time_utc"] >= release) & (environment.frame["time_utc"] < observation.observation_time)].copy()
         if len(history) < 2:
             continue
+        if grid and not grid.covers(release, observation.observation_time):
+            continue
         for current_multiplier in current_multipliers:
             varied = history.copy()
             varied["current_east_ms"] *= current_multiplier
             varied["current_north_ms"] *= current_multiplier
             for windage in windages:
-                origin_lon, origin_lat = infer_origins_timeseries(
-                    observed_lon,
-                    observed_lat,
-                    varied,
-                    step_seconds=age * 3600.0 / len(varied),
-                    seed=seed + 1,
-                    ensemble_members=ensemble_members,
-                    windage=windage,
-                )
+                if grid:
+                    origin_lon, origin_lat = infer_origins_spatial_timeseries(
+                        observed_lon,
+                        observed_lat,
+                        varied,
+                        grid,
+                        step_seconds=age * 3600.0 / len(varied),
+                        seed=seed + 1,
+                        ensemble_members=ensemble_members,
+                        windage=windage,
+                        current_multiplier=current_multiplier,
+                    )
+                else:
+                    origin_lon, origin_lat = infer_origins_timeseries(
+                        observed_lon,
+                        observed_lat,
+                        varied,
+                        step_seconds=age * 3600.0 / len(varied),
+                        seed=seed + 1,
+                        ensemble_members=ensemble_members,
+                        windage=windage,
+                    )
                 estimated_lon = float(np.mean(origin_lon))
                 estimated_lat = float(np.mean(origin_lat))
                 x, y = local_xy_m(origin_lon, origin_lat, estimated_lon, estimated_lat)
@@ -99,6 +119,9 @@ def search_release_window(
                         forcing,
                         expected_rows,
                         silence_by_id.get(str(track["mmsi"].iloc[0])),
+                        grid,
+                        varied if grid else None,
+                        current_multiplier,
                     )
                     for _, track in candidates.groupby("mmsi", sort=False)
                 ]
@@ -183,7 +206,12 @@ def search_release_window(
 
     result = {
         "status": "PASS",
-        "method": "joint vessel and release-age hypothesis search with current and windage perturbations",
+        "method": (
+            "joint vessel and release-age hypothesis search with particle-local Copernicus currents"
+            if grid
+            else "joint vessel and release-age hypothesis search with current and windage perturbations"
+        ),
+        "spatial_current_grid": str(grid.path) if grid else None,
         "answer_key_accessed": False,
         "scenarios_per_candidate": int(summary.iloc[0]["scenarios"]),
         "ages_tested_hours": sorted(float(value) for value in frame["age_hours"].unique()),
@@ -199,7 +227,12 @@ def search_release_window(
         "candidate_summary": summary.to_dict(orient="records"),
         "limitations": [
             "The time window is a declared hypothesis-support interval, not a calibrated posterior confidence interval.",
-            "Age resolution is limited to the tested grid and environmental-cache coverage.",
+            "Age resolution is limited to the tested age grid and environmental-cache coverage.",
+            *(
+                ["Particles outside the downloaded current subset use its nearest boundary cell."]
+                if grid
+                else ["Currents are sampled at one representative analysis location."]
+            ),
             "A vessel can rank well across multiple ages when its track is stationary or sparsely sampled.",
             "Operational conclusions still require human review and independent evidence.",
         ],
@@ -226,8 +259,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--environment-cache", type=Path, required=True)
     parser.add_argument("--candidates", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--spatial-current-grid", type=Path)
     args = parser.parse_args(argv)
-    print(json.dumps(search_release_window(args.slick, args.environment_cache, args.candidates, args.out), indent=2))
+    print(json.dumps(search_release_window(args.slick, args.environment_cache, args.candidates, args.out, spatial_current_grid=args.spatial_current_grid), indent=2))
     return 0
 
 

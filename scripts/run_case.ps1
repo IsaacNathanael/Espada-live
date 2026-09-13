@@ -28,6 +28,9 @@ function Resolve-CasePath([object]$Value, [string]$Label) {
 
 $AisCsv = Resolve-CasePath $Case.inputs.ais_csv "inputs.ais_csv"
 $EnvironmentCache = Resolve-CasePath $Case.inputs.environment_cache "inputs.environment_cache"
+$SpatialCurrentGrid = if ($Case.inputs.spatial_current_grid) {
+    Resolve-CasePath $Case.inputs.spatial_current_grid "inputs.spatial_current_grid"
+} else { "" }
 foreach ($RequiredPath in @($AisCsv, $EnvironmentCache)) {
     if (-not (Test-Path -LiteralPath $RequiredPath)) { throw "Required case input does not exist: $RequiredPath" }
 }
@@ -62,9 +65,10 @@ if ($Mode -eq "approved_slick") {
         OutputDirectory = $OutputDirectory
     }
     if ($PythonPath) { $Arguments.PythonPath = $PythonPath }
+    if ($SpatialCurrentGrid) { $Arguments.SpatialCurrentGrid = $SpatialCurrentGrid }
     & (Join-Path $PSScriptRoot "run_approved_slick_case.ps1") @Arguments
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-    $InputFiles = @($SlickGeoJson, $AisCsv, $EnvironmentCache)
+    $InputFiles = @($SlickGeoJson, $AisCsv, $EnvironmentCache) + @($SpatialCurrentGrid | Where-Object { $_ })
 } else {
     $SarImage = Resolve-CasePath $Case.inputs.sar_image "inputs.sar_image"
     if (-not (Test-Path -LiteralPath $SarImage)) { throw "Required case input does not exist: $SarImage" }
@@ -86,6 +90,7 @@ if ($Mode -eq "approved_slick") {
     }
     if ($PythonPath) { $Arguments.PythonPath = $PythonPath }
     if ($GpuPythonPath) { $Arguments.GpuPythonPath = $GpuPythonPath }
+    if ($SpatialCurrentGrid) { $Arguments.SpatialCurrentGrid = $SpatialCurrentGrid }
     if ($Case.analysis.analyst_approved) { $Arguments.AnalystApproved = $true }
     if ($Case.analysis.use_classical_fallback) { $Arguments.UseClassicalFallback = $true }
     if ($Case.analysis.model_checkpoint) {
@@ -96,7 +101,7 @@ if ($Mode -eq "approved_slick") {
     }
     & (Join-Path $PSScriptRoot "run_real_case.ps1") @Arguments
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-    $InputFiles = @($SarImage, $AisCsv, $EnvironmentCache)
+    $InputFiles = @($SarImage, $AisCsv, $EnvironmentCache) + @($SpatialCurrentGrid | Where-Object { $_ })
 }
 
 $DossierPath = Join-Path $OutputDirectory "dossier\evidence_dossier.html"
