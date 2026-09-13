@@ -17,6 +17,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from scipy.spatial import cKDTree
 
 from .geo import haversine_km, local_xy_m
 from .models import Forcing, parse_utc
@@ -34,6 +35,51 @@ REQUIRED_AIS_COLUMNS = {
 }
 
 
+def _observed_cloud_xy_km(
+    observed_lon: np.ndarray,
+    observed_lat: np.ndarray,
+    observed_centroid: tuple[float, float],
+    maximum_points: int = 512,
+) -> np.ndarray:
+    observed_x, observed_y = local_xy_m(
+        observed_lon,
+        observed_lat,
+        observed_centroid[0],
+        observed_centroid[1],
+    )
+    observed_xy_km = np.column_stack((observed_x, observed_y)) / 1_000.0
+    if len(observed_xy_km) > maximum_points:
+        sample_indices = np.linspace(0, len(observed_xy_km) - 1, maximum_points, dtype=int)
+        observed_xy_km = observed_xy_km[sample_indices]
+    return observed_xy_km
+
+
+def _symmetric_cloud_error_km(
+    predicted_lon: np.ndarray,
+    predicted_lat: np.ndarray,
+    observed_xy_km: np.ndarray,
+    observed_centroid: tuple[float, float],
+) -> float:
+    predicted_x, predicted_y = local_xy_m(
+        predicted_lon,
+        predicted_lat,
+        observed_centroid[0],
+        observed_centroid[1],
+    )
+    predicted_xy_km = np.column_stack((predicted_x, predicted_y)) / 1_000.0
+    predicted_tree = cKDTree(predicted_xy_km)
+    observed_tree = cKDTree(observed_xy_km)
+    predicted_to_observed = observed_tree.query(predicted_xy_km, k=1)[0]
+    observed_to_predicted = predicted_tree.query(observed_xy_km, k=1)[0]
+    return float(
+        0.5
+        * (
+            np.quantile(predicted_to_observed, 0.75)
+            + np.quantile(observed_to_predicted, 0.75)
+        )
+    )
+
+
 def _score_track(
     track: pd.DataFrame,
     release_time: datetime,
@@ -42,6 +88,7 @@ def _score_track(
     estimated_lat: float,
     credible_radius_km: float,
     observed_centroid: tuple[float, float],
+    observed_xy_km: np.ndarray,
     forcing: Forcing,
     expected_rows: int,
     silence_report: dict | None = None,
@@ -60,6 +107,8 @@ def _score_track(
 
     forward_scores: list[float] = []
     forward_errors: list[float] = []
+    forward_shape_scores: list[float] = []
+    forward_shape_errors: list[float] = []
     deterministic = Forcing(
         forcing.current_east_ms,
         forcing.current_north_ms,
@@ -68,13 +117,23 @@ def _score_track(
         forcing.windage,
         0.0,
     )
-    rng = np.random.default_rng(100)
-    for lon, lat, timestamp in zip(lons, lats, timestamps):
+    dispersive = Forcing(
+        forcing.current_east_ms,
+        forcing.current_north_ms,
+        forcing.wind_east_ms,
+        forcing.wind_north_ms,
+        forcing.windage,
+        max(forcing.diffusivity_m2s, 1.0),
+    )
+    for point_index, (lon, lat, timestamp) in enumerate(zip(lons, lats, timestamps)):
         duration_hours = (observation_time - timestamp.to_pydatetime()).total_seconds() / 3600.0
         if duration_hours <= 0:
             forward_scores.append(0.0)
             forward_errors.append(float("inf"))
+            forward_shape_scores.append(0.0)
+            forward_shape_errors.append(float("inf"))
             continue
+        rng = np.random.default_rng(10_000 + point_index)
         predicted_lon, predicted_lat = advect_diffuse_constant(
             lon,
             lat,
@@ -91,7 +150,27 @@ def _score_track(
         forward_errors.append(error_km)
         forward_scores.append(float(np.exp(-0.5 * (error_km / 8.0) ** 2)))
 
-    joint = 0.55 * presence_by_point + 0.40 * np.asarray(forward_scores)
+        cloud_size = 128
+        cloud_lon, cloud_lat = advect_diffuse_constant(
+            np.full(cloud_size, lon),
+            np.full(cloud_size, lat),
+            duration_hours * 3600.0,
+            dispersive,
+            np.random.default_rng(20_000 + point_index),
+        )
+        shape_error_km = _symmetric_cloud_error_km(
+            cloud_lon,
+            cloud_lat,
+            observed_xy_km,
+            observed_centroid,
+        )
+        forward_shape_errors.append(shape_error_km)
+        forward_shape_scores.append(float(np.exp(-0.5 * (shape_error_km / 8.0) ** 2)))
+
+    forward_combined = 0.55 * np.asarray(forward_scores) + 0.45 * np.asarray(
+        forward_shape_scores
+    )
+    joint = 0.55 * presence_by_point + 0.40 * forward_combined
     best_index = int(np.argmax(joint))
     coverage_quality = min(1.0, len(track) / max(expected_rows, 1))
     interpolated_fraction = float(track["is_interpolated"].astype(str).str.lower().isin({"true", "1", "yes"}).mean())
@@ -117,8 +196,11 @@ def _score_track(
         "vessel_name": str(track["vessel_name"].iloc[0]),
         "total_score": total_score,
         "presence_score": presence_score,
-        "forward_consistency": float(forward_scores[best_index]),
+        "forward_consistency": float(forward_combined[best_index]),
         "forward_error_km": float(forward_errors[best_index]),
+        "forward_centroid_consistency": float(forward_scores[best_index]),
+        "forward_shape_consistency": float(forward_shape_scores[best_index]),
+        "forward_shape_error_km": float(forward_shape_errors[best_index]),
         "data_quality": data_quality,
         "gap_threshold_minutes": gap_threshold,
         "silence_classification": silence_report["classification"],
@@ -130,7 +212,7 @@ def _score_track(
         "best_match_time_utc": timestamps.iloc[best_index].strftime("%Y-%m-%dT%H:%M:%SZ"),
         "evidence": [
             "Space-time proximity to the inferred release distribution.",
-            "Forward trajectory consistency with the observed slick centroid.",
+            "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
             "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
         ],
         "limitations": [
@@ -139,7 +221,7 @@ def _score_track(
                 if str(track.get("source", pd.Series([""])).iloc[0]).startswith("synthetic")
                 else "AIS identity and reception completeness require independent verification."
             ),
-            "Point-release centroid comparison; slick-shape comparison is not yet implemented.",
+            "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
             "AIS gaps do not receive a deliberate-behaviour bonus.",
         ],
     }
@@ -163,10 +245,17 @@ def rank_candidates(
         origin_lon = np.asarray(reverse["lon"], dtype=float)
         origin_lat = np.asarray(reverse["lat"], dtype=float)
     with np.load(forward_particles_path) as forward:
+        observed_lon = np.asarray(forward["lon"], dtype=float)
+        observed_lat = np.asarray(forward["lat"], dtype=float)
         observed_centroid = (
-            float(np.mean(forward["lon"])),
-            float(np.mean(forward["lat"])),
+            float(np.mean(observed_lon)),
+            float(np.mean(observed_lat)),
         )
+    observed_xy_km = _observed_cloud_xy_km(
+        observed_lon,
+        observed_lat,
+        observed_centroid,
+    )
     estimate = json.loads(Path(release_estimate_path).read_text(encoding="utf-8"))
     release_time = parse_utc(estimate["release_time_utc"])
     observation_time = parse_utc(estimate["observation_time_utc"])
@@ -186,6 +275,7 @@ def rank_candidates(
             estimated_lat,
             float(estimate["credible_radius_90_km"]),
             observed_centroid,
+            observed_xy_km,
             forcing,
             expected_rows,
             silence_by_mmsi.get(str(track["mmsi"].iloc[0])),

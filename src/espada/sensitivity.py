@@ -14,7 +14,7 @@ from matplotlib.colors import BoundaryNorm, ListedColormap
 import numpy as np
 import pandas as pd
 
-from .attribution import _score_track
+from .attribution import _observed_cloud_xy_km, _score_track
 from .environment import load_cache
 from .geo import haversine_km, local_xy_m, sample_polygon
 from .models import Forcing
@@ -55,6 +55,7 @@ def run_historical_sensitivity(
     rng = np.random.default_rng(seed)
     observed_lon, observed_lat = sample_polygon(observation.polygon, particles, rng)
     observed_centroid = (float(np.mean(observed_lon)), float(np.mean(observed_lat)))
+    observed_xy_km = _observed_cloud_xy_km(observed_lon, observed_lat, observed_centroid)
     expected_rows = int(candidates.groupby("mmsi").size().max())
     silence = analyze_coverage_aware_silence(candidates)
     silence_by_id = {item["mmsi"]: item for item in silence["vessels"]}
@@ -108,6 +109,7 @@ def run_historical_sensitivity(
                         estimated_lat,
                         radius_90,
                         observed_centroid,
+                        observed_xy_km,
                         forcing,
                         expected_rows,
                         silence_by_id.get(str(track["mmsi"].iloc[0])),

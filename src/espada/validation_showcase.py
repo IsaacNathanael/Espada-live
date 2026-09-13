@@ -74,9 +74,10 @@ def build_report(project_root: Path, output_path: Path) -> dict:
     )["features"][0]["properties"]
 
     wak_stability = _check(wak_decision, "assumption_stability")["observed"]
-    mindoro_stability = _check(mindoro_decision, "assumption_stability")["observed"]
     wak_candidate = wak_decision["candidate"]
     mindoro_candidate = mindoro_decision["candidate"]
+    wak_ranked_candidate = wak_bundle["ranking"]["top_candidate"]
+    mindoro_ranked_candidate = mindoro_bundle["ranking"]["top_candidate"]
     wak_map = _image_uri(project_root / "out/wakashio/ranking/attribution_map.png")
     mindoro_map = _image_uri(
         project_root / "out/incidents/princess_empress_2023/run_official/ranking/attribution_map.png"
@@ -118,13 +119,13 @@ ul{{margin:10px 0;padding-left:20px}} a{{color:#78e9df}} .verdict{{font-size:1.0
 <div class="casehead"><div><h2>MV Wakashio · Mauritius, 2020</h2><h3>Historical known-source reconstruction</h3></div><div class="decision escalate">PRIORITY ANALYST REVIEW</div></div>
 <div class="grid">
 <div class="metric"><b>#1 / {wak_eval['candidate_count']}</b><span>documented vessel rank</span></div>
-<div class="metric"><b>{_num(wak_candidate['forward_error_km'])} km</b><span>forward replay error</span></div>
+<div class="metric"><b>{_num(wak_ranked_candidate['forward_shape_error_km'])} km</b><span>particle-cloud shape error</span></div>
 <div class="metric"><b>{_num(wak_candidate['score_margin'],3)}</b><span>lead over runner-up</span></div>
 <div class="metric"><b>{_pct(wak_stability['top_3_rate'])}</b><span>Top-3 sensitivity retention</span></div>
 </div>
 <div class="panel visual"><img src="{wak_map}" alt="Wakashio AIS tracks over the inferred origin field"><div class="caption">Blinded ranking was written before the truth identity was opened. The orange track is the leading pseudonymized candidate.</div></div>
 <div class="split"><div class="panel"><h2>Decision-gate evidence</h2><table><thead><tr><th>Gate</th><th>Observed</th><th>Rule</th><th>Status</th></tr></thead><tbody>{_gate_rows(wak_decision)}</tbody></table></div>
-<aside class="panel"><h2>What this validates</h2><ul><li>The documented release vessel ranked above every nearby candidate.</li><li>Forward drift returned within {_num(wak_candidate['forward_error_km'])} km of the observed slick.</li><li>Identity was withheld from the ranker until after ranking.</li><li>AIS silence never added score.</li></ul><div class="verdict"><b>Answer to the evaluator:</b><br>{html.escape(wak_eval['answer'])}</div></aside></div>
+<aside class="panel"><h2>What this validates</h2><ul><li>The documented release vessel ranked above every nearby candidate.</li><li>Forward drift reached {_num(wak_candidate['forward_error_km'])} km centroid error and {_num(wak_ranked_candidate['forward_shape_error_km'])} km particle-cloud shape error.</li><li>Identity was withheld from the ranker until after ranking.</li><li>AIS silence never added score.</li></ul><div class="verdict"><b>Answer to the evaluator:</b><br>{html.escape(wak_eval['answer'])}</div></aside></div>
 </section>
 
 <section id="mindoro" class="case" role="tabpanel">
@@ -133,7 +134,7 @@ ul{{margin:10px 0;padding-left:20px}} a{{color:#78e9df}} .verdict{{font-size:1.0
 <div class="metric"><b>{mindoro_bundle['ranking']['candidate_count']}</b><span>AIS candidates compared</span></div>
 <div class="metric"><b>{_num(mindoro_candidate['comparative_score'],3)}</b><span>top comparative score—not probability</span></div>
 <div class="metric"><b>{_num(mindoro_candidate['data_quality'],2)}</b><span>leader track quality</span></div>
-<div class="metric"><b>{_pct(mindoro_stability['top_3_rate'])}</b><span>Top-3 sensitivity retention</span></div>
+<div class="metric"><b>{_num(mindoro_ranked_candidate['forward_shape_error_km'])} km</b><span>particle-cloud shape error</span></div>
 </div>
 <div class="panel visual"><img src="{mindoro_map}" alt="Princess Empress case AIS tracks over the inferred origin field"><div class="caption">The leading candidate fit one hypothesis well, but sparse tracks and poor stability prevented nomination.</div></div>
 <div class="split"><div class="panel"><h2>Decision-gate evidence</h2><table><thead><tr><th>Gate</th><th>Observed</th><th>Rule</th><th>Status</th></tr></thead><tbody>{_gate_rows(mindoro_decision)}</tbody></table></div>
@@ -142,7 +143,7 @@ ul{{margin:10px 0;padding-left:20px}} a{{color:#78e9df}} .verdict{{font-size:1.0
 
 <section class="matrix"><div class="eyebrow">Validation matrix</div><h2>What the pair proves</h2><div class="matrixgrid">
 <div class="panel result"><strong style="color:var(--green)">Converging evidence → escalate</strong>Wakashio passes identity-blinded ranking, forward replay, candidate separation and sensitivity gates.</div>
-<div class="panel result"><strong style="color:var(--amber)">Conflicting evidence → abstain</strong>Princess Empress shows that even a 0.901 comparative score cannot bypass weak data and unstable assumptions.</div>
+<div class="panel result"><strong style="color:var(--amber)">Conflicting evidence → abstain</strong>Princess Empress shows that even a {_num(mindoro_candidate['comparative_score'],3)} comparative score cannot bypass weak data and unstable assumptions.</div>
 </div></section>
 <section class="panel" style="margin-top:16px"><h2>Provenance and limits</h2><p>Wakashio uses UNITAR-UNOSAT slick mapping, Copernicus Marine currents, Open-Meteo historical wind, Global Fishing Watch vessel presence and the official casualty record. Princess Empress uses WWF Philippines’ possible-slick layer derived from Copernicus Sentinel-1, the same environmental sources and Global Fishing Watch vessel presence.</p>
 <p><a href="{html.escape(wak_eval['sources']['official_casualty_report'])}">Wakashio official report</a> · <a href="{html.escape(wak_eval['sources']['unosat_product'])}">UNOSAT product</a> · <a href="{html.escape(mapped_slick['source_layer_url'])}">Mindoro official map layer</a> · <a href="https://response.restoration.noaa.gov/orr-supporting-oil-spill-oriental-mindoro-philippines">NOAA incident summary</a></p>

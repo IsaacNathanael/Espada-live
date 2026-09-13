@@ -3,8 +3,9 @@ import json
 from pathlib import Path
 
 import pandas as pd
+import numpy as np
 
-from espada.attribution import rank_candidates
+from espada.attribution import _symmetric_cloud_error_km, rank_candidates
 from espada.demo import run_demo
 from espada.synthetic_ais import generate_synthetic_ais
 from espada.verification import VerificationConfig, run_verification
@@ -24,6 +25,27 @@ def test_ranker_cannot_receive_truth_file() -> None:
     parameters = inspect.signature(rank_candidates).parameters
     assert "truth" not in parameters
     assert "truth_path" not in parameters
+
+
+def test_shape_error_distinguishes_matching_and_displaced_clouds() -> None:
+    observed_xy_km = np.asarray([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])
+    centroid = (0.0, 0.0)
+    matching_lon = observed_xy_km[:, 0] / 111.195
+    matching_lat = observed_xy_km[:, 1] / 111.195
+    matching = _symmetric_cloud_error_km(
+        matching_lon,
+        matching_lat,
+        observed_xy_km,
+        centroid,
+    )
+    displaced = _symmetric_cloud_error_km(
+        matching_lon + 1.0,
+        matching_lat,
+        observed_xy_km,
+        centroid,
+    )
+    assert matching < 0.01
+    assert displaced > 100.0
 
 
 def test_synthetic_ais_has_fourteen_vessels_and_a_real_gap(tmp_path: Path) -> None:
