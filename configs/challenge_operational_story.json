@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "name": "Operational moving-source challenge",
+  "seed": 26143,
+  "candidate_vessels": 8,
+  "source_vessel_index": 3,
+  "satellite_delay_hours": 12.0,
+  "release_duration_minutes": 60.0,
+  "truth": {
+    "current_multiplier": 1.0,
+    "wind_multiplier": 1.0,
+    "windage": 0.02,
+    "diffusivity_m2s": 12.0
+  },
+  "evidence": {
+    "random_ais_dropout_fraction": 0.03,
+    "source_blackout_hours": 0.0,
+    "position_noise_m": 50.0,
+    "spoofed_decoy_tracks": 0
+  },
+  "inference": {
+    "minimum_age_hours": 8.0,
+    "maximum_age_hours": 16.0,
+    "age_step_hours": 2.0,
+    "current_multipliers": [0.85, 1.0, 1.15],
+    "windages": [0.015, 0.02, 0.025],
+    "slick_particles": 300,
+    "ensemble_members": 4
+  },
+  "simulation_particles": 600
+}

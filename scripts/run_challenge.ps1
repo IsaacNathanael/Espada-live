@@ -19,7 +19,7 @@ if (-not $PythonPath -or -not (Test-Path -LiteralPath $PythonPath)) {
     throw "The Espada Python environment was not found."
 }
 if (-not $Config) {
-    $Config = Join-Path $ProjectRoot "configs\challenge_balanced.json"
+    $Config = Join-Path $ProjectRoot "configs\challenge_operational_story.json"
 }
 $ResolvedConfig = Resolve-Path -LiteralPath $Config -ErrorAction Stop
 if (-not $OutputDirectory) {
