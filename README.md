@@ -202,7 +202,9 @@ The ranker can reconstruct a release-time position only when two AIS observation
 
 ## Open the operations dashboard
 
-The map-first everyday interface is separate from the technical judge dashboard. It keeps the real Sentinel-1 input, animated ships, reverse-drift replay, Top-3 shortlist, timeline and current/wind conditions on one screen, while provenance and detailed evidence stay behind click-through panels:
+The map-first everyday interface is separate from the technical judge dashboard. It combines unaltered Sentinel-1 context with a clearly labelled, georegistered digital-twin oil return; the Raw SAR control removes the simulated return so the two cannot be confused. Its 13-frame event replay uses the same particle-local Copernicus currents, windage, diffusion and coastline blocking as the saved controlled slick. Oil appears only at the sealed release time, the detection boundary appears only at the observation time, and the generated alignment report verifies the final geometry.
+
+Vessel motion comes from pseudonymized historical Global Fishing Watch tracks. Realistic fictional scenario aliases and profiles make the exercise readable without falsely accusing a real named vessel. Interpolation stops across AIS gaps longer than three hours, missing vessels are counted as unavailable, and recent trails show only observed route segments. The reverse-drift replay, Top-3 shortlist, timeline and current/wind conditions remain on one screen, while provenance and detailed evidence stay behind click-through panels:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\start_operations_dashboard.ps1

@@ -3,10 +3,35 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import math
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from PIL import Image, ImageDraw
+from shapely.geometry import MultiPoint, Polygon, mapping, shape
+
+from .coast import load_coast_mask
+from .environment import load_cache
+from .geo import haversine_km, local_xy_m
+from .physics import advect_diffuse_spatial_timeseries
+from .spatial_current import load_spatial_current_grid
+
+
+VESSEL_PROFILES = (
+    {"name": "MT Auriga Maris", "type": "Oil / chemical tanker", "flag": "Malta", "length": 183, "beam": 32, "draught": 10.2},
+    {"name": "MV Ligurian Crest", "type": "General cargo", "flag": "Italy", "length": 146, "beam": 23, "draught": 8.1},
+    {"name": "MT Pelagos Dawn", "type": "Product tanker", "flag": "Greece", "length": 176, "beam": 30, "draught": 9.7},
+    {"name": "MV Cobalt Meridian", "type": "Bulk carrier", "flag": "Marshall Islands", "length": 199, "beam": 32, "draught": 11.3},
+    {"name": "MV Cap Corse Trader", "type": "Ro-ro cargo", "flag": "France", "length": 164, "beam": 26, "draught": 7.4},
+    {"name": "FV Stella Tirrena", "type": "Fishing vessel", "flag": "Italy", "length": 38, "beam": 9, "draught": 4.1},
+    {"name": "MV Etruria Wind", "type": "Container feeder", "flag": "Cyprus", "length": 154, "beam": 25, "draught": 8.6},
+    {"name": "MT Marevia", "type": "Bunker tanker", "flag": "Italy", "length": 92, "beam": 16, "draught": 5.8},
+    {"name": "MV Tyrrhenian Vale", "type": "Bulk carrier", "flag": "Panama", "length": 189, "beam": 31, "draught": 10.8},
+    {"name": "Tug Bastia Guardian", "type": "Harbour tug", "flag": "France", "length": 31, "beam": 11, "draught": 4.5},
+    {"name": "MV Aegean Cedar", "type": "General cargo", "flag": "Greece", "length": 132, "beam": 21, "draught": 7.2},
+    {"name": "FV Calvi Horizon", "type": "Fishing vessel", "flag": "France", "length": 34, "beam": 8, "draught": 3.8},
+)
 
 
 def _read_json(path: Path) -> dict:
@@ -23,6 +48,257 @@ def _display_name(mmsi: str, original: str, rank: int | None) -> str:
     if original and original.upper() != "UNKNOWN":
         return original
     return f"Vessel {str(mmsi)[-4:]}" if rank else f"Traffic {str(mmsi)[-4:]}"
+
+
+def _track_speed_knots(frame: pd.DataFrame) -> float | None:
+    ordered = frame.sort_values("timestamp_utc")
+    times = pd.to_datetime(ordered["timestamp_utc"], utc=True)
+    longitude = ordered["longitude"].to_numpy(dtype=float)
+    latitude = ordered["latitude"].to_numpy(dtype=float)
+    speeds: list[float] = []
+    for index in range(1, len(ordered)):
+        hours = (times.iloc[index] - times.iloc[index - 1]).total_seconds() / 3600.0
+        if 0 < hours <= 3:
+            speed = haversine_km(
+                longitude[index - 1],
+                latitude[index - 1],
+                longitude[index],
+                latitude[index],
+            ) / hours / 1.852
+            if math.isfinite(speed) and speed <= 45:
+                speeds.append(float(speed))
+    return float(np.median(speeds)) if speeds else None
+
+
+def _profile_map(mmsis: list[str], known_source_id: str) -> dict[str, dict[str, object]]:
+    ordered = sorted(str(value) for value in mmsis)
+    if known_source_id in ordered:
+        ordered.remove(known_source_id)
+        ordered.insert(0, known_source_id)
+    profiles: dict[str, dict[str, object]] = {}
+    for index, mmsi in enumerate(ordered):
+        template = dict(VESSEL_PROFILES[index % len(VESSEL_PROFILES)])
+        template["registry"] = f"ESP-COR-{index + 1:02d}"
+        template["identity_status"] = "Fictional scenario alias; motion is pseudonymized historical AIS"
+        profiles[mmsi] = template
+    return profiles
+
+
+def _polygon_from_particles(longitude: np.ndarray, latitude: np.ndarray) -> Polygon | None:
+    longitude = np.asarray(longitude, dtype=float)
+    latitude = np.asarray(latitude, dtype=float)
+    if longitude.size < 10 or longitude.shape != latitude.shape:
+        return None
+    center_lon = float(np.median(longitude))
+    center_lat = float(np.median(latitude))
+    x, y = local_xy_m(longitude, latitude, center_lon, center_lat)
+    radius = np.hypot(x, y)
+    keep = radius <= np.quantile(radius, 0.90)
+    polygon = MultiPoint(np.column_stack((longitude[keep], latitude[keep]))).convex_hull
+    return polygon if isinstance(polygon, Polygon) and polygon.is_valid else None
+
+
+def _slick_timeline(
+    case_root: Path,
+    slick: dict,
+    challenge_result: dict,
+    scenario: dict,
+) -> tuple[list[dict[str, object]], dict[str, object]]:
+    final_geometry = slick["features"][0]["geometry"]
+    truth = challenge_result.get("truth_reveal", {})
+    fallback_time = str(
+        truth.get(
+            "observation_time_utc",
+            slick["features"][0].get("properties", {}).get("observation_time_utc", ""),
+        )
+    )
+    fallback = [{"time": fallback_time, "geometry": final_geometry, "particleCount": None}]
+    if not truth or not scenario:
+        return fallback, {
+            "physicsReplay": "UNAVAILABLE",
+            "finalGeometryIoU": None,
+            "timelineFrames": 1,
+        }
+
+    try:
+        release_time = pd.Timestamp(truth["release_time_utc"])
+        observation_time = pd.Timestamp(truth["observation_time_utc"])
+        environment = load_cache(case_root / "environment/environment.json").frame
+        current_grid = load_spatial_current_grid(case_root / "environment/currents.nc")
+        coast = load_coast_mask(case_root / "environment/land_mask.geojson")
+        forcing = scenario["truth"]
+        particles = int(scenario.get("simulation_particles", 600))
+        release_duration_minutes = float(scenario.get("release_duration_minutes", 90.0))
+        release_corridor = truth["release_corridor"]
+        delays = np.linspace(0.0, release_duration_minutes / 60.0, 3)
+        cohort_sizes = np.full(3, particles // 3, dtype=int)
+        cohort_sizes[: particles % 3] += 1
+        rng = np.random.default_rng(int(scenario.get("seed", 26143)))
+        # run_challenge selects background traffic with the same generator before
+        # slick diffusion. Reproduce those draws so this time-lapse is bit-for-bit
+        # aligned with the saved controlled observation.
+        source_traffic = pd.read_csv(
+            case_root / "ais/ais_normalized.csv", dtype={"mmsi": str}
+        )
+        rng.random(max(0, source_traffic["mmsi"].nunique() - 1))
+        cohorts: list[dict[str, object]] = []
+
+        for delay_hours, cohort_size, release_point in zip(
+            delays, cohort_sizes, release_corridor
+        ):
+            cohort_time = release_time + pd.Timedelta(hours=float(delay_hours))
+            history = environment.loc[
+                (environment["time_utc"] >= cohort_time)
+                & (environment["time_utc"] < observation_time)
+            ]
+            duration_seconds = (observation_time - cohort_time).total_seconds()
+            step_seconds = duration_seconds / len(history)
+            longitude = np.full(int(cohort_size), float(release_point["longitude"]))
+            latitude = np.full(int(cohort_size), float(release_point["latitude"]))
+            states: list[tuple[pd.Timestamp, np.ndarray, np.ndarray]] = [
+                (cohort_time, longitude.copy(), latitude.copy())
+            ]
+            for step_index, row in enumerate(history.itertuples()):
+                longitude, latitude = advect_diffuse_spatial_timeseries(
+                    longitude,
+                    latitude,
+                    [row.time_utc],
+                    np.asarray([row.wind_east_ms * float(forcing["wind_multiplier"])]),
+                    np.asarray([row.wind_north_ms * float(forcing["wind_multiplier"])]),
+                    step_seconds,
+                    current_grid,
+                    rng,
+                    windage=float(forcing["windage"]),
+                    diffusivity_m2s=float(forcing["diffusivity_m2s"]),
+                    current_multiplier=float(forcing["current_multiplier"]),
+                    coast_mask=coast,
+                )
+                states.append(
+                    (
+                        cohort_time
+                        + pd.Timedelta(seconds=(step_index + 1) * step_seconds),
+                        longitude.copy(),
+                        latitude.copy(),
+                    )
+                )
+            cohorts.append({"release": cohort_time, "states": states})
+
+        frame_times = list(pd.date_range(release_time, observation_time, periods=13))
+        frames: list[dict[str, object]] = []
+        for frame_time in frame_times:
+            frame_longitude: list[np.ndarray] = []
+            frame_latitude: list[np.ndarray] = []
+            for cohort in cohorts:
+                if frame_time < cohort["release"]:
+                    continue
+                states = cohort["states"]
+                eligible = [state for state in states if state[0] <= frame_time]
+                state = eligible[-1] if eligible else states[0]
+                frame_longitude.append(state[1])
+                frame_latitude.append(state[2])
+            polygon = (
+                _polygon_from_particles(
+                    np.concatenate(frame_longitude), np.concatenate(frame_latitude)
+                )
+                if frame_longitude
+                else None
+            )
+            frames.append(
+                {
+                    "time": frame_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "geometry": mapping(polygon) if polygon else None,
+                    "particleCount": int(sum(len(value) for value in frame_longitude)),
+                }
+            )
+
+        reconstructed_lon = np.concatenate(
+            [cohort["states"][-1][1] for cohort in cohorts]
+        )
+        reconstructed_lat = np.concatenate(
+            [cohort["states"][-1][2] for cohort in cohorts]
+        )
+        reconstructed = _polygon_from_particles(reconstructed_lon, reconstructed_lat)
+        final_polygon = shape(final_geometry)
+        geometry_iou = (
+            float(reconstructed.intersection(final_polygon).area / reconstructed.union(final_polygon).area)
+            if reconstructed and not reconstructed.union(final_polygon).is_empty
+            else None
+        )
+        frames[-1]["geometry"] = final_geometry
+        return frames, {
+            "physicsReplay": "PASS",
+            "finalGeometryIoU": geometry_iou,
+            "timelineFrames": len(frames),
+            "particleModel": "three-cohort advection-diffusion with particle-local currents and coastline blocking",
+        }
+    except (FileNotFoundError, KeyError, TypeError, ValueError, ZeroDivisionError):
+        return fallback, {
+            "physicsReplay": "FALLBACK_FINAL_GEOMETRY_ONLY",
+            "finalGeometryIoU": None,
+            "timelineFrames": 1,
+        }
+
+
+def _sar_alignment(
+    image_path: Path,
+    slick: dict,
+    bbox: list[float],
+    observation_time: str,
+    acquisition_time: str,
+) -> dict[str, object]:
+    geometry = shape(slick["features"][0]["geometry"])
+    bounds = geometry.bounds
+    within_bbox = (
+        bounds[0] >= bbox[0]
+        and bounds[1] >= bbox[1]
+        and bounds[2] <= bbox[2]
+        and bounds[3] <= bbox[3]
+    )
+    contrast_ratio: float | None = None
+    try:
+        image = np.asarray(Image.open(image_path).convert("L"), dtype=float)
+        height, width = image.shape
+        mask_image = Image.new("1", (width, height), 0)
+        drawer = ImageDraw.Draw(mask_image)
+        parts = geometry.geoms if geometry.geom_type == "MultiPolygon" else (geometry,)
+        for part in parts:
+            pixels = [
+                (
+                    (longitude - bbox[0]) / (bbox[2] - bbox[0]) * (width - 1),
+                    (bbox[3] - latitude) / (bbox[3] - bbox[1]) * (height - 1),
+                )
+                for longitude, latitude in part.exterior.coords
+            ]
+            drawer.polygon(pixels, fill=1)
+        mask = np.asarray(mask_image, dtype=bool)
+        if mask.any():
+            ys, xs = np.where(mask)
+            pad = 40
+            local = np.zeros_like(mask)
+            local[
+                max(0, int(ys.min()) - pad) : min(height, int(ys.max()) + pad + 1),
+                max(0, int(xs.min()) - pad) : min(width, int(xs.max()) + pad + 1),
+            ] = True
+            background = local & ~mask
+            if background.any() and float(image[background].mean()) > 0:
+                contrast_ratio = float(image[mask].mean() / image[background].mean())
+    except (FileNotFoundError, OSError, ValueError):
+        contrast_ratio = None
+    time_offset = abs(
+        (pd.Timestamp(acquisition_time) - pd.Timestamp(observation_time)).total_seconds()
+    ) / 60.0
+    return {
+        "geometryWithinSarBbox": bool(within_bbox),
+        "sarAcquisitionOffsetMinutes": float(time_offset),
+        "rawSarLocalContrastRatio": contrast_ratio,
+        "rawSarOilClaimSupported": False,
+        "displayMode": "Real Sentinel-1 context plus a labelled physics-generated oil-return composite",
+        "interpretation": (
+            "The controlled slick is georegistered inside the SAR crop, but the raw pixels are not "
+            "claimed as a verified oil detection. The composite makes the simulated sensor return and "
+            "its exact detection boundary visible without falsifying the raw image."
+        ),
+    }
 
 
 def build_operations_dashboard(project_root: Path, output_path: Path) -> dict[str, object]:
@@ -56,15 +332,42 @@ def build_operations_dashboard(project_root: Path, output_path: Path) -> dict[st
     ais = pd.read_csv(run / "ais/ais_normalized.csv", dtype={"mmsi": str})
     candidate_lookup = {str(item["mmsi"]): item for item in ranking["candidates"]}
     known_source_id = str(challenge_result.get("truth_reveal", {}).get("source_id", ""))
+    profiles = _profile_map(ais["mmsi"].astype(str).unique().tolist(), known_source_id)
     tracks = []
     for mmsi, frame in ais.groupby("mmsi", sort=False):
+        frame = frame.sort_values("timestamp_utc")
         candidate = candidate_lookup.get(str(mmsi), {})
         rank = int(candidate["rank"]) if candidate.get("rank") else None
         original_name = str(frame["vessel_name"].iloc[0])
+        profile = profiles.get(str(mmsi), {}) if use_challenge else {}
+        median_speed = _track_speed_knots(frame)
+        motion_status = (
+            "At anchor / slow drift"
+            if median_speed is not None and median_speed < 1.0
+            else (
+                "Low-speed manoeuvre"
+                if median_speed is not None and median_speed < 4.0
+                else "Under way"
+            )
+        )
         tracks.append(
             {
                 "mmsi": str(mmsi),
-                "name": _display_name(str(mmsi), original_name, rank),
+                "registry": profile.get("registry", f"AIS {str(mmsi)[-6:]}"),
+                "name": profile.get("name", _display_name(str(mmsi), original_name, rank)),
+                "vesselType": profile.get("type", "Unknown vessel type"),
+                "flag": profile.get("flag", "Not available"),
+                "lengthM": profile.get("length"),
+                "beamM": profile.get("beam"),
+                "draughtM": profile.get("draught"),
+                "identityStatus": profile.get(
+                    "identity_status", "AIS-reported identity when available"
+                ),
+                "medianSpeedKnots": median_speed,
+                "motionStatus": motion_status,
+                "reportCount": int(len(frame)),
+                "coverageStart": str(frame["timestamp_utc"].iloc[0]),
+                "coverageEnd": str(frame["timestamp_utc"].iloc[-1]),
                 "rank": rank,
                 "score": candidate.get("total_score"),
                 "presence": candidate.get("presence_score"),
@@ -98,13 +401,69 @@ def build_operations_dashboard(project_root: Path, output_path: Path) -> dict[st
         track = next(value for value in tracks if value["mmsi"] == str(item["mmsi"]))
         top_candidates.append(track)
     bbox = satellite["bbox"]
+    slick_timeline, physics_validation = _slick_timeline(
+        case, slick, challenge_result, scenario
+    )
+    truth_reveal = challenge_result.get("truth_reveal", {})
+    truth_release_time = str(
+        truth_reveal.get("release_time_utc", estimate["release_time_utc"])
+    )
+    observation_time = str(
+        truth_reveal.get("observation_time_utc", estimate["observation_time_utc"])
+    )
+    playback_start = (
+        pd.Timestamp(truth_release_time) - pd.Timedelta(hours=4)
+    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+    alignment = {
+        **physics_validation,
+        **_sar_alignment(
+            case / "sar_input/sentinel1_vv_quicklook.png",
+            slick,
+            bbox,
+            observation_time,
+            satellite["acquisition_time_utc"],
+        ),
+    }
+    release_corridor = truth_reveal.get("release_corridor", [])
+    if known_source_id and release_corridor:
+        source_track = ais.loc[ais["mmsi"].astype(str) == known_source_id].copy()
+        source_track["timestamp_utc"] = pd.to_datetime(
+            source_track["timestamp_utc"], utc=True
+        )
+        source_track = source_track.sort_values("timestamp_utc")
+        seconds = source_track["timestamp_utc"].map(
+            lambda value: value.timestamp()
+        ).to_numpy(dtype=float)
+        target = pd.Timestamp(truth_release_time).timestamp()
+        source_longitude = float(
+            np.interp(target, seconds, source_track["longitude"].to_numpy(dtype=float))
+        )
+        source_latitude = float(
+            np.interp(target, seconds, source_track["latitude"].to_numpy(dtype=float))
+        )
+        alignment["sourceTrackReleaseErrorKm"] = haversine_km(
+            source_longitude,
+            source_latitude,
+            float(release_corridor[0]["longitude"]),
+            float(release_corridor[0]["latitude"]),
+        )
+        alignment["sourceTrackReleaseMatch"] = (
+            "PASS" if alignment["sourceTrackReleaseErrorKm"] <= 1.0 else "REVIEW"
+        )
+    else:
+        alignment["sourceTrackReleaseErrorKm"] = None
+        alignment["sourceTrackReleaseMatch"] = "UNAVAILABLE"
     payload = {
         "case": {
             "id": "corsica-2018-sealed-challenge" if use_challenge else "corsica-2018-hybrid",
             "name": "Corsica · Sealed Challenge" if use_challenge else "Corsica · 2018",
             "mode": "CONTROLLED DIGITAL TWIN" if use_challenge else "HYBRID SIMULATION",
-            "observationTime": estimate["observation_time_utc"],
+            "observationTime": observation_time,
             "releaseTime": estimate["release_time_utc"],
+            "truthReleaseTime": truth_release_time,
+            "releaseDurationMinutes": float(scenario.get("release_duration_minutes", 0.0)),
+            "playbackStart": playback_start,
+            "playbackEnd": observation_time,
             "decision": decision["decision"],
             "candidateCount": ranking["candidate_count"],
         },
@@ -112,10 +471,16 @@ def build_operations_dashboard(project_root: Path, output_path: Path) -> dict[st
         "satelliteImage": f"data:image/png;base64,{image}",
         "satellite": satellite,
         "slick": slick,
+        "slickTimeline": slick_timeline,
         "release": {
             **estimate["estimated_origin"],
             "radius90": estimate["credible_radius_90_km"],
         },
+        "truthRelease": (
+            truth_reveal.get("release_corridor", [{}])[0]
+            if truth_reveal.get("release_corridor")
+            else estimate["estimated_origin"]
+        ),
         "reverse": reverse_points,
         "tracks": tracks,
         "candidates": top_candidates,
@@ -125,13 +490,14 @@ def build_operations_dashboard(project_root: Path, output_path: Path) -> dict[st
         "digitalTwin": twin,
         "challenge": challenge_result,
         "scenario": scenario,
+        "alignment": alignment,
         "dossier": (
             "../challenge/dossier/evidence_dossier.html"
             if use_challenge
             else "../external_validation/corsica_2018/counterfactual_ais/run/dossier/evidence_dossier.html"
         ),
         "trafficSummary": (
-            f"{len(tracks)} pseudonymized historical GFW tracks"
+            f"{len(tracks)} pseudonymized historical GFW tracks with fictional scenario aliases"
             if use_challenge
             else "76 real historical tracks + 1 disclosed synthetic source track"
         ),
@@ -153,6 +519,9 @@ def build_operations_dashboard(project_root: Path, output_path: Path) -> dict[st
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(document, encoding="utf-8")
+    (output_path.parent / "alignment_report.json").write_text(
+        json.dumps(alignment, indent=2), encoding="utf-8"
+    )
     return {
         "status": "PASS",
         "output": str(output_path.resolve()),
@@ -160,6 +529,8 @@ def build_operations_dashboard(project_root: Path, output_path: Path) -> dict[st
         "candidate_cards": len(top_candidates),
         "mode": payload["case"]["mode"],
         "source": "sealed challenge" if use_challenge else "counterfactual replay",
+        "physics_replay": alignment["physicsReplay"],
+        "final_geometry_iou": alignment["finalGeometryIoU"],
     }
 
 
@@ -169,48 +540,62 @@ def _document(data: str) -> str:
 :root{--bg:#030b10;--panel:#081820;--panel2:#0c222c;--line:#173541;--ink:#ecfffb;--muted:#87a2aa;--cyan:#52e2dc;--amber:#ffbd59;--red:#ff7187;--green:#67e8a5}
 *{box-sizing:border-box}body{margin:0;overflow:hidden;background:var(--bg);color:var(--ink);font:13px/1.45 Inter,Segoe UI,Arial,sans-serif}button{font:inherit;color:inherit}button:focus-visible,input:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}.app{height:100vh;display:grid;grid-template-rows:62px minmax(0,1fr) 88px;background:radial-gradient(circle at 10% 0,#103640 0,transparent 28%),var(--bg)}
 header{display:flex;align-items:center;gap:18px;padding:0 18px;border-bottom:1px solid var(--line);background:#041118e8;backdrop-filter:blur(12px);z-index:20}.brand{display:flex;align-items:center;gap:10px;font-weight:900;letter-spacing:.15em}.mark{width:32px;height:32px;display:grid;place-items:center;border:1px solid #3a7777;border-radius:9px;color:var(--cyan)}.case{border-left:1px solid var(--line);padding-left:18px}.case b{display:block;font-size:14px}.case span,.source{color:var(--muted);font-size:10px}.badge{padding:6px 9px;border:1px solid #8d6d2c;border-radius:999px;color:var(--amber);font-size:9px;font-weight:900;letter-spacing:.1em}.spacer{flex:1}.server{font-size:9px;color:var(--muted)}.server.on{color:var(--green)}.primary,.soft{border-radius:9px;padding:9px 13px;cursor:pointer;font-weight:800}.primary{border:1px solid var(--cyan);background:var(--cyan);color:#031013}.soft{border:1px solid var(--line);background:#0a2028}.primary:disabled{opacity:.55;cursor:wait}
-.workspace{min-height:0;display:grid;grid-template-columns:minmax(0,1.28fr) minmax(340px,.72fr);gap:10px;padding:10px}.map-card,.side{min-height:0;border:1px solid var(--line);border-radius:16px;background:var(--panel);overflow:hidden}.map-card{position:relative}.map{position:absolute;inset:0;background:#06212a}.sar{width:100%;height:100%;opacity:.68;filter:contrast(1.22) saturate(.55);transition:.3s}.map-shade{position:absolute;inset:0;background:linear-gradient(90deg,rgba(0,29,37,.32),rgba(0,22,30,.02)),radial-gradient(circle at 55% 45%,transparent,#00101899);pointer-events:none}.overlay{position:absolute;inset:0;width:100%;height:100%}.gridline{stroke:#75d9d41c;stroke-width:1}.slick{fill:#ffbd5925;stroke:var(--amber);stroke-width:2;filter:drop-shadow(0 0 5px #ffbd59aa);opacity:0;transition:.5s}.slick.show{opacity:1}.release{fill:#52e2dc22;stroke:var(--cyan);stroke-width:2;opacity:0;transform-origin:center;filter:drop-shadow(0 0 12px #52e2dc)}.release.show{opacity:1;animation:pulse 2.2s infinite}.particle{fill:#8affee;opacity:0}.particle.show{opacity:.48}.track{fill:none;stroke:#d7ffff;stroke-width:1.2;opacity:0;stroke-dasharray:5 4}.track.show{opacity:.5}.track.top{stroke:var(--amber);stroke-width:2;opacity:.9}.ship{cursor:pointer;transition:opacity .2s}.ship path{fill:#79eee8;stroke:#01262c;stroke-width:1.2;filter:drop-shadow(0 2px 3px #001)}.ship.top path{fill:var(--amber)}.ship.dim{opacity:.18}.ship.hidden{display:none}.ship.selected path{stroke:white;stroke-width:2.2;filter:drop-shadow(0 0 6px white)}
-@keyframes pulse{50%{stroke-width:5;opacity:.6}}.map-tools{position:absolute;top:14px;left:14px;display:flex;gap:7px;z-index:5}.tool{border:1px solid #31515d;background:#04151dde;padding:8px 10px;border-radius:8px;cursor:pointer;font-weight:800}.tool[aria-pressed=true]{border-color:var(--cyan);color:var(--cyan)}.legend{position:absolute;left:14px;bottom:14px;display:flex;gap:12px;padding:8px 10px;border:1px solid #31515d;border-radius:9px;background:#04151dde;color:#bcd0d4;font-size:9px}.dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px}.map-status{position:absolute;right:14px;top:14px;padding:9px 11px;border-radius:9px;background:#04151dde;border:1px solid #31515d;text-align:right}.map-status b{display:block;color:var(--cyan)}.map-status span{font-size:9px;color:var(--muted)}
+.workspace{min-height:0;display:grid;grid-template-columns:minmax(0,1.28fr) minmax(340px,.72fr);gap:10px;padding:10px}.map-card,.side{min-height:0;border:1px solid var(--line);border-radius:16px;background:var(--panel);overflow:hidden}.map-card{position:relative}.map{position:absolute;inset:0;background:#06212a}.sar{width:100%;height:100%;opacity:.76;filter:contrast(1.18) saturate(.4);transition:.3s}.map-shade{position:absolute;inset:0;background:linear-gradient(90deg,rgba(0,29,37,.26),rgba(0,22,30,.01)),radial-gradient(circle at 55% 45%,transparent,#00101888);pointer-events:none}.overlay{position:absolute;inset:0;width:100%;height:100%}.gridline{stroke:#75d9d41c;stroke-width:1}.oil-return{fill:#000305d9;stroke:#5a787b;stroke-width:1.2;filter:drop-shadow(0 0 7px #000);opacity:.88;transition:opacity .35s}.detection{fill:none;stroke:var(--amber);stroke-width:2.2;stroke-dasharray:8 4;filter:drop-shadow(0 0 4px #ffbd59aa);opacity:0;transition:.3s}.detection.show{opacity:1}.release{fill:#52e2dc18;stroke:var(--cyan);stroke-width:2;opacity:0;transform-origin:center;filter:drop-shadow(0 0 12px #52e2dc)}.release.show{opacity:1;animation:pulse 2.2s infinite}.particle{fill:#8affee;opacity:0}.particle.show{opacity:.48}.traffic-trail{fill:none;stroke:#8ad8d3;stroke-width:1.05;opacity:.25}.traffic-trail.top{stroke:var(--amber);stroke-width:1.8;opacity:.7}.track{fill:none;stroke:#eafffb;stroke-width:1.8;opacity:.82;stroke-dasharray:7 4}.track.top{stroke:var(--amber);stroke-width:2.4}.report-dot{fill:#c9ffff;opacity:.65}.leak-pulse{fill:#ffbd5966;stroke:var(--amber);stroke-width:2;animation:pulse 1.2s infinite}.ship{cursor:pointer;opacity:1;transition:opacity .45s ease,filter .25s}.ship path{fill:#79eee8;stroke:#01262c;stroke-width:1.2;filter:drop-shadow(0 2px 3px #001)}.ship.top path{fill:var(--amber)}.ship.dim{opacity:.16}.ship.hidden{opacity:0;pointer-events:none}.ship.acquired path{animation:acquired .8s ease}.ship.selected path{stroke:white;stroke-width:2.2;filter:drop-shadow(0 0 6px white)}
+@keyframes pulse{50%{stroke-width:5;opacity:.55}}@keyframes acquired{0%{transform:scale(.35);opacity:0}55%{transform:scale(1.4);opacity:1}100%{transform:scale(1)}}.map-tools{position:absolute;top:14px;left:14px;display:flex;gap:7px;z-index:5}.tool{border:1px solid #31515d;background:#04151dde;padding:8px 10px;border-radius:8px;cursor:pointer;font-weight:800}.tool[aria-pressed=true]{border-color:var(--cyan);color:var(--cyan)}.legend{position:absolute;left:14px;bottom:14px;display:flex;gap:12px;padding:8px 10px;border:1px solid #31515d;border-radius:9px;background:#04151dde;color:#bcd0d4;font-size:9px}.dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px}.map-status{position:absolute;right:14px;top:14px;padding:9px 11px;border-radius:9px;background:#04151dde;border:1px solid #31515d;text-align:right}.map-status b{display:block;color:var(--cyan)}.map-status span{font-size:9px;color:var(--muted)}.coverage-live{position:absolute;right:14px;top:68px;padding:6px 9px;border-radius:8px;background:#04151dcc;border:1px solid #31515d;color:var(--muted);font-size:9px;z-index:5}.coverage-live b{color:var(--ink)}
 .tooltip{position:absolute;display:none;pointer-events:none;z-index:10;width:190px;padding:10px;border:1px solid #3a6570;border-radius:10px;background:#04151df2;box-shadow:0 12px 30px #0008}.tooltip.show{display:block}.tooltip b{display:block;font-size:13px}.tooltip span{display:block;color:var(--muted);font-size:10px;margin-top:3px}.tooltip em{color:var(--amber);font-style:normal}
 .side{display:grid;grid-template-rows:auto auto minmax(0,1fr);overflow:hidden}.side-head{padding:15px 16px 12px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:end}.eyebrow{font-size:9px;letter-spacing:.15em;color:var(--cyan);font-weight:900}.side-head h2{margin:3px 0 0;font:500 23px Georgia,serif}.count{color:var(--muted);font-size:10px}.decision-summary{margin:10px 11px 0;padding:11px 12px;border:1px solid var(--line);border-radius:11px;background:#06171d}.decision-summary small{display:block;color:var(--muted);font-size:8px;letter-spacing:.12em}.decision-summary b{display:block;margin:3px 0;color:var(--cyan);font-size:14px}.decision-summary span{color:var(--muted);font-size:9px}.decision-summary.abstain{border-color:#806532}.decision-summary.abstain b{color:var(--amber)}.side-scroll{overflow:auto;padding:11px}.candidates{display:grid;gap:7px}.candidate{display:grid;grid-template-columns:31px 1fr auto;gap:9px;align-items:center;width:100%;padding:10px;border:1px solid var(--line);border-radius:11px;background:#071a22;text-align:left;cursor:pointer}.candidate:hover,.candidate.active{border-color:#4e858c;background:#0b252e}.rank{width:28px;height:28px;display:grid;place-items:center;border-radius:8px;background:#102f38;color:var(--cyan);font-weight:900}.candidate:first-child .rank{background:#4b3b1c;color:var(--amber)}.candidate b{display:block}.candidate small{color:var(--muted)}.score{color:var(--amber);font-weight:900}.more{width:100%;border:0;background:none;color:var(--muted);padding:9px;cursor:pointer}.detail{margin-top:11px;padding:13px;border:1px solid var(--line);border-radius:12px;background:var(--panel2)}.detail-placeholder{text-align:center;color:var(--muted);padding:20px}.detail-top{display:flex;justify-content:space-between;gap:12px}.detail h3{margin:2px 0;font:500 20px Georgia,serif}.detail-id{color:var(--muted);font:10px monospace}.metrics{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:11px 0}.metric{padding:9px;border-radius:9px;background:#06171d}.metric span{display:block;color:var(--muted);font-size:9px}.metric b{display:block;margin-top:3px}.bar{height:4px;background:#14313a;border-radius:5px;margin-top:5px;overflow:hidden}.bar i{display:block;height:100%;background:var(--cyan)}.detail-actions{display:flex;gap:6px}.detail-actions button,.detail-actions a{flex:1;padding:8px;border:1px solid var(--line);border-radius:8px;background:#09232b;color:var(--ink);text-align:center;text-decoration:none;cursor:pointer;font-size:10px;font-weight:800}.notice{margin-top:9px;color:#c9b77f;font-size:9px;border-left:2px solid var(--amber);padding-left:8px}
-.bottom{display:grid;grid-template-columns:minmax(0,1fr) 390px;gap:10px;padding:0 10px 10px}.timeline,.weather{border:1px solid var(--line);border-radius:14px;background:var(--panel);min-width:0}.timeline{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:12px;padding:12px 14px}.play{width:38px;height:38px;border-radius:50%;border:1px solid #39717a;background:#0a2931;cursor:pointer}.timebox{font:11px monospace;color:var(--cyan)}input[type=range]{width:100%;accent-color:var(--cyan)}.range-labels{display:flex;justify-content:space-between;color:var(--muted);font-size:8px}.weather{display:grid;grid-template-columns:1fr 1fr 1fr}.weather button{border:0;border-right:1px solid var(--line);background:transparent;text-align:left;padding:12px;cursor:pointer}.weather button:last-child{border:0}.weather span{display:block;color:var(--muted);font-size:8px;text-transform:uppercase}.weather b{display:block;font-size:15px;margin-top:4px}.arrow{display:inline-block;color:var(--cyan);margin-right:4px}
+.bottom{display:grid;grid-template-columns:minmax(0,1fr) 390px;gap:10px;padding:0 10px 10px}.timeline,.weather{border:1px solid var(--line);border-radius:14px;background:var(--panel);min-width:0}.timeline{display:grid;grid-template-columns:auto 1fr 150px;align-items:center;gap:12px;padding:12px 14px}.play{width:38px;height:38px;border-radius:50%;border:1px solid #39717a;background:#0a2931;cursor:pointer}.time-readout{text-align:right}.time-readout b{display:block;color:var(--amber);font-size:9px;letter-spacing:.08em}.timebox{display:block;font:10px monospace;color:var(--cyan)}.range-wrap{position:relative;height:24px;padding-top:4px}input[type=range]{position:relative;z-index:2;width:100%;accent-color:var(--cyan)}.event-mark{position:absolute;top:0;height:22px;border-left:1px solid var(--amber);z-index:1}.event-mark.obs{border-color:var(--cyan)}.event-mark span{position:absolute;top:-10px;left:4px;white-space:nowrap;color:var(--amber);font-size:7px}.event-mark.obs span{color:var(--cyan);transform:translateX(-100%);left:-4px}.range-labels{display:flex;justify-content:space-between;color:var(--muted);font-size:8px}.weather{display:grid;grid-template-columns:1fr 1fr 1fr}.weather button{border:0;border-right:1px solid var(--line);background:transparent;text-align:left;padding:12px;cursor:pointer}.weather button:last-child{border:0}.weather span{display:block;color:var(--muted);font-size:8px;text-transform:uppercase}.weather b{display:block;font-size:15px;margin-top:4px}.arrow{display:inline-block;color:var(--cyan);margin-right:4px}.profile-line{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}.profile-line span{padding:4px 6px;border:1px solid var(--line);border-radius:6px;color:#bfd2d6;font-size:9px}
 .popover{position:absolute;left:14px;top:54px;display:none;padding:9px;border:1px solid #31515d;border-radius:10px;background:#04151df5;z-index:8}.popover.show{display:grid;gap:7px}.popover label{display:flex;gap:8px;align-items:center;font-size:11px}.phase{position:absolute;inset:auto 20px 22px 20px;display:none;grid-template-columns:repeat(4,1fr);gap:6px;z-index:7}.phase.show{display:grid}.phase div{padding:8px;border:1px solid #31515d;background:#04151ded;border-radius:8px;color:var(--muted);font-size:9px}.phase div.on{border-color:var(--cyan);color:var(--cyan)}.phase div.done{color:var(--green)}
 dialog{width:min(620px,calc(100% - 24px));padding:0;border:1px solid #37616c;border-radius:16px;background:#071820;color:var(--ink);box-shadow:0 30px 90px #000c}dialog::backdrop{background:#010609cc;backdrop-filter:blur(4px)}.modal{padding:19px}.modal-head{display:flex;justify-content:space-between}.modal h2{margin:4px 0 12px;font:500 28px Georgia,serif}.close{border:0;background:none;color:var(--muted);font-size:24px;cursor:pointer}.fact{display:grid;grid-template-columns:160px 1fr;gap:10px;padding:9px 0;border-top:1px solid var(--line)}.fact span{color:var(--muted)}.disclosure{padding:11px;border-left:3px solid var(--amber);background:#2e250f55;color:#dec991;margin-top:12px}.spark{width:100%;height:150px;background:#05141a;border-radius:10px}.hidden{display:none!important}
 @media(max-width:900px){body{overflow:auto}.app{height:auto;min-height:100vh;grid-template-rows:auto auto auto}header{padding:10px;flex-wrap:wrap}.workspace{grid-template-columns:1fr}.map-card{height:58vh}.side{max-height:none}.bottom{grid-template-columns:1fr}.weather{min-height:70px}.server{display:none}}
 </style></head><body><div class="app"><header><div class="brand"><div class="mark">E</div>ESPADA</div><div class="case"><b id="caseName"></b><span id="caseSub">Sealed evidence replay</span></div><div class="badge" id="modeBadge"></div><div class="spacer"></div><span class="server" id="server">SAVED EVIDENCE MODE</span><button class="soft" id="details">Case details</button><button class="primary" id="run">▶ Run analysis</button></header>
-<main class="workspace"><section class="map-card" id="mapCard"><img class="sar" id="sar" alt="Real Sentinel-1 context"><div class="map-shade"></div><svg class="overlay" id="overlay" viewBox="0 0 1000 650" preserveAspectRatio="none"><g id="grid"></g><g id="slickLayer"></g><g id="particleLayer"></g><g id="releaseLayer"></g><g id="trackLayer"></g><g id="shipLayer"></g></svg><div class="map-tools"><button class="tool" id="layers">☷ Layers</button><button class="tool" id="satellite" aria-pressed="true">◐ Satellite</button><button class="tool" id="reset">↺ Reset</button></div><div class="popover" id="layerMenu"><label><input type="checkbox" data-layer="slick" checked> Oil slick</label><label><input type="checkbox" data-layer="reverse" checked> Reverse drift</label><label><input type="checkbox" data-layer="ships" checked> Ships</label><label><input type="checkbox" data-layer="tracks"> Selected track</label></div><div class="map-status"><b id="mapStatus">REAL SENTINEL-1 CONTEXT</b><span id="mapSub">Run analysis to trace the controlled slick</span></div><div class="legend"><span><i class="dot" style="background:#52e2dc"></i>Ships</span><span><i class="dot" style="background:#ffbd59"></i>Oil</span><span><i class="dot" style="background:#72f1e6"></i>Probable origin</span></div><div class="tooltip" id="tooltip"></div><div class="phase" id="phase"><div>01 · Observe</div><div>02 · Reverse</div><div>03 · Rank</div><div>04 · Verify</div></div></section>
+<main class="workspace"><section class="map-card" id="mapCard"><img class="sar" id="sar" alt="Real Sentinel-1 context"><div class="map-shade"></div><svg class="overlay" id="overlay" viewBox="0 0 1000 650" preserveAspectRatio="none"><defs><marker id="routeArrow" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto"><path d="M0 0 L7 3.5 L0 7 Z" fill="#ffbd59"/></marker></defs><g id="grid"></g><g id="slickLayer"></g><g id="detectionLayer"></g><g id="particleLayer"></g><g id="releaseLayer"></g><g id="trailLayer"></g><g id="trackLayer"></g><g id="leakLayer"></g><g id="shipLayer"></g></svg><div class="map-tools"><button class="tool" id="layers">☷ Layers</button><button class="tool" id="satellite" aria-pressed="false">◐ Raw SAR</button><button class="tool" id="alignment">✓ Alignment</button><button class="tool" id="reset">↺ Reset</button></div><div class="popover" id="layerMenu"><label><input type="checkbox" data-layer="slick" checked> Simulated oil return</label><label><input type="checkbox" data-layer="detection" checked> Detection boundary</label><label><input type="checkbox" data-layer="reverse" checked> Reverse drift</label><label><input type="checkbox" data-layer="ships" checked> Ships</label><label><input type="checkbox" data-layer="trails" checked> Recent AIS trails</label></div><div class="map-status"><b id="mapStatus">PRE-RELEASE · NO SLICK</b><span id="mapSub">Press play to replay the event, or run the analysis</span></div><div class="coverage-live"><b id="reportingCount">0 reporting</b> · <span id="missingCount">0 without a current AIS fix</span></div><div class="legend"><span><i class="dot" style="background:#52e2dc"></i>Reported ship</span><span><i class="dot" style="background:#050709;border:1px solid #ffbd59"></i>Simulated oil</span><span><i class="dot" style="background:#72f1e6"></i>Probable origin</span></div><div class="tooltip" id="tooltip"></div><div class="phase" id="phase"><div>01 · Observe</div><div>02 · Reverse</div><div>03 · Rank</div><div>04 · Verify</div></div></section>
 <aside class="side"><div class="side-head"><div><div class="eyebrow">INVESTIGATION SHORTLIST</div><h2>Candidate vessels</h2></div><div class="count"><span id="candidateCount"></span><br>Top 3 after analysis</div></div><div class="decision-summary" id="decisionSummary"><small>OPERATIONAL DECISION</small><b id="decisionState">AWAITING ANALYSIS</b><span id="decisionReason">No vessel has been nominated.</span></div><div class="side-scroll"><div class="candidates" id="candidateList"></div><button class="more hidden" id="more">Show more candidates</button><div class="detail" id="detail"><div class="detail-placeholder">Run the analysis to create a reviewable shortlist.</div></div></div></aside></main>
-<footer class="bottom"><section class="timeline"><button class="play" id="play" aria-label="Play timeline">▶</button><div><input id="time" type="range" min="0" max="1000" value="520"><div class="range-labels"><span id="startTime"></span><span>Drag to replay ship movement</span><span id="endTime"></span></div></div><div class="timebox" id="timeBox"></div></section><section class="weather"><button data-env="wind"><span>Wind</span><b><i class="arrow" id="windArrow">→</i><span id="windValue" style="display:inline"></span></b></button><button data-env="current"><span>Surface current</span><b><i class="arrow" id="currentArrow">→</i><span id="currentValue" style="display:inline"></span></b></button><button data-env="coverage"><span>AIS coverage</span><b id="coverage">76 vessels</b></button></section></footer></div>
+<footer class="bottom"><section class="timeline"><button class="play" id="play" aria-label="Play timeline">▶</button><div><div class="range-wrap"><i class="event-mark" id="leakMark"><span>LEAK BEGINS</span></i><i class="event-mark obs" id="obsMark"><span>SAR OBSERVATION</span></i><input id="time" type="range" min="0" max="1000" value="0"></div><div class="range-labels"><span id="startTime"></span><span>Actual AIS timing · gaps remain gaps</span><span id="endTime"></span></div></div><div class="time-readout"><b id="eventState">PRE-RELEASE</b><span class="timebox" id="timeBox"></span></div></section><section class="weather"><button data-env="wind"><span>Wind</span><b><i class="arrow" id="windArrow">→</i><span id="windValue" style="display:inline"></span></b></button><button data-env="current"><span>Surface current</span><b><i class="arrow" id="currentArrow">→</i><span id="currentValue" style="display:inline"></span></b></button><button data-env="coverage"><span>AIS reporting now</span><b id="coverage">0 / 0</b></button></section></footer></div>
 <dialog id="modal"><div class="modal"><div class="modal-head"><div><div class="eyebrow" id="modalEyebrow">CASE DETAILS</div><h2 id="modalTitle"></h2></div><button class="close" id="close">×</button></div><div id="modalBody"></div></div></dialog>
 <script>const DATA=__DATA__;
-const $=id=>document.getElementById(id),bbox=DATA.bbox,W=1000,H=650;let selected=null,showCount=3,playing=false,ran=false,analysisComplete=false,engine=false,runTimer=[];const times=DATA.tracks.flatMap(t=>t.points.map(p=>Date.parse(p.t))),minT=Math.min(...times),maxT=Math.max(...times);const releaseT=Date.parse(DATA.case.releaseTime),obsT=Date.parse(DATA.case.observationTime);
+const $=id=>document.getElementById(id),bbox=DATA.bbox,W=1000,H=650;let selected=null,showCount=3,playing=false,ran=false,analysisComplete=false,analysisRunning=false,detectionAvailable=false,rawMode=false,engine=false,runTimer=[],lastSlickFrame=-2;const minT=Date.parse(DATA.case.playbackStart),maxT=Date.parse(DATA.case.playbackEnd),releaseT=Date.parse(DATA.case.releaseTime),truthReleaseT=Date.parse(DATA.case.truthReleaseTime),releaseEndT=truthReleaseT+Number(DATA.case.releaseDurationMinutes||0)*60000,obsT=Date.parse(DATA.case.observationTime);
 function pct(v){return v==null?'N/A':(v*100).toFixed(1)+'%'}function num(v,d=1){return v==null?'N/A':Number(v).toFixed(d)}function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}function point(lon,lat){return{x:(lon-bbox[0])/(bbox[2]-bbox[0])*W,y:(bbox[3]-lat)/(bbox[3]-bbox[1])*H}}function geoPaths(g){const polys=g.type==='Polygon'?[g.coordinates]:g.coordinates;return polys.map(poly=>poly.map(ring=>ring.map((c,i)=>{const p=point(c[0],c[1]);return(i?'L':'M')+p.x.toFixed(1)+' '+p.y.toFixed(1)}).join(' ')+' Z').join(' '))}
-function init(){ $('caseName').textContent=DATA.case.name;$('caseSub').textContent=DATA.case.mode==='CONTROLLED DIGITAL TWIN'?'Sealed-ground-truth attribution test':'Historical evidence replay';$('modeBadge').textContent=DATA.case.mode;$('sar').src=DATA.satelliteImage;$('candidateCount').textContent=DATA.case.candidateCount+' compared';$('coverage').textContent=DATA.case.candidateCount+' tracked';$('startTime').textContent=new Date(minT).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit'});$('endTime').textContent=new Date(maxT).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit'});grid();slick();particles();ships();renderCandidates();setTime(releaseT);health()}
+function init(){ $('caseName').textContent=DATA.case.name;$('caseSub').textContent=DATA.case.mode==='CONTROLLED DIGITAL TWIN'?'Real forcing · real AIS motion · controlled slick':'Historical evidence replay';$('modeBadge').textContent=DATA.case.mode;$('sar').src=DATA.satelliteImage;$('candidateCount').textContent=DATA.case.candidateCount+' compared';$('startTime').textContent=stamp(minT);$('endTime').textContent=stamp(maxT);$('leakMark').style.left=((truthReleaseT-minT)/(maxT-minT)*100)+'%';$('obsMark').style.left=((obsT-minT)/(maxT-minT)*100)+'%';grid();slick();particles();ships();renderCandidates();setTime(minT);health()}
 function grid(){let s='';for(let i=1;i<6;i++)s+=`<line class="gridline" x1="${i*W/6}" y1="0" x2="${i*W/6}" y2="${H}"/><line class="gridline" x1="0" y1="${i*H/6}" x2="${W}" y2="${i*H/6}"/>`;$('grid').innerHTML=s}
-function slick(){ $('slickLayer').innerHTML=geoPaths(DATA.slick.features[0].geometry).map(d=>`<path class="slick" d="${d}"/>`).join('')}
+function slick(){const finalPaths=geoPaths(DATA.slick.features[0].geometry);$('detectionLayer').innerHTML=finalPaths.map(d=>`<path class="detection" d="${d}"/>`).join('');setSlickTime(minT,true)}
+function layerOn(name){const control=document.querySelector(`[data-layer="${name}"]`);return !control||control.checked}
+function setSlickTime(t,force=false){let frameIndex=-1;for(let i=0;i<DATA.slickTimeline.length;i++){if(Date.parse(DATA.slickTimeline[i].time)<=t)frameIndex=i}if(force||frameIndex!==lastSlickFrame){lastSlickFrame=frameIndex;const frame=frameIndex>=0?DATA.slickTimeline[frameIndex]:null;if(!rawMode&&layerOn('slick')&&t>=truthReleaseT){if(frame&&frame.geometry){$('slickLayer').innerHTML=geoPaths(frame.geometry).map(d=>`<path class="oil-return" d="${d}"/>`).join('')}else{const p=point(DATA.truthRelease.longitude,DATA.truthRelease.latitude);$('slickLayer').innerHTML=`<circle class="oil-return" cx="${p.x}" cy="${p.y}" r="3"/>`}}else $('slickLayer').innerHTML=''}const detectionOn=!rawMode&&layerOn('detection')&&detectionAvailable&&t>=obsT;document.querySelectorAll('.detection').forEach(x=>x.classList.toggle('show',detectionOn));$('leakLayer').innerHTML='';if(!rawMode&&analysisComplete&&t>=truthReleaseT&&t<=releaseEndT){const source=DATA.tracks.find(track=>track.knownSource),pos=source?positionAt(source,t):null,p=pos?point(pos.lon,pos.lat):point(DATA.truthRelease.longitude,DATA.truthRelease.latitude);$('leakLayer').innerHTML=`<circle class="leak-pulse" cx="${p.x}" cy="${p.y}" r="8"/>`}updateEvent(t)}
+function updateEvent(t){let state='PRE-RELEASE',status='PRE-RELEASE · NO SLICK',sub='AIS traffic only; no oil exists yet';if(t>=truthReleaseT&&t<releaseEndT){state='RELEASE IN PROGRESS';status='CONTROLLED RELEASE ACTIVE';sub='Oil is entering the water from the moving source track'}else if(t>=releaseEndT&&t<obsT){state='SLICK DRIFTING';status='SLICK ADVECTING';sub='Particle plume follows currents, windage and diffusion'}else if(t>=obsT){state='SAR OBSERVATION';status=rawMode?'RAW SAR · NO OIL CLAIM':'SIMULATED SAR OIL RETURN';sub=rawMode?'Unaltered Sentinel-1 context':'Physics-generated oil return, georegistered to the SAR crop'}$('eventState').textContent=state;if(!analysisRunning){$('mapStatus').textContent=status;$('mapSub').textContent=sub}}
 function particles(){const c=centroid();$('particleLayer').innerHTML=DATA.reverse.map((v,i)=>{const e=point(v[0],v[1]);return`<circle class="particle" cx="${c.x}" cy="${c.y}" r="${1.5+(i%3)*.35}" data-x="${e.x}" data-y="${e.y}"/>`}).join('');const r=point(DATA.release.longitude,DATA.release.latitude);const px=Math.max(16,DATA.release.radius90/90*W/(bbox[2]-bbox[0]));$('releaseLayer').innerHTML=`<circle class="release" cx="${r.x}" cy="${r.y}" r="${Math.min(95,px)}"/><circle class="release" cx="${r.x}" cy="${r.y}" r="5"/>`}
 function centroid(){let x=0,y=0,n=0;const g=DATA.slick.features[0].geometry,polys=g.type==='Polygon'?[g.coordinates]:g.coordinates;polys.forEach(p=>p[0].forEach(c=>{const q=point(c[0],c[1]);x+=q.x;y+=q.y;n++}));return{x:x/n,y:y/n}}
 const boat='<path d="M0 -10 L6 7 L0 4 L-6 7 Z"/>';
 function ships(){ $('shipLayer').innerHTML=DATA.tracks.map(t=>`<g class="ship" data-id="${t.mmsi}" tabindex="0" role="button" aria-label="${esc(t.name)}">${boat}</g>`).join('');document.querySelectorAll('.ship').forEach(el=>{el.addEventListener('mouseenter',e=>tip(e,el.dataset.id));el.addEventListener('mousemove',moveTip);el.addEventListener('mouseleave',()=> $('tooltip').classList.remove('show'));el.addEventListener('click',()=>select(el.dataset.id));el.addEventListener('keydown',e=>{if(e.key==='Enter')select(el.dataset.id)})})}
-function positionAt(track,t){const p=track.points,q=p.map(x=>Date.parse(x.t));if(t<q[0]-5400000||t>q[q.length-1]+5400000)return null;let i=q.findIndex(v=>v>=t);if(i===-1)i=q.length-1;if(i===0)return Math.abs(q[0]-t)<=5400000?{...p[0],h:0}:null;const a=p[i-1],b=p[i],ta=q[i-1],tb=q[i];if(tb-ta>21600000)return Math.min(t-ta,tb-t)<=5400000?{...(t-ta<tb-t?a:b),h:0}:null;const f=(t-ta)/(tb-ta),dx=b.lon-a.lon,dy=b.lat-a.lat;return{lon:a.lon+dx*f,lat:a.lat+dy*f,h:Math.atan2(dx,-dy)*180/Math.PI}}
-function setTime(t){const val=Math.max(minT,Math.min(maxT,t));$('time').value=((val-minT)/(maxT-minT)*1000).toFixed(0);$('timeBox').textContent=new Date(val).toISOString().slice(0,16).replace('T',' ')+' UTC';DATA.tracks.forEach(track=>{const el=document.querySelector(`.ship[data-id="${track.mmsi}"]`),pos=positionAt(track,val);if(!pos){el.classList.add('hidden');return}el.classList.remove('hidden');const p=point(pos.lon,pos.lat);el.setAttribute('transform',`translate(${p.x} ${p.y}) rotate(${pos.h}) scale(${track.rank&&track.rank<=3?1.15:.82})`)});environment(val);if(selected)drawTrack(DATA.tracks.find(t=>t.mmsi===selected))}
-function tip(e,id){const t=DATA.tracks.find(x=>x.mmsi===id),box=$('tooltip');box.innerHTML=analysisComplete?`<b>${esc(t.name)}</b><span>${t.rank?'Rank #'+t.rank+' · <em>'+pct(t.score)+'</em> evidence':'Background traffic'}</span><span>${t.knownSource?'Sealed truth match':'Pseudonymized historical AIS'}</span><span>Click for evidence</span>`:`<b>${esc(t.name)}</b><span>Pseudonymized historical AIS track</span><span>Run analysis to calculate evidence</span>`;box.classList.add('show');moveTip(e)}function moveTip(e){const card=$('mapCard').getBoundingClientRect(),box=$('tooltip');box.style.left=Math.min(card.width-205,e.clientX-card.left+12)+'px';box.style.top=Math.min(card.height-95,e.clientY-card.top+12)+'px'}
-function renderCandidates(){if(!analysisComplete){$('candidateList').innerHTML='<div class="detail-placeholder">No ranking yet. Run the analysis to compare every vessel.</div>';$('more').classList.add('hidden');return}const list=DATA.candidates.slice(0,showCount);$('candidateList').innerHTML=list.map(t=>`<button class="candidate ${selected===t.mmsi?'active':''}" data-id="${t.mmsi}"><span class="rank">${t.rank}</span><span><b>${esc(t.name)}</b><small>${t.knownSource?'Sealed source recovered':'Pseudonymized AIS vessel'} · ${num(t.forwardError,2)} km replay</small></span><span class="score">${pct(t.score)}</span></button>`).join('');document.querySelectorAll('.candidate').forEach(b=>b.onclick=()=>select(b.dataset.id));$('more').classList.remove('hidden');$('more').textContent=showCount===3?'Show more candidates':'Show Top 3 only'}
-function select(id){selected=id;const t=DATA.tracks.find(x=>x.mmsi===id);document.querySelectorAll('.ship').forEach(s=>{s.classList.toggle('selected',s.dataset.id===id);s.classList.toggle('dim',s.dataset.id!==id)});drawTrack(t);if(!analysisComplete){$('detail').innerHTML=`<div class="detail-top"><div><div class="eyebrow">TRACKED VESSEL</div><h3>${esc(t.name)}</h3><div class="detail-id">ID ${esc(t.mmsi)}</div></div></div><div class="notice">The vessel is visible in AIS, but no attribution score exists until the analysis runs.</div>`;return}renderCandidates();$('detail').innerHTML=`<div class="detail-top"><div><div class="eyebrow">${t.knownSource?'SEALED SOURCE · RANK #'+t.rank:'RANK #'+t.rank}</div><h3>${esc(t.name)}</h3><div class="detail-id">ID ${esc(t.mmsi)}</div></div><div class="score">${pct(t.score)}</div></div><div class="metrics"><div class="metric"><span>Origin presence</span><b>${pct(t.presence)}</b><div class="bar"><i style="width:${(t.presence||0)*100}%"></i></div></div><div class="metric"><span>Forward agreement</span><b>${pct(t.forward)}</b><div class="bar"><i style="width:${(t.forward||0)*100}%"></i></div></div><div class="metric"><span>Track quality</span><b>${pct(t.quality)}</b></div><div class="metric"><span>AIS gap</span><b>${esc((t.silence||'not evaluated').replaceAll('_',' '))}</b></div></div><div class="detail-actions"><button id="replayVessel">Replay track</button><button id="why">Why ranked?</button><a href="${DATA.dossier}" target="_blank">Dossier ↗</a></div><div class="notice">Candidate evidence supports analyst review only. It is not a guilt probability.</div>`;$('replayVessel').onclick=()=>{setTime(Math.max(minT,Date.parse(t.bestTime||DATA.case.releaseTime)-7200000));if(!playing)togglePlay()};$('why').onclick=()=>why(t)}
-function drawTrack(t){if(!t){$('trackLayer').innerHTML='';return}const pts=t.points.map(p=>point(p.lon,p.lat));$('trackLayer').innerHTML=`<polyline class="track show ${t.rank===1?'top':''}" points="${pts.map(p=>p.x+','+p.y).join(' ')}"/>`}
+function positionAt(track,t){const p=track.points,q=p.map(x=>Date.parse(x.t));if(t<q[0]||t>q[q.length-1])return null;let i=q.findIndex(v=>v>=t);if(i<0)return null;if(i===0)return{...p[0],h:0,reported:true};const a=p[i-1],b=p[i],ta=q[i-1],tb=q[i];if(tb-ta>10800000)return null;const f=Math.max(0,Math.min(1,(t-ta)/(tb-ta))),dx=b.lon-a.lon,dy=b.lat-a.lat;return{lon:a.lon+dx*f,lat:a.lat+dy*f,h:Math.atan2(dx,-dy)*180/Math.PI,reported:Math.min(t-ta,tb-t)<=2100000}}
+function trackSegments(track,t,windowMs=null){const points=track.points.filter(p=>Date.parse(p.t)<=t&&(!windowMs||Date.parse(p.t)>=t-windowMs)),segments=[];let segment=[];points.forEach(p=>{if(segment.length&&Date.parse(p.t)-Date.parse(segment[segment.length-1].t)>10800000){if(segment.length>1)segments.push(segment);segment=[]}segment.push(p)});if(segment.length>1)segments.push(segment);return segments}
+function drawTrafficTrails(t){if(!layerOn('trails')){$('trailLayer').innerHTML='';return}$('trailLayer').innerHTML=DATA.tracks.flatMap(track=>trackSegments(track,t,21600000).map(segment=>{const pts=segment.map(p=>point(p.lon,p.lat));return`<polyline class="traffic-trail ${analysisComplete&&track.rank===1?'top':''}" points="${pts.map(p=>p.x+','+p.y).join(' ')}"/>`})).join('')}
+function setTime(t){const val=Math.max(minT,Math.min(maxT,t));$('time').value=((val-minT)/(maxT-minT)*1000).toFixed(0);$('timeBox').textContent=new Date(val).toISOString().slice(0,16).replace('T',' ')+' UTC';let reporting=0;DATA.tracks.forEach(track=>{const el=document.querySelector(`.ship[data-id="${track.mmsi}"]`),pos=positionAt(track,val),wasHidden=el.classList.contains('hidden');if(!pos){el.classList.add('hidden');return}reporting++;el.classList.remove('hidden');if(wasHidden){el.classList.add('acquired');setTimeout(()=>el.classList.remove('acquired'),850)}const p=point(pos.lon,pos.lat);el.setAttribute('transform',`translate(${p.x} ${p.y}) rotate(${pos.h}) scale(${analysisComplete&&track.rank&&track.rank<=3?1.15:.82})`)});$('reportingCount').textContent=reporting+' reporting';$('missingCount').textContent=(DATA.tracks.length-reporting)+' in AIS gaps';$('coverage').textContent=reporting+' / '+DATA.tracks.length;drawTrafficTrails(val);environment(val);setSlickTime(val);if(selected)drawTrack(DATA.tracks.find(t=>t.mmsi===selected),val)}
+function tip(e,id){const t=DATA.tracks.find(x=>x.mmsi===id),box=$('tooltip'),current=minT+Number($('time').value)/1000*(maxT-minT),live=Boolean(positionAt(t,current));box.innerHTML=analysisComplete?`<b>${esc(t.name)}</b><span>${esc(t.vesselType)} · ${esc(t.flag)}</span><span>${live?'AIS reporting now':'No current AIS fix'} · ${num(t.medianSpeedKnots,1)} kn median</span><span>${t.rank?'Rank #'+t.rank+' · <em>'+pct(t.score)+'</em> comparative evidence':'Background traffic'}</span><span>Click for full evidence</span>`:`<b>${esc(t.name)}</b><span>${esc(t.vesselType)} · ${esc(t.flag)}</span><span>${live?'AIS reporting now':'No current AIS fix'}</span><span>Scenario alias on a real historical motion track</span>`;box.classList.add('show');moveTip(e)}function moveTip(e){const card=$('mapCard').getBoundingClientRect(),box=$('tooltip');box.style.left=Math.min(card.width-205,e.clientX-card.left+12)+'px';box.style.top=Math.min(card.height-125,e.clientY-card.top+12)+'px'}
+function stamp(value){return new Date(value).toISOString().slice(5,16).replace('T',' ')+' UTC'}
+function profile(t){return`<div class="profile-line"><span>${esc(t.vesselType)}</span><span>Flag ${esc(t.flag)}</span><span>${num(t.lengthM,0)} × ${num(t.beamM,0)} m</span><span>Draught ${num(t.draughtM,1)} m</span><span>${num(t.medianSpeedKnots,1)} kn median</span></div><div class="fact"><span>Motion state</span><b>${esc(t.motionStatus)}</b></div><div class="fact"><span>AIS reports retained</span><b>${t.reportCount}</b></div><div class="fact"><span>Observed window</span><b>${stamp(t.coverageStart)} — ${stamp(t.coverageEnd)}</b></div><div class="notice">${esc(t.identityStatus)}. The alias is not a claim about the real vessel's identity.</div>`}
+function renderCandidates(){if(!analysisComplete){$('candidateList').innerHTML='<div class="detail-placeholder">No ranking yet. Run the analysis to compare every vessel.</div>';$('more').classList.add('hidden');return}const list=DATA.candidates.slice(0,showCount);$('candidateList').innerHTML=list.map(t=>`<button class="candidate ${selected===t.mmsi?'active':''}" data-id="${t.mmsi}"><span class="rank">${t.rank}</span><span><b>${esc(t.name)}</b><small>${esc(t.vesselType)} · ${num(t.forwardError,2)} km replay</small></span><span class="score">${pct(t.score)}</span></button>`).join('');document.querySelectorAll('.candidate').forEach(b=>b.onclick=()=>select(b.dataset.id));$('more').classList.remove('hidden');$('more').textContent=showCount===3?'Show more candidates':'Show Top 3 only'}
+function select(id){selected=id;const t=DATA.tracks.find(x=>x.mmsi===id),current=minT+Number($('time').value)/1000*(maxT-minT);document.querySelectorAll('.ship').forEach(s=>{s.classList.toggle('selected',s.dataset.id===id);s.classList.toggle('dim',s.dataset.id!==id)});drawTrack(t,current);if(!analysisComplete){$('detail').innerHTML=`<div class="detail-top"><div><div class="eyebrow">TRACKED VESSEL · ${esc(t.registry)}</div><h3>${esc(t.name)}</h3></div></div>${profile(t)}<div class="notice">No attribution score exists until the analysis runs.</div>`;return}renderCandidates();$('detail').innerHTML=`<div class="detail-top"><div><div class="eyebrow">${t.knownSource?'SEALED SOURCE · RANK #'+t.rank:'RANK #'+t.rank} · ${esc(t.registry)}</div><h3>${esc(t.name)}</h3></div><div class="score">${pct(t.score)}</div></div>${profile(t)}<div class="metrics"><div class="metric"><span>Origin presence</span><b>${pct(t.presence)}</b><div class="bar"><i style="width:${(t.presence||0)*100}%"></i></div></div><div class="metric"><span>Forward agreement</span><b>${pct(t.forward)}</b><div class="bar"><i style="width:${(t.forward||0)*100}%"></i></div></div><div class="metric"><span>Track quality</span><b>${pct(t.quality)}</b></div><div class="metric"><span>AIS gap</span><b>${esc((t.silence||'not evaluated').replaceAll('_',' '))}</b></div></div><div class="detail-actions"><button id="replayVessel">Replay event</button><button id="why">Why ranked?</button><a href="${DATA.dossier}" target="_blank">Dossier ↗</a></div><div class="notice">Comparative evidence supports analyst review only. It is not a guilt probability.</div>`;$('replayVessel').onclick=()=>{setTime(minT);if(!playing)togglePlay()};$('why').onclick=()=>why(t)}
+function drawTrack(t,current=maxT){if(!t){$('trackLayer').innerHTML='';return}const segments=trackSegments(t,current,null),lines=segments.map(segment=>{const pts=segment.map(p=>point(p.lon,p.lat));return`<polyline class="track ${t.rank===1?'top':''}" marker-end="url(#routeArrow)" points="${pts.map(p=>p.x+','+p.y).join(' ')}"/>`}).join(''),dots=t.points.filter(p=>Date.parse(p.t)<=current).map(p=>{const q=point(p.lon,p.lat);return`<circle class="report-dot" cx="${q.x}" cy="${q.y}" r="2"/>`}).join('');$('trackLayer').innerHTML=lines+dots}
 function environment(t){const e=DATA.environment.reduce((a,b)=>Math.abs(Date.parse(b.time_utc)-t)<Math.abs(Date.parse(a.time_utc)-t)?b:a);vector('wind',e.wind_east_ms,e.wind_north_ms,'m/s');vector('current',e.current_east_ms,e.current_north_ms,'m/s')}
 function vector(name,e,n,unit){const speed=Math.hypot(e,n),deg=Math.atan2(e,-n)*180/Math.PI;$(name+'Arrow').style.transform=`rotate(${deg}deg)`;$(name+'Value').textContent=speed.toFixed(name==='wind'?1:2)+' '+unit}
-function togglePlay(){playing=!playing;$('play').textContent=playing?'❚❚':'▶';let last=performance.now();function frame(now){if(!playing)return;let t=minT+Number($('time').value)/1000*(maxT-minT);t+=(now-last)*80;last=now;if(t>=maxT){playing=false;$('play').textContent='▶';t=minT}setTime(t);requestAnimationFrame(frame)}if(playing)requestAnimationFrame(frame)}
+function togglePlay(){playing=!playing;$('play').textContent=playing?'❚❚':'▶';if(playing&&Number($('time').value)>=999)setTime(minT);let last=performance.now();function frame(now){if(!playing)return;let t=minT+Number($('time').value)/1000*(maxT-minT);t+=(maxT-minT)*(now-last)/14000;last=now;if(t>=maxT){t=maxT;playing=false;$('play').textContent='▶'}setTime(t);if(playing)requestAnimationFrame(frame)}if(playing)requestAnimationFrame(frame)}
 function animateParticles(duration=2400){const start=performance.now(),nodes=[...document.querySelectorAll('.particle')];nodes.forEach(n=>n.classList.add('show'));function f(now){const p=Math.min(1,(now-start)/duration),ease=1-Math.pow(1-p,3);nodes.forEach(n=>{const sx=Number(n.getAttribute('cx')),sy=Number(n.getAttribute('cy')),ex=Number(n.dataset.x),ey=Number(n.dataset.y);n.setAttribute('transform',`translate(${(ex-sx)*ease} ${(ey-sy)*ease})`)});if(p<1)requestAnimationFrame(f)}requestAnimationFrame(f)}
 function phase(i,state='on'){const nodes=[...$('phase').children];nodes.forEach((n,j)=>{n.className=j<i?'done':j===i?state:''})}
-async function run(){if(ran)resetRun();ran=true;analysisComplete=false;renderCandidates();$('run').disabled=true;$('phase').classList.add('show');$('decisionSummary').classList.remove('abstain');$('decisionState').textContent='ANALYSIS RUNNING';$('decisionReason').textContent='Comparing drift, timing, shape and AIS quality.';$('mapStatus').textContent='ANALYSIS RUNNING';phase(0);document.querySelectorAll('.slick').forEach(x=>x.classList.add('show'));runTimer.push(setTimeout(()=>{phase(1);$('mapStatus').textContent='REVERSING DRIFT';animateParticles();setTime(releaseT)},650));let result=null;try{if(engine){const r=await fetch('/api/run-operations',{method:'POST'});if(!r.ok)throw new Error('engine response');result=await r.json()}}catch(e){result=null}runTimer.push(setTimeout(()=>{phase(2);document.querySelectorAll('.release').forEach(x=>x.classList.add('show'));$('mapStatus').textContent='MATCHING VESSELS'},3200));runTimer.push(setTimeout(()=>{phase(3);$('mapStatus').textContent='FORWARD VERIFYING'},4100));runTimer.push(setTimeout(()=>{phase(4,'done');analysisComplete=true;const abstain=DATA.case.decision.startsWith('ABSTAIN'),label=abstain?'ABSTAIN · INSUFFICIENT EVIDENCE':DATA.case.decision.replaceAll('_',' ');$('mapStatus').textContent=abstain?'RANKED · NO AUTOMATIC NOMINATION':label;$('mapSub').textContent=(result?'Fresh local ranking':'Saved evidence replay')+' · '+DATA.case.candidateCount+' candidates';$('decisionState').textContent=label;$('decisionReason').textContent=abstain?'The shortlist is visible, but evidence gates prevent escalation.':'Evidence gates permit human analyst review.';$('decisionSummary').classList.toggle('abstain',abstain);document.querySelectorAll('.ship').forEach(s=>{const t=DATA.tracks.find(x=>x.mmsi===s.dataset.id);s.classList.toggle('top',t&&t.rank===1);s.classList.toggle('truth',t&&t.knownSource)});renderCandidates();select(DATA.candidates[0].mmsi);$('run').disabled=false;$('run').textContent='Run again'},4900))}
-function resetRun(){runTimer.forEach(clearTimeout);runTimer=[];ran=false;analysisComplete=false;playing=false;showCount=3;$('play').textContent='▶';$('run').disabled=false;$('run').textContent='▶ Run analysis';document.querySelectorAll('.slick,.particle,.release').forEach(x=>{x.classList.remove('show');x.style.display='';if(x.classList.contains('particle'))x.removeAttribute('transform')});$('shipLayer').style.display='';$('trackLayer').style.display='';$('phase').classList.remove('show');$('layerMenu').classList.remove('show');document.querySelectorAll('[data-layer]').forEach(c=>c.checked=c.dataset.layer!=='tracks');$('satellite').setAttribute('aria-pressed','true');$('sar').style.opacity='.68';$('mapStatus').textContent='REAL SENTINEL-1 CONTEXT';$('mapSub').textContent='Select Run analysis to trace the controlled slick';$('decisionSummary').classList.remove('abstain');$('decisionState').textContent='AWAITING ANALYSIS';$('decisionReason').textContent='No vessel has been nominated.';selected=null;document.querySelectorAll('.ship').forEach(s=>s.classList.remove('selected','dim','top','truth'));$('trackLayer').innerHTML='';$('detail').innerHTML='<div class="detail-placeholder">Run the analysis to create a reviewable shortlist.</div>';renderCandidates();setTime(releaseT)}
+async function run(){
+if(ran)resetRun();ran=true;analysisComplete=false;analysisRunning=true;detectionAvailable=true;selected=null;renderCandidates();$('trackLayer').innerHTML='';$('run').disabled=true;$('phase').classList.add('show');$('decisionSummary').classList.remove('abstain');$('decisionState').textContent='ANALYSIS RUNNING';$('decisionReason').textContent='Comparing drift, timing, shape and AIS quality.';phase(0);setTime(obsT);$('mapStatus').textContent='SAR SLICK OBSERVED';$('mapSub').textContent='Detection boundary locked to the controlled observation';
+let result=null;try{if(engine){const r=await fetch('/api/run-operations',{method:'POST'});if(!r.ok)throw new Error('engine response');result=await r.json()}}catch(e){result=null}
+runTimer.push(setTimeout(()=>{phase(1);$('mapStatus').textContent='REVERSING DRIFT';$('mapSub').textContent='Particle ensemble searches backwards through real forcing';animateParticles();setTime(obsT)},700));
+runTimer.push(setTimeout(()=>{phase(2);document.querySelectorAll('.release').forEach(x=>x.classList.add('show'));$('mapStatus').textContent='MATCHING AIS TRACKS';$('mapSub').textContent='Only vessels present in the probable origin field gain evidence';setTime(releaseT)},3200));
+runTimer.push(setTimeout(()=>{phase(3);$('mapStatus').textContent='FORWARD VERIFYING';$('mapSub').textContent='Candidate releases are replayed towards the observed slick';setTime(obsT)},4100));
+runTimer.push(setTimeout(()=>{phase(4,'done');analysisRunning=false;analysisComplete=true;const abstain=DATA.case.decision.startsWith('ABSTAIN'),label=abstain?'ABSTAIN · INSUFFICIENT EVIDENCE':DATA.case.decision.replaceAll('_',' ');$('mapStatus').textContent=abstain?'RANKED · NO AUTOMATIC NOMINATION':label;$('mapSub').textContent=(result?'Fresh local ranking':'Saved evidence replay')+' · automatic event replay starting';$('decisionState').textContent=label;$('decisionReason').textContent=abstain?'The shortlist is visible, but evidence gates prevent escalation.':'Evidence gates permit human analyst review.';$('decisionSummary').classList.toggle('abstain',abstain);document.querySelectorAll('.ship').forEach(s=>{const t=DATA.tracks.find(x=>x.mmsi===s.dataset.id);s.classList.toggle('top',t&&t.rank===1);s.classList.toggle('truth',t&&t.knownSource)});renderCandidates();select(DATA.candidates[0].mmsi);$('run').disabled=false;$('run').textContent='Run again';setTime(minT);if(!playing)togglePlay()},5100))}
+function resetRun(){runTimer.forEach(clearTimeout);runTimer=[];ran=false;analysisComplete=false;analysisRunning=false;detectionAvailable=false;rawMode=false;playing=false;showCount=3;lastSlickFrame=-2;$('play').textContent='▶';$('run').disabled=false;$('run').textContent='▶ Run analysis';document.querySelectorAll('.particle,.release').forEach(x=>{x.classList.remove('show');x.style.display='';if(x.classList.contains('particle'))x.removeAttribute('transform')});$('shipLayer').style.display='';$('trailLayer').style.display='';$('trackLayer').style.display='';$('phase').classList.remove('show');$('layerMenu').classList.remove('show');document.querySelectorAll('[data-layer]').forEach(c=>c.checked=true);$('satellite').setAttribute('aria-pressed','false');$('sar').style.opacity='.76';$('decisionSummary').classList.remove('abstain');$('decisionState').textContent='AWAITING ANALYSIS';$('decisionReason').textContent='No vessel has been nominated.';selected=null;document.querySelectorAll('.ship').forEach(s=>s.classList.remove('selected','dim','top','truth'));$('trackLayer').innerHTML='';$('leakLayer').innerHTML='';$('detail').innerHTML='<div class="detail-placeholder">Run the analysis to create a reviewable shortlist.</div>';renderCandidates();setTime(minT)}
 function modal(title,body,eyebrow='DETAILS'){$('modalTitle').textContent=title;$('modalEyebrow').textContent=eyebrow;$('modalBody').innerHTML=body;$('modal').showModal()}
 function why(t){modal('Why this vessel?',`<div class="fact"><span>Release-zone presence</span><b>${pct(t.presence)}</b></div><div class="fact"><span>Forward slick agreement</span><b>${pct(t.forward)}</b></div><div class="fact"><span>Centroid error</span><b>${num(t.forwardError,2)} km</b></div><div class="fact"><span>Shape error</span><b>${num(t.shapeError,2)} km</b></div><div class="fact"><span>AIS quality</span><b>${pct(t.quality)}</b></div><div class="fact"><span>Gap interpolation</span><b>${t.interpolated?'Used and penalized':'Not used'}</b></div><div class="disclosure">Scores compare vessels within this case. They are not probabilities of guilt.</div>`,'EVIDENCE BREAKDOWN')}
-function details(){const measured=(DATA.challenge||{}).measured_result||{};modal(DATA.case.name,`<div class="fact"><span>SAR context</span><b>Sentinel-1 VV · ${DATA.satellite.acquisition_time_utc}</b></div><div class="fact"><span>Slick input</span><b>${esc(DATA.slickSource)}</b></div><div class="fact"><span>Environment</span><b>Copernicus currents + Open-Meteo wind</b></div><div class="fact"><span>Traffic</span><b>${esc(DATA.trafficSummary)}</b></div><div class="fact"><span>Sealed-source result</span><b>${measured.source_rank?'Rank #'+measured.source_rank+' of '+measured.candidate_count:'Not available'}</b></div><div class="fact"><span>Operational decision</span><b>${esc(DATA.case.decision.replaceAll('_',' '))}</b></div><div class="fact"><span>Digital-twin Top-3</span><b>${pct(DATA.digitalTwin.top_3_rate)}</b></div><div class="disclosure">${esc(DATA.disclosure)} This is controlled validation, not a real accusation.</div>`,'PROVENANCE & CLAIM BOUNDARY')}
+function details(){const measured=(DATA.challenge||{}).measured_result||{};modal(DATA.case.name,`<div class="fact"><span>Raw satellite context</span><b>Sentinel-1 VV · ${DATA.satellite.acquisition_time_utc}</b></div><div class="fact"><span>Controlled observation</span><b>${DATA.case.observationTime} · ${num(DATA.alignment.sarAcquisitionOffsetMinutes,0)} min from SAR acquisition</b></div><div class="fact"><span>Slick input</span><b>${esc(DATA.slickSource)}</b></div><div class="fact"><span>Environment</span><b>Copernicus currents + Open-Meteo wind</b></div><div class="fact"><span>Traffic</span><b>${esc(DATA.trafficSummary)}</b></div><div class="fact"><span>Identity policy</span><b>Real motion is retained; fictional scenario aliases prevent false identification</b></div><div class="fact"><span>Sealed-source result</span><b>${measured.source_rank?'Rank #'+measured.source_rank+' of '+measured.candidate_count:'Not available'}</b></div><div class="fact"><span>Operational decision</span><b>${esc(DATA.case.decision.replaceAll('_',' '))}</b></div><div class="disclosure">${esc(DATA.disclosure)} This is controlled validation, not a real accusation.</div>`,'PROVENANCE & CLAIM BOUNDARY')}
+function alignmentDetails(){const a=DATA.alignment,raw=a.rawSarLocalContrastRatio;modal('SAR and slick alignment',`<div class="fact"><span>Geospatial containment</span><b>${a.geometryWithinSarBbox?'PASS · slick is inside the SAR crop':'REVIEW'}</b></div><div class="fact"><span>Source at release point</span><b>${esc(a.sourceTrackReleaseMatch)} · ${num(a.sourceTrackReleaseErrorKm,2)} km offset</b></div><div class="fact"><span>Physics replay</span><b>${esc(a.physicsReplay)} · ${a.timelineFrames} time frames</b></div><div class="fact"><span>Final geometry match</span><b>${a.finalGeometryIoU==null?'Not evaluated':pct(a.finalGeometryIoU)+' IoU'}</b></div><div class="fact"><span>Raw-pixel local contrast</span><b>${raw==null?'Not available':raw.toFixed(3)+'× local background'}</b></div><div class="fact"><span>SAR time offset</span><b>${num(a.sarAcquisitionOffsetMinutes,1)} minutes</b></div><div class="disclosure">${esc(a.interpretation)}</div>`,'ACCURACY & HONESTY CHECK')}
 function envDetails(type){const title=type==='wind'?'Historical wind':'Surface current',vals=DATA.environment.map(e=>type==='wind'?Math.hypot(e.wind_east_ms,e.wind_north_ms):Math.hypot(e.current_east_ms,e.current_north_ms)),max=Math.max(...vals),pts=vals.map((v,i)=>`${i/(vals.length-1)*560},${130-v/max*105}`).join(' ');modal(title,`<svg class="spark" viewBox="0 0 560 150"><polyline points="${pts}" fill="none" stroke="#52e2dc" stroke-width="3"/><line x1="0" y1="130" x2="560" y2="130" stroke="#31515d"/></svg><div class="fact"><span>Source</span><b>${esc(DATA.environmentSource)}</b></div><div class="fact"><span>Meaning</span><b>Modelled forcing used by reverse drift</b></div><div class="disclosure">Environmental values are model estimates, not direct observations.</div>`,'ENVIRONMENT DETAILS')}
 async function health(){try{const r=await fetch('/api/health',{cache:'no-store'});if(r.ok){engine=true;$('server').textContent='LOCAL ENGINE CONNECTED';$('server').classList.add('on')}}catch(e){}}
-$('run').onclick=run;$('reset').onclick=resetRun;$('play').onclick=togglePlay;$('time').oninput=e=>setTime(minT+Number(e.target.value)/1000*(maxT-minT));$('layers').onclick=()=> $('layerMenu').classList.toggle('show');$('satellite').onclick=e=>{const on=e.currentTarget.getAttribute('aria-pressed')==='true';e.currentTarget.setAttribute('aria-pressed',String(!on));$('sar').style.opacity=on?'.18':'.68'};$('more').onclick=()=>{showCount=showCount===3?10:3;renderCandidates()};$('details').onclick=details;$('close').onclick=()=> $('modal').close();document.querySelectorAll('[data-env]').forEach(b=>b.onclick=()=>b.dataset.env==='coverage'?modal('AIS coverage',`<div class="fact"><span>Compared</span><b>${DATA.case.candidateCount} candidate tracks</b></div><div class="fact"><span>Evidence source</span><b>${esc(DATA.trafficSummary)}</b></div><div class="fact"><span>Missing reports</span><b>Counted as uncertainty</b></div><div class="disclosure">Missing AIS remains missing evidence. Silence never increases attribution score.</div>`,'DATA QUALITY'):envDetails(b.dataset.env));document.querySelectorAll('[data-layer]').forEach(c=>c.onchange=()=>{const name=c.dataset.layer;if(name==='slick')document.querySelectorAll('.slick').forEach(x=>x.style.display=c.checked?'':'none');if(name==='reverse'){document.querySelectorAll('.particle,.release').forEach(x=>x.style.display=c.checked?'':'none')}if(name==='ships')$('shipLayer').style.display=c.checked?'':'none';if(name==='tracks')$('trackLayer').style.display=c.checked?'':'none'});init();
+$('run').onclick=run;$('reset').onclick=resetRun;$('play').onclick=togglePlay;$('time').oninput=e=>setTime(minT+Number(e.target.value)/1000*(maxT-minT));$('layers').onclick=()=> $('layerMenu').classList.toggle('show');$('satellite').onclick=e=>{rawMode=!rawMode;e.currentTarget.setAttribute('aria-pressed',String(rawMode));e.currentTarget.textContent=rawMode?'◐ Composite':'◐ Raw SAR';$('sar').style.opacity=rawMode?'.94':'.76';lastSlickFrame=-2;setSlickTime(minT+Number($('time').value)/1000*(maxT-minT),true)};$('alignment').onclick=alignmentDetails;$('more').onclick=()=>{showCount=showCount===3?10:3;renderCandidates()};$('details').onclick=details;$('close').onclick=()=> $('modal').close();document.querySelectorAll('[data-env]').forEach(b=>b.onclick=()=>b.dataset.env==='coverage'?modal('AIS coverage',`<div class="fact"><span>Reporting at selected time</span><b>${esc($('coverage').textContent)} tracked vessels</b></div><div class="fact"><span>Evidence source</span><b>${esc(DATA.trafficSummary)}</b></div><div class="fact"><span>Interpolation policy</span><b>Only gaps of 3 hours or less are connected</b></div><div class="fact"><span>Long gaps</span><b>Ship is hidden and counted as unavailable</b></div><div class="disclosure">Ships fade in only when a real AIS report window begins. Missing AIS remains missing evidence and never increases attribution.</div>`,'DATA QUALITY'):envDetails(b.dataset.env));document.querySelectorAll('[data-layer]').forEach(c=>c.onchange=()=>{const name=c.dataset.layer,current=minT+Number($('time').value)/1000*(maxT-minT);if(name==='slick'||name==='detection'){lastSlickFrame=-2;setSlickTime(current,true)}if(name==='reverse'){document.querySelectorAll('.particle,.release').forEach(x=>x.style.display=c.checked?'':'none')}if(name==='ships')$('shipLayer').style.display=c.checked?'':'none';if(name==='trails'){if(!c.checked)$('trailLayer').innerHTML='';else drawTrafficTrails(current)}});init();
 </script></body></html>'''.replace("__DATA__", data)
 
 

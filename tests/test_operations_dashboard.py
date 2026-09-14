@@ -48,5 +48,11 @@ def test_operations_dashboard_is_self_contained_and_interactive(tmp_path: Path) 
     assert "showCount=3" in page
     assert "CONTROLLED DIGITAL TWIN" in page
     assert "AWAITING ANALYSIS" in page
+    assert "LEAK BEGINS" in page
+    assert "Raw SAR" in page
+    assert "Fictional scenario alias" in page
+    assert (output.parent / "alignment_report.json").exists()
+    alignment = json.loads((output.parent / "alignment_report.json").read_text())
+    assert "sourceTrackReleaseMatch" in alignment
     assert result["source"] == "sealed challenge"
     assert "culprit" not in page.lower()
