@@ -1,0 +1,14 @@
+{
+  "physicsReplay": "PASS",
+  "finalGeometryIoU": 1.0,
+  "timelineFrames": 13,
+  "particleModel": "three-cohort advection-diffusion with particle-local currents and coastline blocking",
+  "geometryWithinSarBbox": true,
+  "sarAcquisitionOffsetMinutes": 27.95,
+  "rawSarLocalContrastRatio": 0.9804792871750596,
+  "rawSarOilClaimSupported": false,
+  "displayMode": "Real Sentinel-1 context plus a labelled physics-generated oil-return composite",
+  "interpretation": "The controlled slick is georegistered inside the SAR crop, but the raw pixels are not claimed as a verified oil detection. The composite makes the simulated sensor return and its exact detection boundary visible without falsifying the raw image.",
+  "sourceTrackReleaseErrorKm": 0.13787518261319914,
+  "sourceTrackReleaseMatch": "PASS"
+}

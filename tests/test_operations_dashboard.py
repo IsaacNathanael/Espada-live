@@ -39,12 +39,13 @@ def test_operations_dashboard_is_self_contained_and_interactive(tmp_path: Path) 
     (run / "ais").mkdir(parents=True, exist_ok=True)
     pd.DataFrame({"timestamp_utc": ["2018-10-07T19:00:00Z","2018-10-08T05:00:00Z"], "mmsi": ["999000001"]*2, "vessel_name": ["Blinded 999000001"]*2, "longitude": [9.3,9.35], "latitude": [43.3,43.31]}).to_csv(run / "ais/ais_normalized.csv", index=False)
     output = tmp_path / "out/operations_dashboard/index.html"
-    result = build_operations_dashboard(tmp_path, output)
+    result = build_operations_dashboard(tmp_path, output, dossier_href="evidence_dossier.html")
     page = output.read_text(encoding="utf-8")
     assert result["status"] == "PASS"
     assert "Run attribution" in page and "Candidate vessels" in page
     assert "Investigation workspace" in page
     assert "SCENARIO LAB" in page and "DATA PROVENANCE" in page
+    assert '"dossier":"evidence_dossier.html"' in page
     assert "data:image/png;base64," in page
     assert "function run()" in page and "function select(id)" in page
     assert "showCount=3" in page

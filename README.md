@@ -212,6 +212,16 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start_operations_dashboard.ps
 
 The Run button performs a fresh local candidate ranking when the localhost engine is connected and falls back to an explicitly labelled saved-evidence replay when opened as a portable file.
 
+## Package the shareable prototype
+
+Create a browser-only copy containing the validated dashboard and evidence dossier:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\package_prototype.ps1
+```
+
+Share the `docs\prototype` folder or publish it with GitHub Pages. Its `index.html` needs only a modern browser; no Python environment, API credentials, model download or network connection is required. The packaged Run button performs the saved-evidence replay. Fresh inference remains available through the local operations server above.
+
 ## Prepare and train the SAR model
 
 Download and audit the labelled Sentinel-1 data:

@@ -1,0 +1,55 @@
+param(
+    [string]$PythonPath = ""
+)
+
+$ErrorActionPreference = "Stop"
+$ProjectRoot = Split-Path -Parent $PSScriptRoot
+$WorkspaceRoot = Split-Path -Parent (Split-Path -Parent $ProjectRoot)
+
+if (-not $PythonPath) {
+    foreach ($Candidate in @(
+        (Join-Path $ProjectRoot ".venv\Scripts\python.exe"),
+        (Join-Path $WorkspaceRoot "work\envs\espada-py\Scripts\python.exe")
+    )) {
+        if (Test-Path -LiteralPath $Candidate) {
+            $PythonPath = $Candidate
+            break
+        }
+    }
+}
+if (-not $PythonPath -or -not (Test-Path -LiteralPath $PythonPath)) {
+    throw "The Espada Python environment was not found."
+}
+
+$Dossier = Join-Path $ProjectRoot "out\challenge\dossier\evidence_dossier.html"
+if (-not (Test-Path -LiteralPath $Dossier)) {
+    throw "The sealed challenge dossier is missing. Run scripts\run_challenge.ps1 first."
+}
+
+$PackageDirectory = Join-Path $ProjectRoot "docs\prototype"
+$Dashboard = Join-Path $PackageDirectory "index.html"
+$PackagedDossier = Join-Path $PackageDirectory "evidence_dossier.html"
+New-Item -ItemType Directory -Force -Path $PackageDirectory | Out-Null
+
+$env:PYTHONPATH = Join-Path $ProjectRoot "src"
+& $PythonPath -m espada.operations_dashboard `
+    --project-root $ProjectRoot `
+    --output $Dashboard `
+    --dossier-href "evidence_dossier.html"
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+Copy-Item -LiteralPath $Dossier -Destination $PackagedDossier -Force
+
+$Manifest = [ordered]@{
+    status = "PASS"
+    generated_at_utc = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+    entrypoint = "index.html"
+    dossier = "evidence_dossier.html"
+    operation = "portable saved-evidence replay"
+    requirements = "modern browser only"
+    limitation = "The packaged Run button replays validated saved evidence; fresh ranking requires the local Python engine."
+}
+$Manifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $PackageDirectory "manifest.json") -Encoding UTF8
+
+Write-Host "PORTABLE ESPADA PROTOTYPE READY" -ForegroundColor Green
+Write-Host $Dashboard -ForegroundColor Yellow

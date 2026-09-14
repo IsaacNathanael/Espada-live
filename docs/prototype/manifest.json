@@ -1,0 +1,9 @@
+﻿{
+    "status":  "PASS",
+    "generated_at_utc":  "2026-09-14T12:11:14Z",
+    "entrypoint":  "index.html",
+    "dossier":  "evidence_dossier.html",
+    "operation":  "portable saved-evidence replay",
+    "requirements":  "modern browser only",
+    "limitation":  "The packaged Run button replays validated saved evidence; fresh ranking requires the local Python engine."
+}

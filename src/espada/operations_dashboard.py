@@ -301,7 +301,11 @@ def _sar_alignment(
     }
 
 
-def build_operations_dashboard(project_root: Path, output_path: Path) -> dict[str, object]:
+def build_operations_dashboard(
+    project_root: Path,
+    output_path: Path,
+    dossier_href: str | None = None,
+) -> dict[str, object]:
     root = Path(project_root)
     case = root / "out/external_validation/corsica_2018"
     challenge = root / "out/challenge"
@@ -531,7 +535,8 @@ def build_operations_dashboard(project_root: Path, output_path: Path) -> dict[st
         "timeSearch": time_search,
         "slickAnalysis": slick_analysis,
         "alignment": alignment,
-        "dossier": (
+        "dossier": dossier_href
+        or (
             "../challenge/dossier/evidence_dossier.html"
             if use_challenge
             else "../external_validation/corsica_2018/counterfactual_ais/run/dossier/evidence_dossier.html"
@@ -656,8 +661,18 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Build ESPADA's map-first operations dashboard")
     parser.add_argument("--project-root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--dossier-href")
     args = parser.parse_args()
-    print(json.dumps(build_operations_dashboard(args.project_root, args.output), indent=2))
+    print(
+        json.dumps(
+            build_operations_dashboard(
+                args.project_root,
+                args.output,
+                dossier_href=args.dossier_href,
+            ),
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":
