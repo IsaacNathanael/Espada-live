@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "name": "Adversarial missing-and-spoofed-AIS challenge",
+  "seed": 73021,
+  "candidate_vessels": 16,
+  "source_vessel_index": 1,
+  "satellite_delay_hours": 16.0,
+  "release_duration_minutes": 120.0,
+  "truth": {
+    "current_multiplier": 1.12,
+    "wind_multiplier": 0.9,
+    "windage": 0.028,
+    "diffusivity_m2s": 20.0
+  },
+  "evidence": {
+    "random_ais_dropout_fraction": 0.2,
+    "source_blackout_hours": 3.0,
+    "position_noise_m": 250.0,
+    "spoofed_decoy_tracks": 1
+  },
+  "inference": {
+    "minimum_age_hours": 10.0,
+    "maximum_age_hours": 22.0,
+    "age_step_hours": 3.0,
+    "current_multipliers": [0.8, 1.0, 1.2],
+    "windages": [0.01, 0.02, 0.03],
+    "slick_particles": 300,
+    "ensemble_members": 4
+  },
+  "simulation_particles": 600
+}

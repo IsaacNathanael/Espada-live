@@ -190,6 +190,14 @@ To isolate that coverage failure, `scripts\run_corsica_counterfactual.ps1` adds 
 
 For a stronger simulation, `scripts\run_digital_twin.ps1` selects pseudonymized real vessel tracks, creates hidden synthetic releases with particle-local Copernicus currents, time-varying wind and a real coastline mask, models a continuous release plus diffusion, applies AIS dropout/position-noise and physics-mismatch stresses, and scores recovery only after inference. The same spatial-current and coastline physics are used for generation and reconstruction. It is a controlled digital twin—not real-spill attribution accuracy.
 
+For a judge-controlled sealed-ground-truth test, run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_challenge.ps1
+```
+
+Edit `configs\challenge_balanced.json` to change the hidden source index, vessel count, satellite delay, release duration, current/wind truth, diffusion, AIS dropout, source blackout, position noise, spoofed decoys and inference search grid. The runner commits the hidden truth with SHA-256 before inference, searches release age and physics without an answer key, applies the decision gate, then reveals the truth and creates `out\challenge\challenge_report.html`. Use `configs\challenge_adversarial.json` with `-Config` to exercise the failure boundary. A correct abstention under degraded evidence is a safe result; neither preset represents real-incident accuracy.
+
 The ranker can reconstruct a release-time position only when two AIS observations safely bracket a gap of at most six hours. The reconstructed point is explicitly marked as interpolated, receives a score penalty, and is never described as received AIS evidence.
 
 ## Open the operations dashboard

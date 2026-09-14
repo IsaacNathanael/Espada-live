@@ -101,12 +101,20 @@ def _simulate_slick(
     diffusivity_m2s: float,
     spatial_current_grid: SpatialCurrentGrid | None = None,
     coast_mask: CoastMask | None = None,
+    release_duration_minutes: float = 90.0,
+    current_multiplier: float = 1.0,
+    wind_multiplier: float = 1.0,
 ) -> tuple[np.ndarray, np.ndarray, list[tuple[float, float]]]:
     release_corridor: list[tuple[float, float]] = []
     all_lon: list[np.ndarray] = []
     all_lat: list[np.ndarray] = []
-    # Three cohorts approximate a 90-minute continuous release.
-    for delay_hours in (0.0, 0.75, 1.5):
+    if release_duration_minutes < 0:
+        raise ValueError("Release duration cannot be negative")
+    # Three cohorts approximate a continuous release without excessive runtime.
+    delays = np.linspace(0.0, release_duration_minutes / 60.0, 3)
+    cohort_sizes = np.full(3, particles // 3, dtype=int)
+    cohort_sizes[: particles % 3] += 1
+    for delay_hours, cohort_size in zip(delays, cohort_sizes):
         cohort_time = release_time + pd.Timedelta(hours=delay_hours)
         history = environment.loc[
             (environment["time_utc"] >= cohort_time)
@@ -116,31 +124,33 @@ def _simulate_slick(
             raise ValueError("Environmental cache does not cover the digital-twin interval")
         source_lon, source_lat = _interpolated_position(track, cohort_time)
         release_corridor.append((source_lon, source_lat))
-        cohort_size = particles // 3
         duration_seconds = (observation_time - cohort_time).total_seconds()
+        if duration_seconds <= 0:
+            raise ValueError("Release duration must end before satellite observation")
         step_seconds = duration_seconds / len(history)
         if spatial_current_grid is not None:
             lon, lat = advect_diffuse_spatial_timeseries(
                 np.full(cohort_size, source_lon),
                 np.full(cohort_size, source_lat),
                 history["time_utc"].tolist(),
-                history["wind_east_ms"].to_numpy(),
-                history["wind_north_ms"].to_numpy(),
+                history["wind_east_ms"].to_numpy() * wind_multiplier,
+                history["wind_north_ms"].to_numpy() * wind_multiplier,
                 step_seconds,
                 spatial_current_grid,
                 rng,
                 windage=windage,
                 diffusivity_m2s=diffusivity_m2s,
+                current_multiplier=current_multiplier,
                 coast_mask=coast_mask,
             )
         else:
             lon, lat = advect_diffuse_timeseries(
                 np.full(cohort_size, source_lon),
                 np.full(cohort_size, source_lat),
-                history["current_east_ms"].to_numpy(),
-                history["current_north_ms"].to_numpy(),
-                history["wind_east_ms"].to_numpy(),
-                history["wind_north_ms"].to_numpy(),
+                history["current_east_ms"].to_numpy() * current_multiplier,
+                history["current_north_ms"].to_numpy() * current_multiplier,
+                history["wind_east_ms"].to_numpy() * wind_multiplier,
+                history["wind_north_ms"].to_numpy() * wind_multiplier,
                 step_seconds,
                 rng,
                 windage=windage,
