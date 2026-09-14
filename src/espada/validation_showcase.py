@@ -153,7 +153,10 @@ ul{{margin:10px 0;padding-left:20px}} a{{color:#78e9df}} .verdict{{font-size:1.0
 </main>
 <script>
 const buttons=[...document.querySelectorAll('button[data-target]')];
-buttons.forEach(button=>button.addEventListener('click',()=>{{buttons.forEach(b=>{{b.classList.toggle('active',b===button);b.setAttribute('aria-selected',b===button)}});document.querySelectorAll('.case').forEach(c=>c.classList.toggle('active',c.id===button.dataset.target));}}));
+function selectCase(target){{const button=buttons.find(b=>b.dataset.target===target);if(!button)return;buttons.forEach(b=>{{b.classList.toggle('active',b===button);b.setAttribute('aria-selected',b===button)}});document.querySelectorAll('.case').forEach(c=>c.classList.toggle('active',c.id===target));}}
+buttons.forEach(button=>button.addEventListener('click',()=>{{selectCase(button.dataset.target);history.replaceState(null,'','#'+button.dataset.target);}}));
+selectCase(location.hash.slice(1)||'wakashio');
+window.addEventListener('hashchange',()=>selectCase(location.hash.slice(1)));
 </script></body></html>"""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(document, encoding="utf-8")

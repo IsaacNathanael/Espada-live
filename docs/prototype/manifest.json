@@ -1,8 +1,10 @@
 ﻿{
     "status":  "PASS",
-    "generated_at_utc":  "2026-09-14T16:28:40Z",
+    "generated_at_utc":  "2026-09-14T17:06:27Z",
     "entrypoint":  "index.html",
     "dossier":  "evidence_dossier.html",
+    "validation_scorecard":  "validation_scorecard.html",
+    "real_world_validation":  "real_world_validation.html",
     "operation":  "portable saved-evidence replay",
     "requirements":  "modern browser only",
     "limitation":  "The packaged Run button replays validated saved evidence; fresh ranking requires the local Python engine."
