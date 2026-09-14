@@ -23,6 +23,7 @@ class PhysicsBenchmarkConfig:
     start_time: datetime
     duration_hours: float = 10.0
     step_minutes: float = 60.0
+    windage: float = 0.02
     maximum_endpoint_separation_m: float = 250.0
 
 
@@ -56,11 +57,43 @@ def _step_count(config: PhysicsBenchmarkConfig) -> int:
     return rounded
 
 
+def _forcing_timestamps(config: PhysicsBenchmarkConfig) -> list[datetime]:
+    step = timedelta(minutes=config.step_minutes)
+    return [config.start_time + step * index for index in range(_step_count(config) + 1)]
+
+
+def _load_wind_series(
+    path: Path, timestamps: list[datetime]
+) -> tuple[np.ndarray, np.ndarray, str]:
+    payload = json.loads(Path(path).read_text(encoding="utf-8-sig"))
+    samples = payload.get("samples", [])
+    if len(samples) < 2:
+        raise ValueError("Wind input requires at least two time samples")
+    source_times = np.asarray(
+        [datetime.fromisoformat(str(row["time_utc"]).replace("Z", "+00:00")).timestamp() for row in samples],
+        dtype=float,
+    )
+    order = np.argsort(source_times)
+    source_times = source_times[order]
+    east = np.asarray([float(row["wind_east_ms"]) for row in samples], dtype=float)[order]
+    north = np.asarray([float(row["wind_north_ms"]) for row in samples], dtype=float)[order]
+    target = np.asarray([value.timestamp() for value in timestamps], dtype=float)
+    if target[0] < source_times[0] or target[-1] > source_times[-1]:
+        raise ValueError("Wind series does not cover the complete benchmark interval")
+    return (
+        np.interp(target, source_times, east),
+        np.interp(target, source_times, north),
+        str(payload.get("source") or payload.get("wind_source") or "time-varying wind"),
+    )
+
+
 def _espada_trajectory(
     grid: SpatialCurrentGrid,
     lon: np.ndarray,
     lat: np.ndarray,
     config: PhysicsBenchmarkConfig,
+    wind_east_ms: np.ndarray | None = None,
+    wind_north_ms: np.ndarray | None = None,
     *,
     reverse: bool,
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -71,17 +104,26 @@ def _espada_trajectory(
         timestamps = [config.start_time + step * (index + 1) for index in range(count)]
     else:
         timestamps = [config.start_time + step * index for index in range(count)]
-    zeros = np.zeros(count, dtype=float)
+    if wind_east_ms is None or wind_north_ms is None:
+        wind_east = np.zeros(count, dtype=float)
+        wind_north = np.zeros(count, dtype=float)
+        windage = 0.0
+    else:
+        wind_east = np.asarray(wind_east_ms, dtype=float)
+        wind_north = np.asarray(wind_north_ms, dtype=float)
+        if wind_east.shape != (count,) or wind_north.shape != (count,):
+            raise ValueError("Wind arrays must have one value per integration step")
+        windage = config.windage
     return advect_diffuse_spatial_timeseries(
         lon,
         lat,
         timestamps,
-        zeros,
-        zeros,
+        wind_east,
+        wind_north,
         config.step_minutes * 60.0,
         grid,
         np.random.default_rng(26143),
-        windage=0.0,
+        windage=windage,
         diffusivity_m2s=0.0,
         reverse=reverse,
     )
@@ -92,24 +134,35 @@ def _opendrift_trajectory(
     lon: np.ndarray,
     lat: np.ndarray,
     config: PhysicsBenchmarkConfig,
+    wind_times: list[datetime] | None = None,
+    wind_east_ms: np.ndarray | None = None,
+    wind_north_ms: np.ndarray | None = None,
     *,
     reverse: bool,
 ) -> tuple[np.ndarray, np.ndarray]:
     from opendrift.models.oceandrift import OceanDrift
-    from opendrift.readers import reader_constant, reader_netCDF_CF_generic
+    from opendrift.readers import reader_constant, reader_netCDF_CF_generic, reader_timeseries
 
     model = OceanDrift(loglevel=50)
     model.add_reader(reader_netCDF_CF_generic.Reader(str(current_file)))
-    model.add_reader(
-        reader_constant.Reader(
-            {
-                "x_wind": 0.0,
-                "y_wind": 0.0,
-                "horizontal_diffusivity": 0.0,
-                "land_binary_mask": 0,
-            }
+    constant_values = {"horizontal_diffusivity": 0.0, "land_binary_mask": 0}
+    if wind_times is None or wind_east_ms is None or wind_north_ms is None:
+        constant_values.update({"x_wind": 0.0, "y_wind": 0.0})
+        windage = 0.0
+    else:
+        if not (len(wind_times) == len(wind_east_ms) == len(wind_north_ms)):
+            raise ValueError("OpenDrift wind times and values must be aligned")
+        model.add_reader(
+            reader_timeseries.Reader(
+                {
+                    "time": [value.replace(tzinfo=None) for value in wind_times],
+                    "x_wind": np.asarray(wind_east_ms, dtype=float),
+                    "y_wind": np.asarray(wind_north_ms, dtype=float),
+                }
+            )
         )
-    )
+        windage = config.windage
+    model.add_reader(reader_constant.Reader(constant_values))
     model.set_config("drift:advection_scheme", "euler")
     seed_time = config.start_time + timedelta(hours=config.duration_hours) if reverse else config.start_time
     seed_time = seed_time.replace(tzinfo=None)
@@ -118,7 +171,7 @@ def _opendrift_trajectory(
         lat=np.asarray(lat, dtype=float),
         number=len(lon),
         time=seed_time,
-        wind_drift_factor=0.0,
+        wind_drift_factor=windage,
     )
     seconds = int(round(config.step_minutes * 60.0))
     model.run(
@@ -263,8 +316,9 @@ def _write_report(path: Path, result: dict[str, object]) -> None:
         for row in result["comparisons"]
     )
     verdict = "PASS" if result["status"] == "PASS" else "FAIL"
+    forcing_label = html.escape(str(result["forcing_mode"]))
     document = f"""<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>ESPADA physics parity benchmark</title><style>
-    :root{{--bg:#041015;--panel:#0a2029;--line:#21404b;--ink:#eafff9;--muted:#92abb1;--cyan:#58e5df;--amber:#ffbd59;--green:#67e8a5;--red:#ff7187}}*{{box-sizing:border-box}}body{{margin:0;background:radial-gradient(circle at 10% 0,#113b46,transparent 30%),var(--bg);color:var(--ink);font:15px/1.55 Inter,Segoe UI,Arial,sans-serif}}main{{max-width:1050px;margin:auto;padding:42px 22px 70px}}.tag{{color:var(--cyan);font-size:12px;font-weight:900;letter-spacing:.16em}}h1{{font:500 clamp(34px,6vw,68px)/1.02 Georgia,serif;margin:14px 0}}.lead{{max-width:790px;color:var(--muted);font-size:18px}}.verdict{{display:inline-block;margin:14px 0 24px;padding:9px 13px;border:1px solid var(--green);border-radius:999px;color:var(--green);font-weight:900}}.grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}}.card{{background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:18px}}.card small{{display:block;color:var(--muted);text-transform:uppercase;font-size:10px;letter-spacing:.1em}}.card b{{display:block;font-size:25px;margin-top:6px;color:var(--cyan)}}section{{margin-top:14px}}img{{width:100%;border-radius:10px}}table{{width:100%;border-collapse:collapse}}th,td{{padding:10px;border-bottom:1px solid var(--line);text-align:left}}th{{color:var(--muted);font-size:11px;text-transform:uppercase}}.boundary{{border-left:3px solid var(--amber);padding:12px 14px;background:#33270d55;color:#e9d39f}}@media(max-width:760px){{.grid{{grid-template-columns:1fr 1fr}}.table{{overflow:auto}}}}</style></head><body><main><div class='tag'>ESPADA · INDEPENDENT DRIFT-SOLVER CHECK</div><h1>Same ocean currents.<br>Two independent engines.</h1><p class='lead'>ESPADA and OpenDrift 1.14.11 independently advected the same particles through the same real Copernicus Marine current grid. Their endpoints are compared in metres.</p><div class='verdict'>{verdict} · ALL {metrics['trajectories']} TRAJECTORIES WITHIN {metrics['acceptance_limit_m']:.0f} m</div><div class='grid'><div class='card'><small>Forward median</small><b>{metrics['forward_median_separation_m']:.2f} m</b></div><div class='card'><small>Reverse median</small><b>{metrics['reverse_median_separation_m']:.2f} m</b></div><div class='card'><small>P90 separation</small><b>{metrics['combined_p90_separation_m']:.2f} m</b></div><div class='card'><small>Worst separation</small><b>{metrics['combined_maximum_separation_m']:.2f} m</b></div></div><section class='card'><h2>Parity across the current grid</h2><img src='endpoint_parity.png' alt='Endpoint separation for ESPADA and OpenDrift trajectories'></section><section class='card table'><h2>Reproducible comparisons</h2><table><thead><tr><th>Direction</th><th>Seed</th><th>Starting position</th><th>Endpoint separation</th></tr></thead><tbody>{rows}</tbody></table></section><section class='boundary'><b>Claim boundary:</b> {html.escape(str(result['claim_boundary']))}</section></main></body></html>"""
+    :root{{--bg:#041015;--panel:#0a2029;--line:#21404b;--ink:#eafff9;--muted:#92abb1;--cyan:#58e5df;--amber:#ffbd59;--green:#67e8a5;--red:#ff7187}}*{{box-sizing:border-box}}body{{margin:0;background:radial-gradient(circle at 10% 0,#113b46,transparent 30%),var(--bg);color:var(--ink);font:15px/1.55 Inter,Segoe UI,Arial,sans-serif}}main{{max-width:1050px;margin:auto;padding:42px 22px 70px}}.tag{{color:var(--cyan);font-size:12px;font-weight:900;letter-spacing:.16em}}h1{{font:500 clamp(34px,6vw,68px)/1.02 Georgia,serif;margin:14px 0}}.lead{{max-width:790px;color:var(--muted);font-size:18px}}.verdict{{display:inline-block;margin:14px 0 24px;padding:9px 13px;border:1px solid var(--green);border-radius:999px;color:var(--green);font-weight:900}}.grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}}.card{{background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:18px}}.card small{{display:block;color:var(--muted);text-transform:uppercase;font-size:10px;letter-spacing:.1em}}.card b{{display:block;font-size:25px;margin-top:6px;color:var(--cyan)}}section{{margin-top:14px}}img{{width:100%;border-radius:10px}}table{{width:100%;border-collapse:collapse}}th,td{{padding:10px;border-bottom:1px solid var(--line);text-align:left}}th{{color:var(--muted);font-size:11px;text-transform:uppercase}}.boundary{{border-left:3px solid var(--amber);padding:12px 14px;background:#33270d55;color:#e9d39f}}@media(max-width:760px){{.grid{{grid-template-columns:1fr 1fr}}.table{{overflow:auto}}}}</style></head><body><main><div class='tag'>ESPADA · INDEPENDENT DRIFT-SOLVER CHECK</div><h1>Same environmental forcing.<br>Two independent engines.</h1><p class='lead'>ESPADA and OpenDrift 1.14.11 independently advected the same particles using {forcing_label}. Their endpoints are compared in metres.</p><div class='verdict'>{verdict} · ALL {metrics['trajectories']} TRAJECTORIES WITHIN {metrics['acceptance_limit_m']:.0f} m</div><div class='grid'><div class='card'><small>Forward median</small><b>{metrics['forward_median_separation_m']:.2f} m</b></div><div class='card'><small>Reverse median</small><b>{metrics['reverse_median_separation_m']:.2f} m</b></div><div class='card'><small>P90 separation</small><b>{metrics['combined_p90_separation_m']:.2f} m</b></div><div class='card'><small>Worst separation</small><b>{metrics['combined_maximum_separation_m']:.2f} m</b></div></div><section class='card'><h2>Parity across the current grid</h2><img src='endpoint_parity.png' alt='Endpoint separation for ESPADA and OpenDrift trajectories'></section><section class='card table'><h2>Reproducible comparisons</h2><table><thead><tr><th>Direction</th><th>Seed</th><th>Starting position</th><th>Endpoint separation</th></tr></thead><tbody>{rows}</tbody></table></section><section class='boundary'><b>Claim boundary:</b> {html.escape(str(result['claim_boundary']))}</section></main></body></html>"""
     path.write_text(document, encoding="utf-8")
 
 
@@ -272,6 +326,7 @@ def run_physics_benchmark(
     current_file: Path,
     output_dir: Path,
     config: PhysicsBenchmarkConfig,
+    wind_file: Path | None = None,
 ) -> dict[str, object]:
     current_file = Path(current_file).resolve()
     if not current_file.exists():
@@ -280,19 +335,57 @@ def run_physics_benchmark(
     end_time = config.start_time + timedelta(hours=config.duration_hours)
     if not grid.covers(config.start_time, end_time):
         raise ValueError(f"Current grid does not cover {_iso(config.start_time)} to {_iso(end_time)}")
+    forcing_times = _forcing_timestamps(config)
+    wind_source = None
+    wind_east = wind_north = None
+    if wind_file is not None:
+        wind_file = Path(wind_file).resolve()
+        if not wind_file.exists():
+            raise FileNotFoundError(f"Wind time series not found: {wind_file}")
+        wind_east, wind_north, wind_source = _load_wind_series(wind_file, forcing_times)
     start_lon, start_lat = _seed_points(grid)
-    espada_forward = _espada_trajectory(grid, start_lon, start_lat, config, reverse=False)
+    espada_forward = _espada_trajectory(
+        grid,
+        start_lon,
+        start_lat,
+        config,
+        None if wind_east is None else wind_east[:-1],
+        None if wind_north is None else wind_north[:-1],
+        reverse=False,
+    )
     opendrift_forward = _opendrift_trajectory(
-        current_file, start_lon, start_lat, config, reverse=False
+        current_file,
+        start_lon,
+        start_lat,
+        config,
+        forcing_times if wind_east is not None else None,
+        wind_east,
+        wind_north,
+        reverse=False,
     )
     forward_separation = _separation_m(*espada_forward, *opendrift_forward)
 
     # Use one shared set of observed endpoints so the backward engines are
     # compared directly rather than through their separate forward errors.
     observed_lon, observed_lat = opendrift_forward
-    espada_reverse = _espada_trajectory(grid, observed_lon, observed_lat, config, reverse=True)
+    espada_reverse = _espada_trajectory(
+        grid,
+        observed_lon,
+        observed_lat,
+        config,
+        None if wind_east is None else wind_east[1:],
+        None if wind_north is None else wind_north[1:],
+        reverse=True,
+    )
     opendrift_reverse = _opendrift_trajectory(
-        current_file, observed_lon, observed_lat, config, reverse=True
+        current_file,
+        observed_lon,
+        observed_lat,
+        config,
+        forcing_times if wind_east is not None else None,
+        wind_east,
+        wind_north,
+        reverse=True,
     )
     reverse_separation = _separation_m(*espada_reverse, *opendrift_reverse)
     metrics = summarize_endpoint_parity(
@@ -317,14 +410,21 @@ def run_physics_benchmark(
         )
     result: dict[str, object] = {
         "status": "PASS" if metrics["all_within_acceptance"] else "FAIL",
-        "benchmark": "ESPADA particle-local current advection versus OpenDrift",
+        "benchmark": "ESPADA deterministic environmental advection versus OpenDrift",
+        "forcing_mode": (
+            "real Copernicus Marine currents plus time-varying Open-Meteo windage"
+            if wind_east is not None
+            else "real Copernicus Marine currents with wind disabled"
+        ),
         "engines": {
-            "espada": "explicit Euler with bilinear spatial and linear temporal current interpolation",
-            "reference": "OpenDrift 1.14.11 OceanDrift with CF-netCDF reader and Euler advection",
+            "espada": "explicit Euler with particle-local interpolated currents and time-varying point windage",
+            "reference": "OpenDrift 1.14.11 OceanDrift with CF-netCDF and time-series readers using Euler advection",
         },
         "input": {
             "source": "Copernicus Marine Service",
             "current_file": str(current_file),
+            "wind_file": str(wind_file) if wind_file else None,
+            "wind_source": wind_source,
             "grid_bounds": list(grid.bounds),
             "grid_time_start_utc": _iso(grid.time_start),
             "grid_time_end_utc": _iso(grid.time_end),
@@ -333,8 +433,8 @@ def run_physics_benchmark(
         "metrics": metrics,
         "comparisons": comparisons,
         "claim_boundary": (
-            "This verifies deterministic current-advection parity on one Copernicus subset. "
-            "Windage, diffusion, oil weathering, beaching and forecast skill are intentionally excluded; "
+            "This verifies deterministic current-and-wind advection parity on one Copernicus/Open-Meteo case. "
+            "Diffusion, oil weathering, beaching and forecast skill are intentionally excluded; "
             "the result is an engineering verification, not real-spill attribution accuracy."
         ),
         "artifacts": ["physics_benchmark.json", "endpoint_parity.png", "physics_benchmark.html"],
@@ -358,6 +458,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Benchmark ESPADA drift physics against OpenDrift")
     parser.add_argument("--current-file", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--wind-file", type=Path)
     parser.add_argument("--start-time", type=datetime.fromisoformat, required=True)
     parser.add_argument("--duration-hours", type=float, default=10.0)
     parser.add_argument("--step-minutes", type=float, default=60.0)
@@ -369,7 +470,7 @@ def main() -> None:
         step_minutes=args.step_minutes,
         maximum_endpoint_separation_m=args.maximum_separation_m,
     )
-    result = run_physics_benchmark(args.current_file, args.out, config)
+    result = run_physics_benchmark(args.current_file, args.out, config, args.wind_file)
     print(json.dumps(result, indent=2, default=str))
     if result["status"] != "PASS":
         raise SystemExit(1)

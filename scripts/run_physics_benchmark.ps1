@@ -19,8 +19,12 @@ if (-not $PythonPath -or -not (Test-Path -LiteralPath $PythonPath)) {
 }
 
 $CurrentFile = Join-Path $ProjectRoot "out\external_validation\corsica_2018\environment\currents.nc"
+$WindFile = Join-Path $ProjectRoot "out\external_validation\corsica_2018\environment\wind.json"
 if (-not (Test-Path -LiteralPath $CurrentFile)) {
     throw "The Corsica Copernicus current subset is missing. Run the Corsica case preparation first."
+}
+if (-not (Test-Path -LiteralPath $WindFile)) {
+    throw "The Corsica historical wind series is missing. Run the Corsica case preparation first."
 }
 $Output = Join-Path $ProjectRoot "out\physics_benchmark"
 $env:PYTHONPATH = Join-Path $ProjectRoot "src"
@@ -28,6 +32,7 @@ $env:MPLCONFIGDIR = Join-Path $ProjectRoot ".mpl-cache"
 
 & $PythonPath -m espada.physics_benchmark `
     --current-file $CurrentFile `
+    --wind-file $WindFile `
     --out $Output `
     --start-time "2018-10-07T19:00:00+00:00" `
     --duration-hours 10 `
