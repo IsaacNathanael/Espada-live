@@ -32,7 +32,12 @@ class ShowcaseHandler(SimpleHTTPRequestHandler):
                 {
                     "status": "PASS",
                     "service": "ESPADA local evidence engine",
-                    "capabilities": ["known-source-run", "operations-ranking", "static-showcase"],
+                    "capabilities": [
+                        "known-source-run",
+                        "operations-ranking",
+                        "sealed-challenge-ranking",
+                        "static-showcase",
+                    ],
                     "network_scope": "127.0.0.1 only",
                 },
             )
@@ -57,7 +62,13 @@ class ShowcaseHandler(SimpleHTTPRequestHandler):
             return
         try:
             if self.path == "/api/run-operations":
-                run = self.project_root / "out/external_validation/corsica_2018/counterfactual_ais/run"
+                challenge = self.project_root / "out/challenge"
+                run = (
+                    challenge
+                    if (challenge / "ranking/candidates.json").exists()
+                    else self.project_root
+                    / "out/external_validation/corsica_2018/counterfactual_ais/run"
+                )
                 started = time.perf_counter()
                 candidates, *_ = rank_candidates(
                     run / "ais/ais_normalized.csv",
@@ -73,7 +84,7 @@ class ShowcaseHandler(SimpleHTTPRequestHandler):
                         "elapsed_seconds": round(time.perf_counter() - started, 2),
                         "candidate_count": len(candidates),
                         "top_candidates": candidates[:3],
-                        "warning": "Hybrid validation result; not a finding of guilt.",
+                        "warning": "Controlled validation result; not a finding of guilt.",
                     },
                 )
                 return
