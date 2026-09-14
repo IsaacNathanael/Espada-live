@@ -254,7 +254,7 @@ def analyze_slick(
             "spatial_current_grid": str(grid.path) if grid else None,
             "spatial_grid_bounds": list(grid.bounds) if grid else None,
             "land_mask": str(coast.path) if coast else None,
-            "coast_policy": "reject particle steps ending on land" if coast else None,
+            "coast_policy": "reject particle paths intersecting land" if coast else None,
         },
         "assumption": "Release age is supplied by the analyst and must be sensitivity-tested.",
     }
@@ -292,7 +292,7 @@ def analyze_slick(
                 [
                     "Currents vary through time and space; wind varies through time at one analysis location.",
                     "Particles outside the downloaded current subset use its nearest boundary cell.",
-                    *(["Particle steps ending on supplied land polygons are rejected."] if coast else []),
+                    *(["Particle paths intersecting supplied land polygons are rejected."] if coast else []),
                 ]
                 if grid
                 else ["Current and wind vary through time but use one analysis location."]

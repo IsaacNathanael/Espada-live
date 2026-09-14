@@ -318,7 +318,7 @@ def _score_track(
                 else "Forward replay used the case-mean surface current."
             ),
             *(
-                ["Forward particle steps ending on supplied land polygons were rejected."]
+                ["Forward particle paths intersecting supplied land polygons were rejected."]
                 if coast_mask is not None
                 else []
             ),

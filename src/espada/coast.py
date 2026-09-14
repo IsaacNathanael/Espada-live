@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
-from shapely import contains_xy
+from shapely import contains_xy, intersects, linestrings
 from shapely.geometry import shape
 from shapely.ops import unary_union
 
@@ -25,6 +25,41 @@ class CoastMask:
         if lon.shape != lat.shape:
             raise ValueError("Coast-mask coordinates must be aligned")
         return np.asarray(contains_xy(self.geometry, lon, lat), dtype=bool)
+
+    def blocks_step(
+        self,
+        start_longitude: np.ndarray | float,
+        start_latitude: np.ndarray | float,
+        end_longitude: np.ndarray | float,
+        end_latitude: np.ndarray | float,
+    ) -> np.ndarray:
+        """Return particles whose proposed path touches or enters land.
+
+        Checking the entire segment prevents an hourly particle step from
+        teleporting across a narrow island when both endpoints are in water.
+        """
+        arrays = [
+            np.atleast_1d(np.asarray(values, dtype=float))
+            for values in (
+                start_longitude,
+                start_latitude,
+                end_longitude,
+                end_latitude,
+            )
+        ]
+        if not arrays[0].size or any(values.shape != arrays[0].shape for values in arrays[1:]):
+            raise ValueError("Coast-step coordinates must be non-empty and aligned")
+        if not np.isfinite(np.concatenate(arrays)).all():
+            raise ValueError("Coast-step coordinates must be finite")
+        coordinates = np.stack(
+            [
+                np.column_stack([arrays[0], arrays[1]]),
+                np.column_stack([arrays[2], arrays[3]]),
+            ],
+            axis=1,
+        )
+        paths = linestrings(coordinates)
+        return np.asarray(intersects(self.geometry, paths), dtype=bool)
 
 
 def load_coast_mask(path: Path) -> CoastMask:

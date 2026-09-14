@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 
 from .attribution import rank_candidates
+from .coast import CoastMask, load_coast_mask
 from .decision import POLICY
 from .environment import load_cache
 from .geo import haversine_km
@@ -99,6 +100,7 @@ def _simulate_slick(
     windage: float,
     diffusivity_m2s: float,
     spatial_current_grid: SpatialCurrentGrid | None = None,
+    coast_mask: CoastMask | None = None,
 ) -> tuple[np.ndarray, np.ndarray, list[tuple[float, float]]]:
     release_corridor: list[tuple[float, float]] = []
     all_lon: list[np.ndarray] = []
@@ -129,6 +131,7 @@ def _simulate_slick(
                 rng,
                 windage=windage,
                 diffusivity_m2s=diffusivity_m2s,
+                coast_mask=coast_mask,
             )
         else:
             lon, lat = advect_diffuse_timeseries(
@@ -200,6 +203,7 @@ def run_digital_twin_suite(
     particles: int = 1500,
     seed: int = 26143,
     spatial_current_grid: Path | None = None,
+    land_mask: Path | None = None,
 ) -> dict[str, object]:
     if not 1 <= cases <= len(CONDITIONS) or particles < 300:
         raise ValueError("Use 1-6 cases and at least 300 particles")
@@ -214,6 +218,9 @@ def run_digital_twin_suite(
     current_grid = (
         load_spatial_current_grid(spatial_current_grid) if spatial_current_grid else None
     )
+    coast = load_coast_mask(land_mask) if land_mask else None
+    if coast and not current_grid:
+        raise ValueError("A land mask currently requires a spatial current grid")
     observation_time = min(ais["timestamp_utc"].max(), environment["time_utc"].max()) - pd.Timedelta(hours=2)
     trials = _select_trials(ais, observation_time, cases)
     if current_grid:
@@ -240,6 +247,7 @@ def run_digital_twin_suite(
             windage=windage,
             diffusivity_m2s=diffusivity,
             spatial_current_grid=current_grid,
+            coast_mask=coast,
         )
         case_dir = output_dir / f"case-{index:02d}"
         slick_path = write_slick_from_particles(
@@ -263,6 +271,7 @@ def run_digital_twin_suite(
             ensemble_members=8,
             seed=seed + index * 101 + 1,
             spatial_current_grid=spatial_current_grid,
+            land_mask=land_mask,
         )
         candidates, *_ = rank_candidates(
             candidate_path,
@@ -336,6 +345,12 @@ def run_digital_twin_suite(
                 if current_grid
                 else "time-varying current at one analysis point"
             ),
+            "coastline_physics": (
+                "every particle step checked against supplied land polygons"
+                if coast
+                else "not enabled"
+            ),
+            "land_mask": str(coast.path) if coast else None,
             "traffic": f"pseudonymized real GFW background; {int(ais['mmsi'].nunique())} vessels",
         },
         "cases": len(frame),
@@ -366,6 +381,7 @@ def main() -> int:
     parser.add_argument("--ais", type=Path, required=True)
     parser.add_argument("--environment", type=Path, required=True)
     parser.add_argument("--spatial-current-grid", type=Path)
+    parser.add_argument("--land-mask", type=Path)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--cases", type=int, default=6)
     parser.add_argument("--particles", type=int, default=1500)
@@ -379,6 +395,7 @@ def main() -> int:
         particles=args.particles,
         seed=args.seed,
         spatial_current_grid=args.spatial_current_grid,
+        land_mask=args.land_mask,
     )
     print(json.dumps(result, indent=2))
     return 0

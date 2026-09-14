@@ -101,7 +101,7 @@ def clip_land_archive(
         "land_mask": str(output_path),
         "limitations": [
             "Natural Earth 1:10m is cartographic land geometry, not a navigation-grade shoreline.",
-            "The current particle boundary rejects steps ending on land; narrow crossings and beaching are not modelled.",
+            "The particle boundary rejects any step segment that touches land; beaching and resuspension are not modelled.",
         ],
     }
 

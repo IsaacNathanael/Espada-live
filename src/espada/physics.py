@@ -145,7 +145,12 @@ def advect_diffuse_spatial_timeseries(
         proposed_latitude = latitude + np.rad2deg(dy / 6_371_008.8)
         proposed_longitude = longitude + np.rad2deg(dx / (6_371_008.8 * safe_cosine))
         if coast_mask is not None:
-            blocked = coast_mask.contains(proposed_longitude, proposed_latitude)
+            blocked = coast_mask.blocks_step(
+                longitude,
+                latitude,
+                proposed_longitude,
+                proposed_latitude,
+            )
             longitude = np.where(blocked, longitude, proposed_longitude)
             latitude = np.where(blocked, latitude, proposed_latitude)
         else:

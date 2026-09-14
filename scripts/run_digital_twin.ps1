@@ -21,8 +21,12 @@ if (-not $PythonPath -or -not (Test-Path -LiteralPath $PythonPath)) {
 
 $CaseRoot = Join-Path $ProjectRoot "out\external_validation\corsica_2018"
 $CurrentGrid = Join-Path $CaseRoot "environment\currents.nc"
+$LandMask = Join-Path $CaseRoot "environment\land_mask.geojson"
 if (-not (Test-Path -LiteralPath $CurrentGrid)) {
     throw "Copernicus current grid not found. Assemble the Corsica incident first."
+}
+if (-not (Test-Path -LiteralPath $LandMask)) {
+    throw "Corsica land mask not found. Assemble the Corsica incident first."
 }
 $env:PYTHONPATH = Join-Path $ProjectRoot "src"
 $env:MPLCONFIGDIR = Join-Path $ProjectRoot ".mpl-cache"
@@ -30,6 +34,7 @@ $env:MPLCONFIGDIR = Join-Path $ProjectRoot ".mpl-cache"
     --ais (Join-Path $CaseRoot "ais\ais_normalized.csv") `
     --environment (Join-Path $CaseRoot "environment\environment.json") `
     --spatial-current-grid $CurrentGrid `
+    --land-mask $LandMask `
     --out (Join-Path $ProjectRoot "out\digital_twin") `
     --cases $Cases `
     --particles $Particles
