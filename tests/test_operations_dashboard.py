@@ -45,6 +45,7 @@ def test_operations_dashboard_is_self_contained_and_interactive(tmp_path: Path) 
     assert "Run attribution" in page and "Candidate vessels" in page
     assert "Investigation workspace" in page
     assert "SCENARIO LAB" in page and "DATA PROVENANCE" in page
+    assert 'id="labAge" type="range" min="0" max="4" step="1" value="2"' in page
     assert '"dossier":"evidence_dossier.html"' in page
     assert "data:image/png;base64," in page
     assert "function run()" in page and "function select(id)" in page
