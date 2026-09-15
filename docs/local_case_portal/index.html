@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ESPADA · New Case</title>
+  <style>
+    :root{--navy:#071b2b;--navy2:#102f46;--amber:#d99322;--sea:#147b83;--ink:#122331;--muted:#62727f;--line:#d8e0e5;--paper:#fff;--wash:#f2f5f6;--ok:#1d735d;--bad:#b43d31}
+    *{box-sizing:border-box}body{margin:0;background:var(--wash);color:var(--ink);font:14px/1.5 "Segoe UI",Arial,sans-serif}button,input,select{font:inherit}.top{height:66px;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 max(24px,calc((100vw - 1160px)/2));box-shadow:0 2px 12px #06131d30}.brand{font-weight:800;letter-spacing:.16em}.brand i{color:var(--amber);font-style:normal}.top a{color:#dbe8ed;text-decoration:none;border:1px solid #ffffff28;border-radius:6px;padding:8px 12px}.shell{max-width:1160px;margin:30px auto;padding:0 24px}.intro{display:flex;justify-content:space-between;gap:30px;align-items:end;margin-bottom:22px}.eyebrow{color:var(--sea);font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase}.intro h1{font:600 clamp(29px,4vw,47px)/1.05 Georgia,serif;margin:5px 0 8px}.intro p{color:var(--muted);max-width:700px;margin:0}.engine{padding:10px 13px;border-radius:8px;background:#e9efef;color:var(--muted);font-size:12px;white-space:nowrap}.engine.on{background:#e2f2ed;color:var(--ok)}.grid{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:18px}.card{background:var(--paper);border:1px solid var(--line);border-radius:13px;box-shadow:0 5px 22px #0c27390b}.form{padding:24px}.section{border:0;border-top:1px solid var(--line);margin:24px 0 0;padding:22px 0 0}.section:first-of-type{border:0;margin:0;padding:0}.section legend{font-weight:800;font-size:15px;padding:0 9px 0 0}.mode{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}.mode label{border:1px solid var(--line);padding:13px;border-radius:9px;cursor:pointer}.mode label:has(input:checked){border-color:var(--sea);background:#edf6f6}.mode input{margin-right:7px;accent-color:var(--sea)}.mode small{display:block;color:var(--muted);margin:4px 0 0 22px}.fields{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:13px}.field{display:grid;gap:5px}.field.full{grid-column:1/-1}.field label{font-size:12px;font-weight:700}.field input,.field select{width:100%;border:1px solid #c8d3d9;border-radius:7px;padding:10px;background:#fff;color:var(--ink)}.field input[type=file]{padding:8px}.hint{font-size:11px;color:var(--muted)}details{margin-top:18px;border-top:1px dashed var(--line);padding-top:14px}summary{cursor:pointer;font-weight:700;color:var(--navy2)}.actions{display:flex;align-items:center;gap:10px;margin-top:23px}.primary{border:0;border-radius:8px;background:var(--amber);color:#1d1a12;padding:12px 18px;font-weight:850;cursor:pointer}.primary:hover{filter:brightness(.96)}.primary:disabled{cursor:wait;opacity:.55}.secondary{border:1px solid var(--line);background:#fff;border-radius:8px;padding:11px 15px;cursor:pointer}.side{padding:19px;align-self:start;position:sticky;top:18px}.side h2{font:600 22px Georgia,serif;margin:0 0 13px}.steps{display:grid;gap:10px}.step{display:grid;grid-template-columns:28px 1fr;gap:9px;padding:9px;border-radius:8px;color:var(--muted)}.step b{width:27px;height:27px;border:1px solid var(--line);border-radius:50%;display:grid;place-items:center}.step.active{background:#eff6f6;color:var(--ink)}.step.active b{background:var(--sea);border-color:var(--sea);color:#fff}.step.done b{background:var(--ok);border-color:var(--ok);color:#fff}.status{margin-top:16px;padding:13px;border-left:3px solid var(--line);background:var(--wash);color:var(--muted);white-space:pre-wrap}.status.good{border-color:var(--ok);color:var(--ok)}.status.bad{border-color:var(--bad);color:var(--bad)}.links{display:grid;gap:7px;margin-top:13px}.links a{color:var(--navy2);font-weight:750;text-decoration:none;border:1px solid var(--line);border-radius:7px;padding:9px}.boundary{margin-top:18px;padding-top:14px;border-top:1px solid var(--line);font-size:11px;color:var(--muted)}.hidden{display:none!important}@media(max-width:800px){.grid{grid-template-columns:1fr}.side{position:static}.intro{display:block}.engine{display:inline-block;margin-top:14px}.fields,.mode{grid-template-columns:1fr}.field.full{grid-column:auto}}
+  </style>
+</head>
+<body>
+  <header class="top"><div class="brand">ESPADA <i>RDA</i></div><a href="/out/operations_dashboard/index.html">Open operations demo ↗</a></header>
+  <main class="shell">
+    <section class="intro"><div><div class="eyebrow">Local evidence engine · operator workspace</div><h1>Start a defensible case.</h1><p>Upload the slick, vessel traffic and matching ocean conditions. ESPADA checks the evidence first, then reconstructs probable origins and creates an auditable dossier.</p></div><div id="engine" class="engine">Checking local engine…</div></section>
+    <div class="grid">
+      <form id="caseForm" class="card form">
+        <fieldset class="section">
+          <legend>1 · Case identity</legend>
+          <div class="fields">
+            <div class="field"><label for="caseId">Case ID</label><input id="caseId" required minlength="2" maxlength="64" pattern="[A-Za-z0-9][A-Za-z0-9_-]{1,63}" value="incident_001"><span class="hint">Letters, numbers, underscore or hyphen.</span></div>
+            <div class="field"><label>Evidence starting point</label><select id="mode"><option value="approved_slick">Analyst-approved slick polygon</option><option value="sar">Raw SAR image</option></select></div>
+          </div>
+          <div class="mode">
+            <label><input type="radio" name="modeCard" value="approved_slick" checked><strong>Approved slick</strong><small>Fastest and safest operational path.</small></label>
+            <label><input type="radio" name="modeCard" value="sar"><strong>SAR detection</strong><small>Runs V6, then requires human approval.</small></label>
+          </div>
+        </fieldset>
+
+        <fieldset class="section">
+          <legend>2 · Incident evidence</legend>
+          <div class="fields">
+            <div id="slickField" class="field full"><label for="slick">Approved slick GeoJSON *</label><input id="slick" type="file" accept=".geojson,.json"><span class="hint">Polygon properties must include observation_time_utc and detection_confidence.</span></div>
+            <div id="sarField" class="field full hidden"><label for="sar">Sentinel-1 SAR crop *</label><input id="sar" type="file" accept=".tif,.tiff,.png"></div>
+            <div class="field"><label for="ais">AIS positions CSV *</label><input id="ais" type="file" accept=".csv" required><span class="hint">MMSI, timestamp, longitude and latitude.</span></div>
+            <div class="field"><label for="environment">Environment cache JSON *</label><input id="environment" type="file" accept=".json" required><span class="hint">Time-matched currents and wind.</span></div>
+          </div>
+          <div id="sarMetadata" class="fields hidden">
+            <div class="field full"><label for="observation">SAR observation time (UTC) *</label><input id="observation" type="datetime-local"></div>
+            <div class="field"><label for="minLon">Minimum longitude</label><input id="minLon" type="number" step="any" min="-180" max="180"></div>
+            <div class="field"><label for="minLat">Minimum latitude</label><input id="minLat" type="number" step="any" min="-90" max="90"></div>
+            <div class="field"><label for="maxLon">Maximum longitude</label><input id="maxLon" type="number" step="any" min="-180" max="180"></div>
+            <div class="field"><label for="maxLat">Maximum latitude</label><input id="maxLat" type="number" step="any" min="-90" max="90"></div>
+          </div>
+          <details>
+            <summary>Optional higher-fidelity inputs</summary>
+            <div class="fields">
+              <div class="field"><label for="currentGrid">Spatial current grid</label><input id="currentGrid" type="file" accept=".nc,.nc4,.netcdf"><span class="hint">Copernicus NetCDF covering the incident.</span></div>
+              <div class="field"><label for="landMask">Land mask</label><input id="landMask" type="file" accept=".geojson,.json"><span class="hint">Polygon or MultiPolygon GeoJSON.</span></div>
+              <div class="field"><label for="age">Known slick age (hours)</label><input id="age" type="number" min="0" max="720" step="0.25" value="0"><span class="hint">Use 0 to search plausible release times.</span></div>
+              <div class="field"><label for="ages">Candidate ages (hours)</label><input id="ages" value="1.5, 2, 3, 4, 6, 8, 10, 12, 16, 20, 24"></div>
+            </div>
+          </details>
+        </fieldset>
+
+        <div class="actions"><button id="prepare" class="primary" type="submit">Validate & prepare case</button><button id="clear" class="secondary" type="button">Clear</button></div>
+      </form>
+
+      <aside class="card side">
+        <h2>Case progress</h2>
+        <div class="steps">
+          <div id="s1" class="step active"><b>1</b><span><strong>Validate</strong><br>Structure, time, coordinates and formats</span></div>
+          <div id="s2" class="step"><b>2</b><span><strong>Reconstruct</strong><br>Reverse drift and compare AIS tracks</span></div>
+          <div id="s3" class="step"><b>3</b><span><strong>Review</strong><br>Rank, abstain if weak, preserve evidence</span></div>
+        </div>
+        <div id="status" class="status">Select the incident evidence to begin.</div>
+        <div id="links" class="links"></div>
+        <div class="boundary"><strong>Claim boundary</strong><br>Candidate scores prioritize human review. They are not guilt probabilities, legal findings or proof of deliberate AIS silence.</div>
+      </aside>
+    </div>
+  </main>
+  <script>
+    const $=id=>document.getElementById(id), form=$('caseForm'), statusBox=$('status'), links=$('links');let prepared=null,poller=null;
+    function setStatus(text,kind=''){statusBox.textContent=text;statusBox.className='status '+kind}
+    function mode(value){$('mode').value=value;document.querySelectorAll('[name=modeCard]').forEach(x=>x.checked=x.value===value);const sar=value==='sar';$('slickField').classList.toggle('hidden',sar);$('sarField').classList.toggle('hidden',!sar);$('sarMetadata').classList.toggle('hidden',!sar);$('slick').required=!sar;$('sar').required=sar;$('observation').required=sar;['minLon','minLat','maxLon','maxLat'].forEach(id=>$(id).required=sar)}
+    $('mode').onchange=e=>mode(e.target.value);document.querySelectorAll('[name=modeCard]').forEach(x=>x.onchange=e=>mode(e.target.value));mode('approved_slick');
+    async function fileValue(id){const file=$(id).files[0];if(!file)return null;if(file.size>48*1024*1024)throw new Error(file.name+' exceeds 48 MB.');return await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve({name:file.name,data:reader.result});reader.onerror=()=>reject(new Error('Could not read '+file.name));reader.readAsDataURL(file)})}
+    function step(n,state){const node=$('s'+n);node.classList.remove('active','done');if(state)node.classList.add(state)}
+    form.onsubmit=async event=>{event.preventDefault();links.innerHTML='';prepared=null;clearInterval(poller);step(1,'active');step(2,'');step(3,'');$('prepare').disabled=true;setStatus('Reading and validating evidence…');try{const selected=$('mode').value,files={ais_csv:await fileValue('ais'),environment_cache:await fileValue('environment')};if(selected==='sar')files.sar_image=await fileValue('sar');else files.slick_geojson=await fileValue('slick');const current=await fileValue('currentGrid'),land=await fileValue('landMask');if(current)files.spatial_current_grid=current;if(land)files.land_mask=land;const payload={case_id:$('caseId').value.trim(),mode:selected,files,analysis:{age_hours:Number($('age').value||0),candidate_ages_hours:$('ages').value.split(',').map(x=>Number(x.trim())).filter(Number.isFinite)}};if(selected==='sar'){payload.observation_time_utc=new Date($('observation').value).toISOString();payload.bbox=['minLon','minLat','maxLon','maxLat'].map(id=>Number($(id).value));payload.analysis.analyst_approved=false;payload.analysis.use_classical_fallback=false}const response=await fetch('/api/create-case',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}),result=await response.json();if(!response.ok)throw new Error(result.error||'Case was rejected.');prepared=result;step(1,'done');step(2,'active');setStatus('Evidence passed intake checks. Starting reverse-drift analysis…','good');await runCase()}catch(error){setStatus(error.message,'bad');step(1,'active');$('prepare').disabled=false}}
+    async function runCase(){const response=await fetch('/api/run-case',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({case_id:prepared.case_id})}),job=await response.json();if(!response.ok){setStatus(job.error||'Could not start the case.','bad');$('prepare').disabled=false;return}poller=setInterval(()=>poll(job.job_id),2000);poll(job.job_id)}
+    async function poll(id){try{const response=await fetch('/api/jobs/'+id,{cache:'no-store'}),job=await response.json();setStatus(job.message||job.status,job.status==='FAILED'?'bad':job.status==='COMPLETE'||job.status==='SAFE_STOP'?'good':'');if(['COMPLETE','SAFE_STOP','FAILED'].includes(job.status)){clearInterval(poller);step(2,'done');step(3,'active');$('prepare').disabled=false;links.innerHTML='';if(job.dossier_url)links.innerHTML+=`<a href="${job.dossier_url}" target="_blank">Open evidence dossier ↗</a>`;if(job.manifest_url)links.innerHTML+=`<a href="${job.manifest_url}" target="_blank">Open run manifest ↗</a>`;if(job.log_url)links.innerHTML+=`<a href="${job.log_url}" target="_blank">Open technical log ↗</a>`;if(job.status!=='FAILED')step(3,'done')}}catch(error){clearInterval(poller);setStatus('Lost contact with the local engine. Your prepared evidence remains saved.','bad');$('prepare').disabled=false}}
+    $('clear').onclick=()=>{form.reset();mode('approved_slick');links.innerHTML='';setStatus('Select the incident evidence to begin.');[1,2,3].forEach(n=>step(n,n===1?'active':''))};
+    fetch('/api/health',{cache:'no-store'}).then(r=>r.json()).then(x=>{if(x.status==='PASS'&&x.capabilities.includes('validated-case-intake')){$('engine').textContent='● LOCAL ENGINE READY';$('engine').classList.add('on')}else throw Error()}).catch(()=>{$('engine').textContent='LOCAL ENGINE OFFLINE';setStatus('Start this page with scripts/start_case_portal.ps1.','bad');$('prepare').disabled=true});
+  </script>
+</body>
+</html>

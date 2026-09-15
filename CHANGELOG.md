@@ -1,5 +1,14 @@
 # ESPADA release history
 
+## v1.0.0 — End-to-end research prototype
+
+- Added a private local case portal with validated file intake, non-overwriting case workspaces, background execution and direct dossier/run-log links.
+- Added atomic evidence preparation and early checks for AIS, environment, slick GeoJSON, SAR signatures, UTC timestamps and WGS84 bounds.
+- Froze the current dashboard, evidence dossier and validation reports into an isolated browser-only release; the public GitHub Pages package is not modified.
+- Added SHA-256 release manifests and an independent ZIP verifier that checks every file and evidence link.
+- Consolidated controlled, known-source, abstention, SAR V6 and physics-parity evidence in the build status and operator guide.
+- Retained safe abstention and human-review gates; comparative scores remain evidence-fit scores, not guilt probabilities.
+
 ## Unreleased — Leakage-safe SAR learning foundation
 
 - Added checksum-verified acquisition for the CC BY 4.0 Zenodo oil-spill segmentation dataset.

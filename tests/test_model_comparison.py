@@ -65,7 +65,7 @@ class ComparisonTests(unittest.TestCase):
         # predictor, without downloading weights or running GPU inference.
         try:
             import torch
-        except ImportError:
+        except (ImportError, OSError):
             self.skipTest("Torch integration runs in the working GPU environment")
         import csv
         import json

@@ -409,13 +409,32 @@ The combined cache is `data\cache\environment_historical.json`; its status and g
 
 ## Run a complete uploaded case
 
-The simplest interface is one case JSON and one command. Copy either `examples\case.approved.example.json` or `examples\case.sar.example.json`, fill in the evidence paths, then run:
+For a guided local interface, start the operator portal from the project folder:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start_case_portal.ps1
+```
+
+It opens a private localhost page, validates uploaded evidence before execution, preserves each case without overwriting it, runs the analysis in the background and links the resulting dossier, manifest and log. It is deliberately separate from `docs\prototype` and the public GitHub Pages demo.
+
+The command-line interface is one case JSON and one command. Copy either `examples\case.approved.example.json` or `examples\case.sar.example.json`, fill in the evidence paths, then run:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\run_case.ps1 -CaseFile ".\my_case.json"
 ```
 
 Relative paths in the case file are resolved from the ESPADA project directory. Every completed run writes `case_run_manifest.json` with the exact case-file and input SHA-256 hashes.
+
+## Build and verify the portable prototype
+
+Create a self-contained browser-only release without changing the public website:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\package_release_v1.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\verify_release_v1.ps1
+```
+
+The shareable ZIP is written to `out\releases\espada-prototype-v1.0.zip`. It contains the operations dashboard, evidence dossier, validation scorecard, real-world validation report, instructions and a SHA-256 integrity manifest. Fresh inference still requires the local evidence engine.
 
 To assemble those inputs from a location and approximate observation time, first generate a no-download plan:
 
