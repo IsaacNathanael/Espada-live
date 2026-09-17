@@ -140,6 +140,7 @@ def _parser() -> argparse.ArgumentParser:
     sar.add_argument("--model-checkpoint", type=Path)
     sar.add_argument("--calibration", type=Path)
     sar.add_argument("--prediction-bundle", type=Path)
+    sar.add_argument("--land-mask", type=Path)
     sar.add_argument("--inference-batch-size", type=int, default=4)
     ml_audit = subparsers.add_parser(
         "ml-audit", help="validate the labelled SAR data and create leakage-safe splits"
@@ -356,6 +357,7 @@ def main(argv: list[str] | None = None) -> int:
             calibration_path=args.calibration,
             prediction_bundle=args.prediction_bundle,
             inference_batch_size=args.inference_batch_size,
+            land_mask=args.land_mask,
         )
         print(json.dumps(result, indent=2))
         return 0 if result["status"] in {"PASS", "REVIEW_REQUIRED", "NO_DETECTION"} else 1

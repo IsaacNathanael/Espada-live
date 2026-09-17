@@ -17,6 +17,7 @@ from PIL import Image
 from scipy import ndimage
 from shapely.geometry import MultiPoint, Polygon
 
+from .coast import load_coast_mask
 from .geo import write_polygon_geojson
 from .sar_input import (
     _repair_float_byte_order,
@@ -248,6 +249,85 @@ def _mask_polygon(mask: np.ndarray, bbox: tuple[float, float, float, float]) -> 
     return polygon
 
 
+def apply_land_exclusion(
+    mask: np.ndarray,
+    score: np.ndarray,
+    bbox: tuple[float, float, float, float],
+    land_mask: Path,
+) -> tuple[np.ndarray, np.ndarray, dict[str, object]]:
+    """Remove detections on mapped land before creating an evidence polygon."""
+    coast = load_coast_mask(land_mask)
+    min_lon, min_lat, max_lon, max_lat = bbox
+    longitudes = np.linspace(min_lon, max_lon, mask.shape[1], dtype=float)
+    latitudes = np.linspace(max_lat, min_lat, mask.shape[0], dtype=float)
+    longitude_grid, latitude_grid = np.meshgrid(longitudes, latitudes)
+    mapped_land = coast.contains(longitude_grid.ravel(), latitude_grid.ravel()).reshape(mask.shape)
+    # Inland lakes/reservoirs are not part of the maritime search domain.
+    mapped_land = ndimage.binary_fill_holes(mapped_land)
+    # Exclude an approximately 2 km coastal safety band. Besides registration
+    # error, this closes narrow rivers and reservoirs that are outside the
+    # offshore oil-search domain.
+    pixel_degrees = max(
+        (max_lon - min_lon) / max(mask.shape[1] - 1, 1),
+        (max_lat - min_lat) / max(mask.shape[0] - 1, 1),
+    )
+    shoreline_halo_pixels = max(2, int(np.ceil(0.02 / pixel_degrees)))
+    excluded = ndimage.binary_dilation(mapped_land, iterations=shoreline_halo_pixels)
+    before = int(np.count_nonzero(mask))
+    filtered_mask = np.asarray(mask, dtype=bool) & ~excluded
+    filtered_score = np.asarray(score, dtype=np.float32).copy()
+    filtered_score[excluded] = 0.0
+    removed = before - int(np.count_nonzero(filtered_mask))
+    return filtered_mask, filtered_score, {
+        "status": "APPLIED",
+        "dataset": "Natural Earth 1:10m land",
+        "land_mask": str(Path(land_mask).resolve()),
+        "mapped_land_fraction": float(mapped_land.mean()),
+        "excluded_with_shoreline_halo_fraction": float(excluded.mean()),
+        "shoreline_halo_pixels": shoreline_halo_pixels,
+        "shoreline_halo_approx_degrees": 0.02,
+        "candidate_pixels_before": before,
+        "candidate_pixels_removed": removed,
+        "candidate_pixels_after": int(np.count_nonzero(filtered_mask)),
+    }
+
+
+def filter_operational_components(
+    mask: np.ndarray,
+    *,
+    minimum_pixels: int = 64,
+) -> tuple[np.ndarray, dict[str, object]]:
+    """Reject tiny speckle and incomplete components clipped by the image edge."""
+    labels, count = ndimage.label(np.asarray(mask, dtype=bool))
+    border_labels = set(
+        np.unique(
+            np.concatenate(
+                [labels[0, :], labels[-1, :], labels[:, 0], labels[:, -1]]
+            )
+        ).tolist()
+    )
+    border_labels.discard(0)
+    sizes = np.asarray(
+        ndimage.sum(mask, labels, range(1, count + 1)), dtype=float
+    )
+    keep_labels = [
+        index
+        for index, size in enumerate(sizes, start=1)
+        if size >= minimum_pixels and index not in border_labels
+    ]
+    filtered = np.isin(labels, keep_labels)
+    return filtered, {
+        "status": "APPLIED",
+        "minimum_component_pixels": int(minimum_pixels),
+        "components_before": int(count),
+        "edge_components_removed": int(len(border_labels)),
+        "small_components_removed": int(
+            sum(size < minimum_pixels for size in sizes)
+        ),
+        "components_after": int(len(keep_labels)),
+    }
+
+
 def run_segmentation(
     image: np.ndarray,
     output_dir: Path,
@@ -261,6 +341,7 @@ def run_segmentation(
     calibration_path: Path | None = None,
     prediction_bundle: Path | None = None,
     inference_batch_size: int = 4,
+    land_mask: Path | None = None,
 ) -> dict[str, object]:
     if model_checkpoint is not None and prediction_bundle is not None:
         raise ValueError("Choose a model checkpoint or a precomputed prediction, not both")
@@ -277,6 +358,34 @@ def run_segmentation(
         )
     else:
         mask, score, metadata = segment_dark_slick(image)
+    if land_mask is not None:
+        if bbox is None:
+            raise ValueError("Land exclusion requires a WGS84 bounding box")
+        mask, score, land_filter = apply_land_exclusion(mask, score, bbox, land_mask)
+        labels, component_count = ndimage.label(mask)
+        component_sizes = sorted(
+            (
+                int(value)
+                for value in ndimage.sum(mask, labels, range(1, component_count + 1))
+            ),
+            reverse=True,
+        )
+        metadata["detected_components"] = int(component_count)
+        metadata["largest_component_pixels"] = component_sizes[:10]
+        metadata["land_exclusion"] = land_filter
+    mask, component_filter = filter_operational_components(mask)
+    score = np.where(mask, score, 0.0).astype(np.float32)
+    labels, component_count = ndimage.label(mask)
+    component_sizes = sorted(
+        (
+            int(value)
+            for value in ndimage.sum(mask, labels, range(1, component_count + 1))
+        ),
+        reverse=True,
+    )
+    metadata["detected_components"] = int(component_count)
+    metadata["largest_component_pixels"] = component_sizes[:10]
+    metadata["operational_component_filter"] = component_filter
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     for stale_polygon in ("slick_candidate.geojson", "slick_observation.geojson"):
@@ -375,6 +484,7 @@ def run_segmentation(
             ),
             "Real imagery never becomes an attribution input until a human approves the candidate polygon.",
             "A WGS84 bounding box is required because raster georeferencing is not inferred by this lightweight adapter.",
+            "Natural Earth land exclusion is cartographic and not a navigation-grade shoreline.",
         ],
         "artifacts": artifacts + ["sar_result.json", "sar_model_card.json"],
     }

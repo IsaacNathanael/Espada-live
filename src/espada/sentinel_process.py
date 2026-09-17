@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 import os
+import time
+from http.client import IncompleteRead
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Callable
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -202,7 +204,21 @@ def download_sentinel1_subset(
         height=height,
     )
     token = token_fetcher(client_id, client_secret)
-    content = processor(payload, token)
+    content: bytes | None = None
+    for attempt in range(1, 4):
+        try:
+            content = processor(payload, token)
+            break
+        except HTTPError:
+            raise
+        except (IncompleteRead, URLError, TimeoutError, ConnectionError, OSError) as error:
+            if attempt == 3:
+                raise RuntimeError(
+                    "Sentinel Hub download was interrupted three times; retry the scene later."
+                ) from error
+            time.sleep(float(attempt))
+    if content is None:
+        raise RuntimeError("Sentinel Hub did not return image content")
     if not content.startswith((b"II*\x00", b"MM\x00*")):
         raise ValueError("Sentinel Hub response is not a TIFF image")
 

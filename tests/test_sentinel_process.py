@@ -1,4 +1,5 @@
 import json
+from http.client import IncompleteRead
 from io import BytesIO
 from pathlib import Path
 
@@ -146,3 +147,29 @@ def test_download_rejects_unknown_selected_scene(tmp_path: Path) -> None:
             bbox=(71.25, 18.55, 71.65, 18.90),
             scene_id="S1_NOT_IN_CATALOG",
         )
+
+
+def test_download_retries_an_incomplete_provider_response(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("CDSE_CLIENT_ID", "private-client")
+    monkeypatch.setenv("CDSE_CLIENT_SECRET", "private-secret")
+    calls = 0
+
+    def processor(payload: dict, token: str) -> bytes:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise IncompleteRead(b"partial")
+        return _tiff()
+
+    result = download_sentinel1_subset(
+        _catalog(tmp_path / "catalog.json"),
+        tmp_path / "out",
+        bbox=(71.25, 18.55, 71.65, 18.90),
+        width=64,
+        height=64,
+        token_fetcher=lambda *_: "short-lived-token",
+        processor=processor,
+    )
+
+    assert calls == 2
+    assert result["status"] == "PASS"

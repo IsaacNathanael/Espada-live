@@ -231,7 +231,17 @@ class LiveOperationsEngine:
 
     def _prepare_coastline(self) -> None:
         if self.coast_path.exists():
-            return
+            try:
+                cached = json.loads(self.coast_path.read_text(encoding="utf-8"))
+                cached_bbox = cached.get("properties", {}).get("requested_bbox")
+                if (
+                    isinstance(cached_bbox, list)
+                    and len(cached_bbox) == 4
+                    and np.allclose(np.asarray(cached_bbox, dtype=float), self.region.bbox)
+                ):
+                    return
+            except (OSError, ValueError, TypeError, json.JSONDecodeError):
+                pass
         archive = self.project_root / "data" / "cache" / "natural_earth" / "ne_10m_land.zip"
         if not archive.exists():
             return
@@ -626,6 +636,8 @@ class LiveOperationsEngine:
                 age_hours=age_hours,
                 particles=1_200,
                 ensemble_members=14,
+                spatial_current_grid=current_file,
+                land_mask=self.coast_path if self.coast_path.exists() else None,
             )
             with np.load(drift_dir / "reverse_endpoints.npz") as endpoints:
                 origin_lon = np.asarray(endpoints["lon"], dtype=float)
@@ -899,6 +911,11 @@ class LiveOperationsEngine:
                     *(str(value) for value in crop_bbox),
                     "--prediction-bundle",
                     str(prediction),
+                    *(
+                        ["--land-mask", str(self.coast_path)]
+                        if self.coast_path.exists()
+                        else []
+                    ),
                 ],
                 cwd=self.project_root,
                 env=child_environment,

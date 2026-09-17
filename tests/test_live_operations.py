@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -140,3 +141,32 @@ def test_analyst_approval_is_required_and_persisted(tmp_path: Path) -> None:
     assert approved.exists()
     assert '"review_status": "analyst_approved"' in approved.read_text(encoding="utf-8")
     assert engine.snapshot()["pipeline"]["analyst_review_ready"] is True
+
+
+def test_coastline_cache_is_regenerated_when_region_changes(tmp_path: Path, monkeypatch) -> None:
+    engine = LiveOperationsEngine(
+        tmp_path,
+        LiveRegion("Singapore", 103.5, 1.0, 104.2, 1.55),
+    )
+    engine.coast_path.parent.mkdir(parents=True, exist_ok=True)
+    engine.coast_path.write_text(
+        json.dumps(
+            {
+                "type": "Feature",
+                "properties": {"requested_bbox": [70.8, 17.8, 73.0, 20.0]},
+                "geometry": {"type": "Polygon", "coordinates": []},
+            }
+        ),
+        encoding="utf-8",
+    )
+    archive = tmp_path / "data" / "cache" / "natural_earth" / "ne_10m_land.zip"
+    archive.parent.mkdir(parents=True)
+    archive.write_bytes(b"cached")
+    seen: dict[str, object] = {}
+
+    def fake_clip(source, destination, bbox, *, padding_degrees):
+        seen["bbox"] = tuple(bbox)
+
+    monkeypatch.setattr("espada.live_operations.clip_land_archive", fake_clip)
+    engine._prepare_coastline()
+    assert seen["bbox"] == engine.region.bbox
