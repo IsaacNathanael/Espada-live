@@ -45,8 +45,11 @@ def test_operations_dashboard_is_self_contained_and_interactive(tmp_path: Path) 
     assert "Run attribution" in page and "Candidate vessels" in page
     assert "Investigation workspace" in page
     assert "SCENARIO LAB" in page and "DATA PROVENANCE" in page
-    assert "Validation · 3 cases" in page
-    assert "Three cases. One honest system." in page
+    assert "Cases · 4 replays" in page
+    assert "Four spills. Four evidence conditions." in page
+    assert "Tyrrhenian · Pulse Release" in page
+    assert "Ligurian · AIS Dropout" in page
+    assert "Sardinian · Strong-Wind Trial" in page
     assert '"validationScorecard":"validation_scorecard.html"' in page
     assert 'id="labAge" type="range" min="0" max="4" step="1" value="2"' in page
     assert '"dossier":"evidence_dossier.html"' in page

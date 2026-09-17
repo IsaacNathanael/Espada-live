@@ -14,6 +14,8 @@ data/datasets/
 data/models/
 data/cache/ais_live*.csv
 data/cache/ais_diagnostic*.csv
+data/cache/live_operations_ais.csv
+data/cache/live_environment.json
 data/cache/environment_historical.json
 data/cache/wind_historical.json
 *.zip
