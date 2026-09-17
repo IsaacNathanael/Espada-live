@@ -159,6 +159,7 @@ def download_sentinel1_subset(
     output_dir: Path,
     *,
     bbox: tuple[float, float, float, float],
+    scene_id: str | None = None,
     width: int = 1536,
     height: int = 1400,
     client_id_env: str = "CDSE_CLIENT_ID",
@@ -168,7 +169,19 @@ def download_sentinel1_subset(
 ) -> dict[str, object]:
     catalog_path = Path(catalog_path)
     catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
-    scene = catalog.get("recommended_scene")
+    if scene_id:
+        scene = next(
+            (
+                item
+                for item in catalog.get("scenes", [])
+                if str(item.get("id")) == str(scene_id)
+            ),
+            None,
+        )
+        if scene is None:
+            raise ValueError(f"Sentinel-1 scene is not present in the current catalogue: {scene_id}")
+    else:
+        scene = catalog.get("recommended_scene")
     if not scene:
         raise ValueError("Sentinel-1 catalogue has no recommended scene")
     if scene.get("target_point_covered") is False:

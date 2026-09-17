@@ -99,9 +99,19 @@ def download_subset(
     if subsetter is None:
         try:
             import copernicusmarine
-        except ImportError as error:
+        except ModuleNotFoundError as error:
+            if error.name != "copernicusmarine":
+                raise RuntimeError(
+                    "Copernicus Marine is installed, but a required Python dependency is missing. "
+                    "Run scripts/setup_copernicus.ps1 -SkipLogin to repair the isolated environment."
+                ) from error
             raise RuntimeError(
                 "Copernicus Marine Toolbox is not installed. Run scripts/setup_copernicus.ps1."
+            ) from error
+        except (ImportError, OSError) as error:
+            raise RuntimeError(
+                "Copernicus Marine is installed, but Windows blocked or could not load a native dependency. "
+                "Run scripts/setup_copernicus.ps1 -SkipLogin to repair the isolated environment."
             ) from error
         subsetter = copernicusmarine.subset
     kwargs = build_subset_kwargs(request, output_path)

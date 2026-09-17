@@ -3,6 +3,7 @@ from io import BytesIO
 from pathlib import Path
 
 import numpy as np
+import pytest
 from PIL import Image
 
 from espada.sentinel_process import (
@@ -13,16 +14,26 @@ from espada.sentinel_process import (
 
 
 def _catalog(path: Path, *, covered: bool = True) -> Path:
+    recommended = {
+        "id": "S1_TEST_COG",
+        "acquisition_time_utc": "2026-08-25T01:02:37Z",
+        "target_point_covered": covered,
+        "has_vv": True,
+    }
     path.write_text(
         json.dumps(
             {
                 "status": "PASS" if covered else "PARTIAL",
-                "recommended_scene": {
-                    "id": "S1_TEST_COG",
-                    "acquisition_time_utc": "2026-08-25T01:02:37Z",
-                    "target_point_covered": covered,
-                    "has_vv": True,
-                },
+                "recommended_scene": recommended,
+                "scenes": [
+                    recommended,
+                    {
+                        "id": "S1_SELECTED_COG",
+                        "acquisition_time_utc": "2026-08-20T03:04:05Z",
+                        "target_point_covered": True,
+                        "has_vv": True,
+                    },
+                ],
             }
         ),
         encoding="utf-8",
@@ -99,3 +110,39 @@ def test_download_rejects_partial_scene_before_request(tmp_path: Path) -> None:
         assert "does not cover" in str(error)
     else:
         raise AssertionError("partial scene was accepted")
+
+
+def test_download_uses_explicitly_selected_scene(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("CDSE_CLIENT_ID", "private-client")
+    monkeypatch.setenv("CDSE_CLIENT_SECRET", "private-secret")
+    seen: dict[str, object] = {}
+
+    def processor(payload: dict, token: str) -> bytes:
+        seen["payload"] = payload
+        return _tiff()
+
+    result = download_sentinel1_subset(
+        _catalog(tmp_path / "catalog.json"),
+        tmp_path / "out",
+        bbox=(71.25, 18.55, 71.65, 18.90),
+        scene_id="S1_SELECTED_COG",
+        width=64,
+        height=64,
+        token_fetcher=lambda *_: "short-lived-token",
+        processor=processor,
+    )
+
+    assert result["scene_id"] == "S1_SELECTED_COG"
+    assert result["acquisition_time_utc"] == "2026-08-20T03:04:05Z"
+    data_filter = seen["payload"]["input"]["data"][0]["dataFilter"]
+    assert data_filter["timeRange"]["from"].startswith("2026-08-20")
+
+
+def test_download_rejects_unknown_selected_scene(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="not present"):
+        download_sentinel1_subset(
+            _catalog(tmp_path / "catalog.json"),
+            tmp_path / "out",
+            bbox=(71.25, 18.55, 71.65, 18.90),
+            scene_id="S1_NOT_IN_CATALOG",
+        )

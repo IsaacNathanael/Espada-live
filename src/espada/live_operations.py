@@ -821,9 +821,14 @@ class LiveOperationsEngine:
                 catalog_path,
                 input_dir,
                 bbox=crop_bbox,
+                scene_id=scene_id,
                 width=1024,
                 height=896,
             )
+            if str(downloaded.get("scene_id")) != scene_id:
+                raise RuntimeError(
+                    "Sentinel-1 download identity mismatch; attribution was stopped before inference."
+                )
             checkpoint = self.project_root / "out" / "ml_training_v6" / "sar_segmentation_best.pt"
             calibration = self.project_root / "out" / "ml_calibration_v6" / "threshold_calibration.json"
             for required in (checkpoint, calibration):
