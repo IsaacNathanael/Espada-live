@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>ESPADA Live Command</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="masthead">
+    <a class="identity" href="#overview" aria-label="ESPADA live command home">
+      <svg class="identity-mark" viewBox="0 0 44 44" aria-hidden="true">
+        <path d="M22 3 38 12v20L22 41 6 32V12Z"/>
+        <path d="m13 26 9-16 9 16-9 8Z"/>
+        <path d="M16 24h12M22 10v24"/>
+      </svg>
+      <span><b>ESPADA</b><small>Maritime Evidence Operations</small></span>
+    </a>
+
+    <div class="mission">
+      <span class="label">WATCH REGION</span>
+      <strong id="regionName">Awaiting engine</strong>
+      <span id="regionBounds">—</span>
+    </div>
+
+    <div class="clock-block">
+      <span class="label">SYSTEM TIME</span>
+      <strong id="utcClock">--:--:-- UTC</strong>
+      <span id="calendarDate">—</span>
+    </div>
+
+    <div class="connection" id="connectionState" data-tone="offline" role="status" aria-live="polite">
+      <span class="connection-light" aria-hidden="true"></span>
+      <span><b>ENGINE OFFLINE</b><small>Waiting for live API</small></span>
+    </div>
+  </header>
+
+  <nav class="workflow" aria-label="ESPADA investigation workflow">
+    <a class="workflow-step active" href="#overview" aria-current="step"><span>01</span><b>Watch</b><small>Sources & coverage</small></a>
+    <span class="workflow-step locked"><span>02</span><b>Detect</b><small>Satellite review</small></span>
+    <span class="workflow-step locked"><span>03</span><b>Reconstruct</b><small>Reverse drift</small></span>
+    <span class="workflow-step locked"><span>04</span><b>Attribute</b><small>Candidate ranking</small></span>
+    <span class="workflow-step locked"><span>05</span><b>Respond</b><small>Evidence & impact</small></span>
+  </nav>
+
+  <main id="overview">
+    <section class="briefing">
+      <div>
+        <p class="kicker">LIVE EVIDENCE DESK · COMPONENT 01</p>
+        <h1>Know what the system can actually see.</h1>
+        <p class="lede">Every source is timestamped and labelled by evidence type before it reaches the map or attribution engine.</p>
+      </div>
+      <div class="briefing-actions">
+        <button class="refresh-button" id="refreshButton" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M18.5 9A7 7 0 0 0 6.8 6.8L4 9m16 6-2.8 2.2A7 7 0 0 1 5.5 15"/></svg>
+          Request provider refresh
+        </button>
+        <span class="refresh-note" id="refreshNote">Automatic polling every 15 seconds</span>
+      </div>
+    </section>
+
+    <section class="summary-strip" aria-label="Operational summary">
+      <div class="summary-cell">
+        <span>ENGINE SNAPSHOT</span>
+        <b id="snapshotAge">No response</b>
+        <small id="snapshotTime">—</small>
+      </div>
+      <div class="summary-cell">
+        <span>PROVIDER SOURCES</span>
+        <b id="sourceCount">0 / 3 responding</b>
+        <small id="sourceSummary">No provider state received</small>
+      </div>
+      <div class="summary-cell">
+        <span>WATCH CENTRE</span>
+        <b id="regionCenter">—</b>
+        <small>WGS84 · longitude, latitude</small>
+      </div>
+      <div class="summary-cell decision-cell">
+        <span>OPERATIONAL RULE</span>
+        <b>Missing data stays missing</b>
+        <small>No synthetic fallback in live mode</small>
+      </div>
+    </section>
+
+    <section class="section-heading">
+      <div>
+        <p class="kicker">SOURCE REGISTER</p>
+        <h2>Three feeds, three different meanings</h2>
+      </div>
+      <div class="evidence-key" aria-label="Evidence type legend">
+        <span><i class="key-observed"></i>Observed</span>
+        <span><i class="key-catalogue"></i>Catalogue</span>
+        <span><i class="key-modelled"></i>Modelled</span>
+        <span><i class="key-inferred"></i>Inferred</span>
+      </div>
+    </section>
+
+    <section class="source-grid" aria-live="polite">
+      <article class="source-card" id="aisCard" data-state="waiting">
+        <div class="card-index">01</div>
+        <header>
+          <div>
+            <span class="evidence-type observed">OBSERVED · LIVE STREAM</span>
+            <h3>Vessel reception</h3>
+          </div>
+          <span class="state-badge" id="aisStatus">WAITING</span>
+        </header>
+        <p class="provider" id="aisProvider">AIS provider not connected</p>
+        <div class="metric-row">
+          <div><span>Cached positions</span><b id="aisPositions">—</b></div>
+          <div><span>Vessels received</span><b id="aisVessels">—</b></div>
+        </div>
+        <dl class="source-details">
+          <div><dt>Latest received position</dt><dd id="aisObservation">—</dd></div>
+          <div><dt>Last provider success</dt><dd id="aisSuccess">—</dd></div>
+        </dl>
+        <p class="source-message" id="aisMessage">Waiting for the first server snapshot.</p>
+        <footer>Tracks appear only after the provider supplies a valid position.</footer>
+      </article>
+
+      <article class="source-card" id="sentinelCard" data-state="waiting">
+        <div class="card-index">02</div>
+        <header>
+          <div>
+            <span class="evidence-type catalogue">CATALOGUE · SATELLITE ACQUISITION</span>
+            <h3>Radar coverage</h3>
+          </div>
+          <span class="state-badge" id="sentinelStatus">WAITING</span>
+        </header>
+        <p class="provider" id="sentinelProvider">Sentinel catalogue not connected</p>
+        <div class="metric-row">
+          <div><span>Scenes returned</span><b id="sentinelScenes">—</b></div>
+          <div><span>Area overlap</span><b id="sentinelOverlap">—</b></div>
+        </div>
+        <dl class="source-details">
+          <div><dt>Latest acquisition</dt><dd id="sentinelObservation">—</dd></div>
+          <div><dt>Platform / orbit</dt><dd id="sentinelPlatform">—</dd></div>
+        </dl>
+        <p class="source-message" id="sentinelMessage">Waiting for the first server snapshot.</p>
+        <footer>“Latest” means newest available image, not a continuous camera feed.</footer>
+      </article>
+
+      <article class="source-card" id="environmentCard" data-state="waiting">
+        <div class="card-index">03</div>
+        <header>
+          <div>
+            <span class="evidence-type modelled">MODELLED · OCEAN & WEATHER</span>
+            <h3>Environmental forcing</h3>
+          </div>
+          <span class="state-badge" id="environmentStatus">WAITING</span>
+        </header>
+        <p class="provider" id="environmentProvider">Environmental provider not connected</p>
+        <div class="metric-row">
+          <div><span>Surface current</span><b id="currentSpeed">—</b><small id="currentDirection"></small></div>
+          <div><span>Wind</span><b id="windSpeed">—</b><small id="windDirection"></small></div>
+        </div>
+        <dl class="source-details">
+          <div><dt>Model timestamp</dt><dd id="environmentObservation">—</dd></div>
+          <div><dt>Temporal resolution</dt><dd id="environmentResolution">—</dd></div>
+        </dl>
+        <p class="source-message" id="environmentMessage">Waiting for the first server snapshot.</p>
+        <footer>Vectors are model estimates and will be marked separately from observations.</footer>
+      </article>
+    </section>
+
+    <section class="integrity-panel">
+      <div class="integrity-mark" aria-hidden="true">
+        <svg viewBox="0 0 56 56"><path d="M28 4 48 12v14c0 13-8 21-20 26C16 47 8 39 8 26V12Z"/><path d="m18 28 7 7 14-16"/></svg>
+      </div>
+      <div>
+        <p class="kicker">EVIDENCE INTEGRITY</p>
+        <h2 id="integrityTitle">Waiting for a live snapshot</h2>
+        <p id="integrityMessage">The interface will state exactly which providers responded and how old their evidence is.</p>
+      </div>
+      <dl>
+        <div><dt>Observed</dt><dd>AIS positions received from a provider</dd></div>
+        <div><dt>Catalogue</dt><dd>Satellite acquisition records and coverage</dd></div>
+        <div><dt>Modelled</dt><dd>Wind and ocean fields from forecast systems</dd></div>
+        <div><dt>Inferred</dt><dd>ESPADA results produced from approved evidence</dd></div>
+      </dl>
+    </section>
+  </main>
+
+  <footer class="page-footer">
+    <span>ESPADA · Reverse Drift Attribution</span>
+    <span id="pollState">Live API has not responded</span>
+  </footer>
+  <script src="app.js"></script>
+</body>
+</html>

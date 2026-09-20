@@ -65,6 +65,19 @@ def test_operator_page_is_separate_and_calls_live_api() -> None:
     assert "docs/prototype" not in page
 
 
+def test_live_command_truth_panel_uses_provider_state_without_demo_data() -> None:
+    root = Path(__file__).resolve().parents[1]
+    page = (root / "operator/live_command/index.html").read_text(encoding="utf-8")
+    script = (root / "operator/live_command/app.js").read_text(encoding="utf-8")
+    assert "Observed" in page
+    assert "Catalogue" in page
+    assert "Modelled" in page
+    assert "Missing data stays missing" in page
+    assert "/api/live/snapshot" in script
+    assert "/api/live/refresh" in script
+    assert "synthetic" not in script.lower()
+
+
 def test_completed_analysis_survives_server_restart(tmp_path: Path) -> None:
     region = LiveRegion("Test region", 70.8, 17.8, 73.0, 20.0)
     first = LiveOperationsEngine(tmp_path, region)
