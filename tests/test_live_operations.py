@@ -94,6 +94,22 @@ def test_live_command_map_separates_live_and_incident_evidence() -> None:
     assert "positions.length === 0" in script
 
 
+def test_live_command_detection_workbench_preserves_evidence_gates() -> None:
+    root = Path(__file__).resolve().parents[1]
+    page = (root / "operator/live_command/index.html").read_text(encoding="utf-8")
+    script = (root / "operator/live_command/app.js").read_text(encoding="utf-8")
+    assert 'id="detection-workbench"' in page
+    assert "Inspect the pixels before trusting the polygon." in page
+    assert "Three independent gates" in page
+    assert "Segmentation model" in page
+    assert "Physics screen" in page
+    assert "Analyst decision" in page
+    assert "/api/live/analyze-latest-sar" in script
+    assert "/api/live/review" in script
+    assert "analysis.physics_screen" in script
+    assert "Approval allows reverse-drift analysis" in page
+
+
 def test_completed_analysis_survives_server_restart(tmp_path: Path) -> None:
     region = LiveRegion("Test region", 70.8, 17.8, 73.0, 20.0)
     first = LiveOperationsEngine(tmp_path, region)

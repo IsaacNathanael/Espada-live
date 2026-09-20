@@ -4,12 +4,16 @@
   const POLL_MS = 15000;
   const SNAPSHOT_ENDPOINT = '/api/live/snapshot';
   const REFRESH_ENDPOINT = '/api/live/refresh';
+  const ANALYZE_ENDPOINT = '/api/live/analyze-latest-sar';
+  const REVIEW_ENDPOINT = '/api/live/review';
   const byId = id => document.getElementById(id);
   let lastSnapshot = null;
   let mapMode = 'live';
   let mapGeometry = {coast: null, footprints: null, slick: null, origin: null, candidateTracks: null};
   const geometryCache = new Map();
   let geometryLoadKey = '';
+  let sarView = 'overview';
+  let selectedSceneId = null;
 
   const html = (id, value) => { byId(id).textContent = value; };
   const parseTime = value => {
@@ -337,6 +341,181 @@
     if(lastSnapshot) renderMap(lastSnapshot);
   }
 
+  const analysisBusy = status => ['QUEUED','DOWNLOADING','INFERENCE','INTERPRETING'].includes(String(status || '').toUpperCase());
+  const setGate = (id, state, label, description) => {
+    const gate = byId(id);
+    gate.dataset.state = state;
+    gate.querySelector('em').textContent = label;
+    if (description) gate.querySelector('small').textContent = description;
+  };
+
+  function setDetectionStatus(state, title, message) {
+    const status = byId('detectionStatus');
+    status.dataset.state = state;
+    status.querySelector('b').textContent = title;
+    status.querySelector('small').textContent = message;
+  }
+
+  function renderSceneSelector(snapshot) {
+    const select = byId('sarSceneSelect');
+    const scenes = Array.isArray(snapshot.sources?.sentinel?.scenes) ? snapshot.sources.sentinel.scenes : [];
+    const preferred = selectedSceneId || snapshot.analysis?.requested_scene_id || snapshot.analysis?.scene_id || scenes[0]?.id;
+    select.replaceChildren();
+    scenes.forEach(scene => {
+      const option = document.createElement('option');
+      option.value = scene.id;
+      const acquired = parseTime(scene.acquisition_time_utc);
+      const ageHours = acquired ? (Date.now() - acquired.getTime()) / 3600000 : null;
+      option.textContent = `${formatUtc(scene.acquisition_time_utc)} · ${String(scene.platform || 'Sentinel-1').toUpperCase()} · ${ageHours !== null && ageHours >= 96 ? 'AIS READY' : 'AIS DELAY'}`;
+      select.append(option);
+    });
+    if (scenes.some(scene => scene.id === preferred)) select.value = preferred;
+    selectedSceneId = select.value || null;
+    select.disabled = scenes.length === 0 || analysisBusy(snapshot.analysis?.status);
+    const scene = scenes.find(item => item.id === selectedSceneId);
+    if (!scene) {
+      html('sceneAvailability','NO CATALOGUE SCENE');
+      html('sceneDelayNote','Refresh the Sentinel catalogue to continue');
+      return null;
+    }
+    const acquired = parseTime(scene.acquisition_time_utc);
+    const ageHours = acquired ? (Date.now() - acquired.getTime()) / 3600000 : null;
+    const ready = ageHours !== null && ageHours >= 96;
+    html('sceneAvailability',ready?'FULL EVIDENCE PATH READY':'SAR READY · AIS DELAYED');
+    html('sceneDelayNote',ready?'Historical AIS availability window has elapsed':`Historical AIS expected in about ${Math.max(1,Math.ceil(96-(ageHours||0)))} h`);
+    return scene;
+  }
+
+  function setSarView(view) {
+    sarView = view;
+    document.querySelectorAll('[data-sar-view]').forEach(button => {
+      const active = button.dataset.sarView === view;
+      button.classList.toggle('active',active);
+      button.setAttribute('aria-pressed',String(active));
+    });
+    if (lastSnapshot) renderSarImage(lastSnapshot);
+  }
+
+  function renderSarImage(snapshot) {
+    const analysis = snapshot.analysis || {};
+    const scene = (snapshot.sources?.sentinel?.scenes || []).find(item => item.id === selectedSceneId);
+    const matchesAnalysis = Boolean(selectedSceneId && analysis.scene_id === selectedSceneId);
+    const urls = {input: analysis.input_url, overview: analysis.overview_url, mask: analysis.mask_url};
+    const labels = {input:'CALIBRATED VV BACKSCATTER',overview:'MODEL PROBABILITY + CANDIDATE BOUNDARY',mask:'THRESHOLDED BINARY CANDIDATE'};
+    const image = byId('sarEvidenceImage');
+    const empty = byId('sarImageEmpty');
+    const viewUrl = matchesAnalysis ? urls[sarView] : null;
+    document.querySelectorAll('[data-sar-view]').forEach(button => { button.disabled = !matchesAnalysis || !urls[button.dataset.sarView]; });
+    html('viewerLabel',matchesAnalysis ? labels[sarView] : 'SELECTED SCENE HAS NOT BEEN PROCESSED');
+    if (viewUrl) {
+      if (image.dataset.url !== viewUrl) {
+        image.dataset.url = viewUrl;
+        image.src = viewUrl;
+      }
+      image.classList.toggle('mask-view',sarView === 'mask');
+      image.alt = `${labels[sarView]} for ${analysis.scene_id}`;
+      image.hidden = false;
+      empty.hidden = true;
+    } else {
+      image.hidden = true;
+      empty.hidden = false;
+      empty.querySelector('strong').textContent = scene ? 'No processed pixels for this selection' : 'No Sentinel-1 scene available';
+      empty.querySelector('span').textContent = scene ? 'Run the calibrated analysis to create an inspectable result.' : 'Refresh the satellite catalogue to continue.';
+    }
+    html('sarSceneId',scene?.id || '—');
+    html('sarAcquired',formatUtc(scene?.acquisition_time_utc));
+    html('sarPolarisation',Array.isArray(scene?.polarizations) ? scene.polarizations.join(' + ') : '—');
+    html('sarFootprint',finite(scene?.aoi_overlap_fraction) ? `${(Number(scene.aoi_overlap_fraction)*100).toFixed(1)}% AOI overlap` : '—');
+  }
+
+  function renderDetectionWorkbench(snapshot) {
+    const scene = renderSceneSelector(snapshot);
+    const analysis = snapshot.analysis || {status:'NOT_RUN'};
+    const review = snapshot.review || {status:'NOT_REVIEWED'};
+    const current = Boolean(scene && analysis.scene_id === scene.id);
+    const busy = analysisBusy(analysis.status);
+    const reviewable = current && analysis.status === 'REVIEW_REQUIRED' && !['APPROVED','REJECTED'].includes(review.status);
+    const approved = current && review.status === 'APPROVED';
+    const rejected = current && review.status === 'REJECTED';
+    const physics = current ? analysis.physics_screen || {} : {};
+
+    const analyzeButton = byId('analyzeSarButton');
+    analyzeButton.disabled = !scene || busy || current && ['REVIEW_REQUIRED','NO_DETECTION'].includes(analysis.status);
+    analyzeButton.textContent = busy ? String(analysis.status).replaceAll('_',' ') + '…' : current ? 'Analysis already available' : 'Analyze selected scene';
+    if (busy) setDetectionStatus('busy',String(analysis.status).replaceAll('_',' '),'Calibrated scene processing is active');
+    else if (approved) setDetectionStatus('approved','APPROVED FOR RECONSTRUCTION',`Recorded ${formatUtc(review.reviewed_at_utc)}`);
+    else if (rejected) setDetectionStatus('rejected','CANDIDATE REJECTED','Reverse drift remains blocked');
+    else if (reviewable) setDetectionStatus('review','ANALYST REVIEW REQUIRED','Automation has stopped at the human gate');
+    else if (current && analysis.status === 'NO_DETECTION') setDetectionStatus('approved','NO CANDIDATE RETAINED','No review or attribution required');
+    else setDetectionStatus('waiting','READY TO ANALYZE',scene?'Selected catalogue scene has no model result':'No usable Sentinel-1 scene');
+
+    if (!current) {
+      setGate('modelGate','waiting','NOT RUN','Selected scene has no calibrated inference');
+      setGate('physicsGate','waiting','WAITING','Requires a model candidate');
+      setGate('analystGate','waiting','LOCKED','Requires completed automated gates');
+    } else if (busy) {
+      setGate('modelGate','review',String(analysis.status).replaceAll('_',' '),'Calibrated inference is running');
+      setGate('physicsGate','waiting','WAITING','Runs after candidate extraction');
+      setGate('analystGate','waiting','LOCKED','Human review remains unavailable');
+    } else {
+      setGate('modelGate','pass',analysis.status === 'NO_DETECTION'?'NO CANDIDATE':'CANDIDATE',analysis.status === 'NO_DETECTION'?'No pixels exceeded the frozen threshold':`${compactNumber(analysis.detected_components)} regions exceeded the frozen threshold`);
+      const physicsPass = String(physics.status || '').includes('PLAUSIBLE') || physics.contrast_gate_passed && physics.wind_gate_passed;
+      setGate('physicsGate',physicsPass?'pass':physics.status?'fail':'waiting',physicsPass?'PLAUSIBLE':physics.status?'REJECTED':'NOT RUN',physics.method || 'Contrast and acquisition wind plausibility');
+      setGate('analystGate',approved?'pass':rejected?'fail':reviewable?'review':'waiting',approved?'APPROVED':rejected?'REJECTED':reviewable?'REVIEW':'NOT REQUIRED',approved?'Decision recorded with assumed slick age':rejected?'Attribution is blocked':reviewable?'Automation paused for a human decision':'No model candidate requires review');
+    }
+
+    html('candidateFraction',current && finite(analysis.detected_pixel_fraction) ? `${(Number(analysis.detected_pixel_fraction)*100).toFixed(3)}%` : '—');
+    html('candidateComponents',current ? compactNumber(analysis.detected_components) : '—');
+    html('maximumProbability',current && finite(analysis.probability_summary?.maximum) ? `${(Number(analysis.probability_summary.maximum)*100).toFixed(1)}%` : '—');
+    html('localContrast',current && finite(physics.weighted_local_contrast_db) ? `${Number(physics.weighted_local_contrast_db).toFixed(2)} dB` : '—');
+    html('physicsStatus',physics.status ? String(physics.status).replaceAll('_',' ') : 'NOT ASSESSED');
+    html('physicsInterpretation',physics.interpretation || 'The screen will check whether candidate pixels are locally dark and whether acquisition-time wind is broadly compatible with an oil signature.');
+    html('physicsWind',finite(physics.wind_speed_ms) ? `${Number(physics.wind_speed_ms).toFixed(2)} m/s · ${formatUtc(physics.wind_time_utc)}` : '—');
+    html('contrastGate',physics.contrast_gate_passed === true?'PASS':physics.contrast_gate_passed === false?'FAIL':'—');
+    html('windGate',physics.wind_gate_passed === true?'PASS':physics.wind_gate_passed === false?'FAIL':'—');
+
+    html('reviewHeading',approved?'Candidate approved':rejected?'Candidate rejected':reviewable?'Decision required':'No reviewable candidate');
+    html('reviewMessage',review.message || analysis.message || 'A decision becomes available only after the model and physics gates complete.');
+    const age = finite(review.assumed_age_hours) ? Number(review.assumed_age_hours) : Number(byId('releaseAgeInput').value || 19);
+    byId('releaseAgeInput').value = String(age);
+    html('releaseAgeValue',`${age} h`);
+    byId('releaseAgeInput').disabled = !reviewable;
+    byId('approveCandidateButton').disabled = !reviewable;
+    byId('rejectCandidateButton').disabled = !reviewable;
+    renderSarImage(snapshot);
+  }
+
+  async function analyzeSelectedSar() {
+    const button = byId('analyzeSarButton');
+    button.disabled = true;
+    button.textContent = 'QUEUED…';
+    try {
+      const response = await fetch(ANALYZE_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scene_id:selectedSceneId})});
+      const result = await response.json().catch(()=>({}));
+      if(!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
+      setDetectionStatus('busy','ANALYSIS QUEUED','The server is downloading and processing real SAR pixels');
+      window.setTimeout(poll,1000);
+    } catch(error) {
+      setDetectionStatus('error','ANALYSIS COULD NOT START',error.message);
+      button.disabled = false;
+      button.textContent = 'Analyze selected scene';
+    }
+  }
+
+  async function submitCandidateReview(decision) {
+    for(const id of ['approveCandidateButton','rejectCandidateButton']) byId(id).disabled = true;
+    try {
+      const response = await fetch(REVIEW_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({decision,age_hours:Number(byId('releaseAgeInput').value)})});
+      const result = await response.json().catch(()=>({}));
+      if(!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
+      setDetectionStatus(decision === 'APPROVE'?'approved':'rejected',decision === 'APPROVE'?'DECISION RECORDED':'CANDIDATE REJECTED',result.message || 'Review state updated');
+      window.setTimeout(poll,600);
+    } catch(error) {
+      setDetectionStatus('error','REVIEW COULD NOT BE RECORDED',error.message);
+      if(lastSnapshot) renderDetectionWorkbench(lastSnapshot);
+    }
+  }
+
   function renderHeader(snapshot) {
     const region = snapshot.region || {};
     const bbox = Array.isArray(region.bbox) ? region.bbox : [];
@@ -428,6 +607,7 @@
     renderSentinel(snapshot.sources?.sentinel);
     renderEnvironment(snapshot.sources?.environment);
     renderIntegrity(snapshot);
+    renderDetectionWorkbench(snapshot);
     html('mapEvidenceTime', formatUtc(evidenceTime(snapshot)));
     updateMapMode(mapMode);
     syncMapGeometry(snapshot).catch(error => {
@@ -486,6 +666,21 @@
   byId('liveModeButton').addEventListener('click', () => updateMapMode('live'));
   byId('incidentModeButton').addEventListener('click', () => updateMapMode('incident'));
   byId('layerControls').addEventListener('change', () => { if (lastSnapshot) renderMap(lastSnapshot); });
+  byId('sarSceneSelect').addEventListener('change', event => {
+    selectedSceneId = event.target.value;
+    if(lastSnapshot) renderDetectionWorkbench(lastSnapshot);
+  });
+  document.querySelectorAll('[data-sar-view]').forEach(button => button.addEventListener('click',()=>setSarView(button.dataset.sarView)));
+  byId('sarEvidenceImage').addEventListener('error',()=>{
+    byId('sarEvidenceImage').hidden = true;
+    byId('sarImageEmpty').hidden = false;
+    byId('sarImageEmpty').querySelector('strong').textContent = 'Evidence image unavailable';
+    byId('sarImageEmpty').querySelector('span').textContent = 'The result record is preserved, but this image could not be loaded.';
+  });
+  byId('releaseAgeInput').addEventListener('input',event=>html('releaseAgeValue',`${event.target.value} h`));
+  byId('analyzeSarButton').addEventListener('click',analyzeSelectedSar);
+  byId('approveCandidateButton').addEventListener('click',()=>submitCandidateReview('APPROVE'));
+  byId('rejectCandidateButton').addEventListener('click',()=>submitCandidateReview('REJECT'));
   updateMapMode('live');
   tickClock();
   poll();

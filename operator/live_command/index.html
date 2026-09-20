@@ -38,7 +38,7 @@
 
   <nav class="workflow" aria-label="ESPADA investigation workflow">
     <a class="workflow-step active" href="#overview" aria-current="step"><span>01</span><b>Watch</b><small>Sources & coverage</small></a>
-    <span class="workflow-step locked"><span>02</span><b>Detect</b><small>Satellite review</small></span>
+    <a class="workflow-step available" href="#detection-workbench"><span>02</span><b>Detect</b><small>Satellite review</small></a>
     <span class="workflow-step locked"><span>03</span><b>Reconstruct</b><small>Reverse drift</small></span>
     <span class="workflow-step locked"><span>04</span><b>Attribute</b><small>Candidate ranking</small></span>
     <span class="workflow-step locked"><span>05</span><b>Respond</b><small>Evidence & impact</small></span>
@@ -155,6 +155,101 @@
         <span><i class="legend-current"></i>Modelled environmental vector</span>
         <b id="mapLayerStatus">Waiting for live snapshot</b>
       </footer>
+    </section>
+
+    <section class="detection-section" id="detection-workbench" aria-labelledby="detectionTitle">
+      <header class="detection-header">
+        <div>
+          <p class="kicker">SAR DETECTION WORKBENCH · COMPONENT 03</p>
+          <h2 id="detectionTitle">Inspect the pixels before trusting the polygon.</h2>
+          <p>Every candidate moves through model inference, a physical plausibility screen and a recorded human decision.</p>
+        </div>
+        <div class="detection-status" id="detectionStatus" data-state="waiting">
+          <span>CURRENT GATE</span><b>WAITING FOR SNAPSHOT</b><small>No scene state received</small>
+        </div>
+      </header>
+
+      <div class="scene-control-bar">
+        <label class="scene-selector" for="sarSceneSelect">
+          <span>SENTINEL-1 ACQUISITION</span>
+          <select id="sarSceneSelect" aria-describedby="sceneAvailability"></select>
+        </label>
+        <div class="scene-readiness">
+          <span>DATA PATH</span><b id="sceneAvailability">Catalogue loading</b>
+          <small id="sceneDelayNote">Checking delayed AIS compatibility</small>
+        </div>
+        <button class="analyze-button" id="analyzeSarButton" type="button" disabled>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h16M7 15l3-3 3 2 4-6M17 8h-3M17 8v3"/></svg>
+          Analyze selected scene
+        </button>
+      </div>
+
+      <div class="detection-layout">
+        <div class="sar-viewer">
+          <div class="viewer-toolbar">
+            <div class="image-tabs" role="group" aria-label="SAR evidence view">
+              <button type="button" data-sar-view="input" aria-pressed="false">Raw SAR</button>
+              <button type="button" data-sar-view="overview" class="active" aria-pressed="true">Model interpretation</button>
+              <button type="button" data-sar-view="mask" aria-pressed="false">Binary candidate mask</button>
+            </div>
+            <span id="viewerLabel">Awaiting processed image</span>
+          </div>
+          <div class="image-stage" id="sarImageStage">
+            <img id="sarEvidenceImage" alt="Processed Sentinel-1 evidence" hidden>
+            <div class="image-empty" id="sarImageEmpty">
+              <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M8 44 24 28l10 10 8-8 14 14M9 10h46v44H9Z"/><circle cx="43" cy="21" r="5"/></svg>
+              <strong>No processed pixels for this selection</strong>
+              <span>Select an acquisition and run the calibrated SAR analysis.</span>
+            </div>
+          </div>
+          <footer class="image-provenance">
+            <div><span>SCENE</span><b id="sarSceneId">—</b></div>
+            <div><span>ACQUIRED</span><b id="sarAcquired">—</b></div>
+            <div><span>POLARISATION</span><b id="sarPolarisation">—</b></div>
+            <div><span>FOOTPRINT</span><b id="sarFootprint">—</b></div>
+          </footer>
+        </div>
+
+        <aside class="detection-evidence" aria-live="polite">
+          <section class="gate-sequence" aria-labelledby="gateSequenceTitle">
+            <div class="aside-heading"><span>DECISION CHAIN</span><h3 id="gateSequenceTitle">Three independent gates</h3></div>
+            <ol>
+              <li id="modelGate" data-state="waiting"><span>01</span><div><b>Segmentation model</b><small>Waiting for calibrated inference</small></div><em>WAITING</em></li>
+              <li id="physicsGate" data-state="waiting"><span>02</span><div><b>Physics screen</b><small>Contrast and wind plausibility</small></div><em>WAITING</em></li>
+              <li id="analystGate" data-state="waiting"><span>03</span><div><b>Analyst decision</b><small>Human approval required</small></div><em>WAITING</em></li>
+            </ol>
+          </section>
+
+          <section class="detection-metrics" aria-label="Detection evidence metrics">
+            <div><span>Candidate area</span><b id="candidateFraction">—</b><small>fraction of analysed pixels</small></div>
+            <div><span>Regions retained</span><b id="candidateComponents">—</b><small>connected components</small></div>
+            <div><span>Maximum response</span><b id="maximumProbability">—</b><small>model output, not guilt</small></div>
+            <div><span>Local contrast</span><b id="localContrast">—</b><small>dB against surroundings</small></div>
+          </section>
+
+          <section class="physics-finding">
+            <div><span>PHYSICAL PLAUSIBILITY</span><b id="physicsStatus">NOT ASSESSED</b></div>
+            <p id="physicsInterpretation">The screen will check whether candidate pixels are locally dark and whether acquisition-time wind is broadly compatible with an oil signature.</p>
+            <dl>
+              <div><dt>Acquisition wind</dt><dd id="physicsWind">—</dd></div>
+              <div><dt>Contrast gate</dt><dd id="contrastGate">—</dd></div>
+              <div><dt>Wind gate</dt><dd id="windGate">—</dd></div>
+            </dl>
+          </section>
+
+          <section class="analyst-review">
+            <div class="aside-heading"><span>HUMAN DECISION</span><h3 id="reviewHeading">No reviewable candidate</h3></div>
+            <p id="reviewMessage">A decision becomes available only after the model and physics gates complete.</p>
+            <label for="releaseAgeInput"><span>Assumed time since release</span><b id="releaseAgeValue">19 h</b></label>
+            <input id="releaseAgeInput" type="range" min="1" max="72" step="1" value="19" disabled>
+            <div class="review-actions">
+              <button type="button" id="approveCandidateButton" class="approve-action" disabled>Approve for reconstruction</button>
+              <button type="button" id="rejectCandidateButton" class="reject-action" disabled>Reject candidate</button>
+            </div>
+            <p class="review-boundary">Approval allows reverse-drift analysis. It never labels a vessel guilty.</p>
+          </section>
+        </aside>
+      </div>
     </section>
 
     <section class="section-heading">
