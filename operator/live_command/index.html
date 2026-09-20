@@ -83,6 +83,80 @@
       </div>
     </section>
 
+    <section class="map-section" id="sea-map" aria-labelledby="mapTitle">
+      <header class="map-header">
+        <div>
+          <p class="kicker">LIVE SEA MAP · COMPONENT 02</p>
+          <h2 id="mapTitle">One map. Two honest timelines.</h2>
+          <p>The display separates present vessel reception from incident-time evidence. Nothing is moved, replayed or invented beyond provider records.</p>
+        </div>
+        <div class="timeline-switch" role="group" aria-label="Map timeline">
+          <button class="timeline-button active" id="liveModeButton" type="button" aria-pressed="true">
+            <span>LIVE WATCH</span><small>Current provider window</small>
+          </button>
+          <button class="timeline-button" id="incidentModeButton" type="button" aria-pressed="false">
+            <span>INCIDENT EVIDENCE</span><small>Matched SAR investigation</small>
+          </button>
+        </div>
+      </header>
+
+      <div class="map-toolbar">
+        <div class="map-time">
+          <span class="map-mode-chip" id="mapModeChip">LIVE WATCH</span>
+          <b id="mapEvidenceTime">Waiting for evidence time</b>
+          <small id="mapTimeRule">Only recent AIS reception is eligible for display.</small>
+        </div>
+        <fieldset class="layer-controls" id="layerControls">
+          <legend>VISIBLE LAYERS</legend>
+          <label><input type="checkbox" data-layer="vessels" checked><span>Vessels</span></label>
+          <label><input type="checkbox" data-layer="satellite" checked><span>Satellite</span></label>
+          <label><input type="checkbox" data-layer="slick" checked><span>Approved slick</span></label>
+          <label><input type="checkbox" data-layer="origin" checked><span>Origin estimate</span></label>
+          <label><input type="checkbox" data-layer="environment" checked><span>Wind / current</span></label>
+        </fieldset>
+      </div>
+
+      <div class="map-layout">
+        <div class="map-frame" id="mapFrame">
+          <svg id="evidenceMap" viewBox="0 0 1100 650" role="img" aria-labelledby="mapSvgTitle mapSvgDescription">
+            <title id="mapSvgTitle">ESPADA operational evidence map</title>
+            <desc id="mapSvgDescription">Provider-supplied maritime evidence for the selected timeline.</desc>
+          </svg>
+          <div class="map-empty" id="mapEmpty" hidden>
+            <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M8 38c8-4 14-4 22 0s14 4 26 0M8 47c8-4 14-4 22 0s14 4 26 0M32 8v25M18 27l14-19 14 19-14 7Z"/></svg>
+            <strong>No AIS positions received</strong>
+            <span>No vessels are rendered for this live watch window.</span>
+          </div>
+          <div class="map-loading" id="mapLoading">Loading published map geometry…</div>
+          <div class="map-attribution">COASTLINE · NATURAL EARTH 1:10m · PUBLIC DOMAIN</div>
+          <div class="map-scale" id="mapScale" aria-hidden="true"></div>
+        </div>
+
+        <aside class="evidence-detail" aria-live="polite">
+          <div class="detail-overline" id="detailType">MAP READOUT</div>
+          <h3 id="detailTitle">Select evidence on the map</h3>
+          <p id="detailSummary">Click a vessel, satellite footprint, approved slick or inferred origin zone to inspect its provenance.</p>
+          <dl id="detailFields">
+            <div><dt>Timeline</dt><dd id="detailTimeline">Live watch</dd></div>
+            <div><dt>Evidence rule</dt><dd>Essential facts remain available without hover</dd></div>
+          </dl>
+          <div class="detail-note" id="detailNote">
+            <b>TIME INTEGRITY</b>
+            Live AIS is never overlaid on an older spill as if the vessels were present at incident time.
+          </div>
+        </aside>
+      </div>
+
+      <footer class="map-legend" aria-label="Map legend">
+        <span><i class="legend-vessel"></i>Received AIS vessel</span>
+        <span><i class="legend-satellite"></i>Sentinel-1 footprint</span>
+        <span><i class="legend-slick"></i>Analyst-approved slick</span>
+        <span><i class="legend-origin"></i>Inferred 90% origin zone</span>
+        <span><i class="legend-current"></i>Modelled environmental vector</span>
+        <b id="mapLayerStatus">Waiting for live snapshot</b>
+      </footer>
+    </section>
+
     <section class="section-heading">
       <div>
         <p class="kicker">SOURCE REGISTER</p>
@@ -186,6 +260,7 @@
     <span>ESPADA · Reverse Drift Attribution</span>
     <span id="pollState">Live API has not responded</span>
   </footer>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

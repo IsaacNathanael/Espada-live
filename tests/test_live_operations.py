@@ -75,7 +75,23 @@ def test_live_command_truth_panel_uses_provider_state_without_demo_data() -> Non
     assert "Missing data stays missing" in page
     assert "/api/live/snapshot" in script
     assert "/api/live/refresh" in script
-    assert "synthetic" not in script.lower()
+    assert "demoVessels" not in script
+    assert "fallbackPositions" not in script
+
+
+def test_live_command_map_separates_live_and_incident_evidence() -> None:
+    root = Path(__file__).resolve().parents[1]
+    page = (root / "operator/live_command/index.html").read_text(encoding="utf-8")
+    script = (root / "operator/live_command/app.js").read_text(encoding="utf-8")
+    assert 'id="evidenceMap"' in page
+    assert "One map. Two honest timelines." in page
+    assert "No AIS positions received" in page
+    assert "snapshot.coastline_url" in script
+    assert "snapshot.sources?.sentinel?.footprints_url" in script
+    assert "snapshot.review?.approved_slick_url" in script
+    assert "snapshot.attribution?.origin_zone_url" in script
+    assert "Present-day AIS is intentionally hidden here." in script
+    assert "positions.length === 0" in script
 
 
 def test_completed_analysis_survives_server_restart(tmp_path: Path) -> None:
