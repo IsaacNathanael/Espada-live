@@ -40,7 +40,7 @@
     <a class="workflow-step active" href="#overview" aria-current="step"><span>01</span><b>Watch</b><small>Sources & coverage</small></a>
     <a class="workflow-step available" href="#detection-workbench"><span>02</span><b>Detect</b><small>Satellite review</small></a>
     <a class="workflow-step available" href="#reverse-drift"><span>03</span><b>Reconstruct</b><small>Reverse drift</small></a>
-    <span class="workflow-step locked"><span>04</span><b>Attribute</b><small>Candidate ranking</small></span>
+    <a class="workflow-step available" href="#candidate-attribution"><span>04</span><b>Attribute</b><small>Candidate ranking</small></a>
     <span class="workflow-step locked"><span>05</span><b>Respond</b><small>Evidence & impact</small></span>
   </nav>
 
@@ -336,6 +336,97 @@
         <span id="driftMethodStatus">Method record unavailable</span>
         <a id="driftDiagnosticLink" href="#" target="_blank" rel="noopener" hidden>Open reconstruction diagnostic ↗</a>
       </footer>
+    </section>
+
+    <section class="attribution-section" id="candidate-attribution" aria-labelledby="attributionTitle">
+      <header class="attribution-header">
+        <div>
+          <p class="kicker">CANDIDATE ATTRIBUTION · COMPONENT 05</p>
+          <h2 id="attributionTitle">Rank the evidence. Respect the refusal.</h2>
+          <p>Historical AIS tracks are compared with the release distribution and forward-replayed toward the observed slick. The system nominates no vessel unless every evidence gate passes.</p>
+        </div>
+        <div class="attribution-decision" id="attributionDecision" data-state="waiting" role="status" aria-live="polite">
+          <span>OPERATIONAL DECISION</span><b>WAITING FOR RECONSTRUCTION</b><small>No candidate result available</small>
+        </div>
+      </header>
+
+      <div class="attribution-summary" aria-label="Attribution result summary">
+        <div><span>TRACKS COMPARED</span><b id="candidatePopulation">—</b><small>temporally matched AIS identities</small></div>
+        <div><span>HIGHEST SCORE</span><b id="highestCandidateScore">—</b><small>comparative, not probability</small></div>
+        <div><span>LEAD OVER RUNNER-UP</span><b id="candidateScoreMargin">—</b><small>minimum nomination gate: 5.0 pts</small></div>
+        <div class="decision-summary"><span>SAFE OUTPUT</span><b id="candidateSafeOutput">—</b><small id="candidateSafeReason">Evidence gate not evaluated</small></div>
+      </div>
+
+      <div class="attribution-layout">
+        <div class="candidate-map-panel">
+          <div class="candidate-map-toolbar">
+            <div><span>HISTORICAL AIS · INCIDENT WINDOW</span><b id="candidateMapTime">—</b></div>
+            <div class="candidate-map-key" aria-label="Candidate map legend"><span><i class="key-track"></i>Compared tracks</span><span><i class="key-selected"></i>Selected track</span><span><i class="key-zone"></i>Origin zone</span></div>
+          </div>
+          <div class="candidate-map-frame">
+            <svg id="candidateMap" viewBox="0 0 1040 590" role="img" aria-labelledby="candidateMapTitle candidateMapDescription">
+              <title id="candidateMapTitle">Historical vessel candidate map</title>
+              <desc id="candidateMapDescription">Temporally matched AIS tracks compared with the inferred release zone.</desc>
+            </svg>
+            <div class="candidate-map-empty" id="candidateMapEmpty">
+              <strong>No candidate tracks available</strong><span>Complete reverse drift and historical AIS matching first.</span>
+            </div>
+            <div class="candidate-map-caption" id="candidateMapCaption">AWAITING ATTRIBUTION</div>
+          </div>
+        </div>
+
+        <aside class="candidate-inspector" aria-live="polite">
+          <div class="candidate-identity">
+            <span id="selectedCandidateRank">SELECT A CANDIDATE</span>
+            <h3 id="selectedCandidateName">No vessel selected</h3>
+            <p id="selectedCandidateMmsi">MMSI —</p>
+          </div>
+
+          <div class="candidate-score"><span>COMPARATIVE SCORE</span><b id="selectedCandidateScore">—</b><small>within this case only</small></div>
+
+          <section class="score-breakdown" aria-labelledby="scoreBreakdownTitle">
+            <h4 id="scoreBreakdownTitle">Why this track ranked here</h4>
+            <div><span>Release-zone proximity <b id="presenceScoreLabel">—</b></span><i><em id="presenceScoreBar"></em></i></div>
+            <div><span>Forward consistency <b id="forwardScoreLabel">—</b></span><i><em id="forwardScoreBar"></em></i></div>
+            <div><span>AIS data quality <b id="qualityScoreLabel">—</b></span><i><em id="qualityScoreBar"></em></i></div>
+          </section>
+
+          <dl class="candidate-facts">
+            <div><dt>Forward slick error</dt><dd id="candidateForwardError">—</dd></div>
+            <div><dt>Release-time position</dt><dd id="candidatePositionType">—</dd></div>
+            <div><dt>Best match time</dt><dd id="candidateMatchTime">—</dd></div>
+            <div><dt>AIS silence test</dt><dd id="candidateSilence">—</dd></div>
+          </dl>
+
+          <div class="silence-rule"><b>COVERAGE-AWARE SILENCE</b><span id="candidateSilenceNote">AIS gaps are contextual evidence only. They never increase a vessel score.</span></div>
+        </aside>
+      </div>
+
+      <div class="attribution-lower">
+        <section class="candidate-ledger" aria-labelledby="candidateLedgerTitle">
+          <header><div><span>REVIEW QUEUE</span><h3 id="candidateLedgerTitle">Top evidence matches</h3></div><small>Click a row to inspect its track and evidence</small></header>
+          <div class="candidate-table-wrap">
+            <table>
+              <thead><tr><th>Rank</th><th>Vessel identity</th><th>Score</th><th>Forward error</th><th>Track quality</th><th>AIS continuity</th></tr></thead>
+              <tbody id="candidateRows"><tr><td colspan="6">Waiting for completed attribution.</td></tr></tbody>
+            </table>
+          </div>
+        </section>
+
+        <aside class="nomination-gate" aria-labelledby="nominationGateTitle">
+          <div class="aside-heading"><span>SAFETY LOGIC</span><h3 id="nominationGateTitle">Nomination gate</h3></div>
+          <ol>
+            <li id="gateTopScore" data-state="waiting"><span>01</span><div><b>Top score ≥ 40%</b><small>Minimum comparative evidence</small></div><em>WAITING</em></li>
+            <li id="gateScoreMargin" data-state="waiting"><span>02</span><div><b>Lead ≥ 5 points</b><small>Candidate must separate from peers</small></div><em>WAITING</em></li>
+            <li id="gateTrackQuality" data-state="waiting"><span>03</span><div><b>Track quality ≥ 40%</b><small>Enough received AIS evidence</small></div><em>WAITING</em></li>
+            <li id="gateForwardError" data-state="waiting"><span>04</span><div><b>Forward error ≤ 8 km</b><small>Track must replay toward the slick</small></div><em>WAITING</em></li>
+          </ol>
+          <div class="gate-verdict" id="gateVerdict"><span>FINAL OUTPUT</span><b>NOT EVALUATED</b><p>All four conditions must pass before a limited shortlist is allowed.</p></div>
+          <div class="attribution-links"><a id="rankingChartLink" href="#" target="_blank" rel="noopener" hidden>Ranking diagnostic ↗</a><a id="attributionMapLink" href="#" target="_blank" rel="noopener" hidden>Forward-verification map ↗</a></div>
+        </aside>
+      </div>
+
+      <footer class="attribution-boundary"><b>INVESTIGATIVE BOUNDARY</b> Scores prioritize analyst review. They are not guilt probabilities, identity verification, discharge proof or legal findings.</footer>
     </section>
 
     <section class="section-heading">

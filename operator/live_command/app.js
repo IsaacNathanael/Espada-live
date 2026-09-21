@@ -16,6 +16,7 @@
   let sarView = 'overview';
   let selectedSceneId = null;
   let driftView = 'comparison';
+  let selectedCandidateMmsi = null;
 
   const html = (id, value) => { byId(id).textContent = value; };
   const parseTime = value => {
@@ -71,6 +72,7 @@
   };
 
   const escapeText = value => String(value ?? '—');
+  const escapeMarkup = value => escapeText(value).replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]));
   const evidenceTime = snapshot => mapMode === 'incident'
     ? snapshot?.analysis?.acquisition_time_utc
     : snapshot?.sources?.ais?.latest_observation_utc || snapshot?.generated_at_utc;
@@ -142,6 +144,7 @@
     if (failures.length) html('mapLayerStatus', `Unavailable geometry: ${failures.join(', ')}`);
     renderMap(snapshot);
     renderDriftMap(snapshot);
+    renderCandidateMap(snapshot);
   }
 
   function appendMapTitle(selection, value) {
@@ -687,6 +690,155 @@
     }
   }
 
+  const candidateDisplayName = candidate => candidate?.vessel_name && candidate.vessel_name !== 'UNKNOWN'
+    ? candidate.vessel_name
+    : 'Unverified vessel identity';
+
+  function selectedCandidate(snapshot) {
+    const candidates = Array.isArray(snapshot.attribution?.candidates) ? snapshot.attribution.candidates : [];
+    if (!candidates.length) return null;
+    const selected = candidates.find(candidate => String(candidate.mmsi) === String(selectedCandidateMmsi)) || candidates[0];
+    selectedCandidateMmsi = String(selected.mmsi);
+    return selected;
+  }
+
+  function renderCandidateMap(snapshot) {
+    const svgElement=byId('candidateMap');
+    if(!svgElement||!window.d3)return;
+    const d3=window.d3;
+    const svg=d3.select(svgElement);
+    svg.selectAll('*').remove();
+    const candidates=Array.isArray(snapshot.attribution?.candidates)?snapshot.attribution.candidates:[];
+    const selected=selectedCandidate(snapshot);
+    const candidateIds=new Set(candidates.map(candidate=>String(candidate.mmsi)));
+    const allFeatures=mapGeometry.candidateTracks?.features||[];
+    const tracks=allFeatures.filter(feature=>candidateIds.has(String(feature.properties?.mmsi)));
+    const complete=String(snapshot.attribution?.status||'').toUpperCase()==='COMPLETE'&&tracks.length>0;
+    byId('candidateMapEmpty').hidden=complete;
+    if(!complete)return;
+    const bbox=Array.isArray(snapshot.region?.bbox)?snapshot.region.bbox.map(Number):null;
+    if(!bbox||bbox.length!==4)return;
+    const width=1040,height=590;
+    const projection=d3.geoMercator().fitExtent([[28,28],[width-28,height-28]],bboxPolygon(bbox));
+    const path=d3.geoPath(projection);
+    svg.append('rect').attr('class','candidate-ocean').attr('width',width).attr('height',height);
+    svg.append('path').datum(d3.geoGraticule().extent([[bbox[0],bbox[1]],[bbox[2],bbox[3]]]).step([0.1,0.1])()).attr('class','candidate-grid').attr('d',path);
+    if(mapGeometry.coast){svg.append('path').datum(mapGeometry.coast).attr('class','candidate-coast-halo').attr('d',path);svg.append('path').datum(mapGeometry.coast).attr('class','candidate-land').attr('d',path);}
+    svg.append('path').datum(bboxPolygon(bbox)).attr('class','candidate-region').attr('d',path);
+    if(mapGeometry.origin)svg.append('path').datum(mapGeometry.origin).attr('class','candidate-origin-zone').attr('d',path);
+    if(mapGeometry.slick)svg.append('path').datum(mapGeometry.slick).attr('class','candidate-slick-context').attr('d',path);
+
+    const ordered=[...tracks].sort((left,right)=>Number(right.properties?.rank)-Number(left.properties?.rank));
+    const group=svg.append('g');
+    ordered.forEach(feature=>{
+      const rank=Number(feature.properties?.rank);
+      const mmsi=String(feature.properties?.mmsi);
+      const active=mmsi===String(selected?.mmsi);
+      const geometry=feature.geometry||{};
+      const mark=group.append('path').datum(feature).attr('class',`candidate-track-line${rank<=5?' top-five':''}${active?' selected':''}`).attr('tabindex',0).attr('aria-label',`Candidate rank ${rank}, MMSI ${mmsi}`).attr('d',path);
+      appendMapTitle(mark,`Rank ${rank} · MMSI ${mmsi}`).on('click keydown',event=>{if(event.type==='keydown'&&!['Enter',' '].includes(event.key))return;selectCandidate(mmsi);});
+      const coordinates=geometry.type==='LineString'?geometry.coordinates:geometry.type==='Point'?[geometry.coordinates]:[];
+      const start=coordinates[0];
+      if(Array.isArray(start)&&start.every(finite)&&rank<=12){
+        const point=projection(start.map(Number));
+        svg.append('circle').attr('class',`candidate-track-start${active?' selected':''}`).attr('cx',point[0]).attr('cy',point[1]).attr('r',active?6:3.5);
+        if(active||rank<=5)svg.append('text').attr('class','candidate-map-rank').attr('x',point[0]+8).attr('y',point[1]-7).text(`#${rank}`);
+      }
+    });
+    html('candidateMapCaption',selected?`SELECTED · RANK ${selected.rank} · MMSI ${selected.mmsi}`:'TOP EVIDENCE MATCHES');
+  }
+
+  function renderCandidateInspector(snapshot,candidate) {
+    if(!candidate){
+      html('selectedCandidateRank','SELECT A CANDIDATE');html('selectedCandidateName','No vessel selected');html('selectedCandidateMmsi','MMSI —');html('selectedCandidateScore','—');
+      return;
+    }
+    html('selectedCandidateRank',`RANK ${candidate.rank} OF ${compactNumber(snapshot.attribution?.candidate_count)}`);
+    html('selectedCandidateName',candidateDisplayName(candidate));
+    html('selectedCandidateMmsi',`MMSI ${candidate.mmsi}`);
+    html('selectedCandidateScore',finite(candidate.total_score)?`${(Number(candidate.total_score)*100).toFixed(1)}%`:'—');
+    const measures=[['presence',candidate.presence_score],['forward',candidate.forward_consistency],['quality',candidate.data_quality]];
+    measures.forEach(([name,value])=>{html(`${name}ScoreLabel`,finite(value)?`${(Number(value)*100).toFixed(1)}%`:'—');byId(`${name}ScoreBar`).style.width=finite(value)?`${Math.max(0,Math.min(100,Number(value)*100))}%`:'0%';});
+    html('candidateForwardError',finite(candidate.forward_error_km)?`${Number(candidate.forward_error_km).toFixed(2)} km`:'—');
+    html('candidatePositionType',candidate.release_position_interpolated?`INTERPOLATED · ${Number(candidate.interpolation_gap_hours||0).toFixed(1)} h gap`:'RECEIVED AIS FIX');
+    html('candidateMatchTime',formatUtc(candidate.best_match_time_utc));
+    const gapCount=Number(candidate.significant_gaps||0);
+    const silenceClass=String(candidate.silence_classification||'not_assessed').replaceAll('_',' ').toUpperCase();
+    html('candidateSilence',gapCount?`${gapCount} GAP${gapCount===1?'':'S'} · ${silenceClass}`:silenceClass);
+    html('candidateSilenceNote',gapCount?`${Number(candidate.gaps_with_local_peer_reception||0)} gap(s) occurred while nearby peers were still received. This triggers scrutiny but adds no score.`:'No gap exceeded the source-aware threshold. Silence contributes no positive score.');
+  }
+
+  function renderCandidateRows(snapshot) {
+    const candidates=Array.isArray(snapshot.attribution?.candidates)?snapshot.attribution.candidates:[];
+    const body=byId('candidateRows');
+    if(!candidates.length){body.innerHTML='<tr><td colspan="6">Waiting for completed attribution.</td></tr>';return;}
+    body.innerHTML=candidates.map(candidate=>{
+      const selected=String(candidate.mmsi)===String(selectedCandidateMmsi);
+      const gaps=Number(candidate.significant_gaps||0);
+      return `<tr tabindex="0" data-candidate-mmsi="${escapeMarkup(candidate.mmsi)}" class="${selected?'selected':''}" aria-selected="${selected}"><td>${escapeMarkup(candidate.rank)}</td><td><strong>${escapeMarkup(candidateDisplayName(candidate))}</strong><small>MMSI ${escapeMarkup(candidate.mmsi)}</small></td><td class="score-value">${finite(candidate.total_score)?(Number(candidate.total_score)*100).toFixed(1)+'%':'—'}</td><td>${finite(candidate.forward_error_km)?Number(candidate.forward_error_km).toFixed(2)+' km':'—'}</td><td>${finite(candidate.data_quality)?(Number(candidate.data_quality)*100).toFixed(0)+'%':'—'}</td><td><span class="continuity${gaps?' gap':''}">${gaps?`${gaps} GAP${gaps===1?'':'S'}`:'CONTINUOUS'}</span></td></tr>`;
+    }).join('');
+    body.querySelectorAll('tr[data-candidate-mmsi]').forEach(row=>{
+      const choose=()=>selectCandidate(row.dataset.candidateMmsi);
+      row.addEventListener('click',choose);
+      row.addEventListener('keydown',event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();choose();}});
+    });
+  }
+
+  function setNominationGate(id,passed,description) {
+    const gate=byId(id);gate.dataset.state=passed?'pass':'fail';gate.querySelector('em').textContent=passed?'PASS':'FAIL';if(description)gate.querySelector('small').textContent=description;
+  }
+
+  function renderNominationGate(snapshot) {
+    const attribution=snapshot.attribution||{};
+    const candidates=Array.isArray(attribution.candidates)?attribution.candidates:[];
+    const top=candidates[0];
+    const complete=String(attribution.status||'').toUpperCase()==='COMPLETE'&&top;
+    if(!complete)return;
+    const score=Number(top.total_score||0),margin=Number(attribution.score_margin||0),quality=Number(top.data_quality||0),error=Number(top.forward_error_km??999);
+    setNominationGate('gateTopScore',score>=.4,`${(score*100).toFixed(1)}% comparative score`);
+    setNominationGate('gateScoreMargin',margin>=.05,`${(margin*100).toFixed(1)} point lead`);
+    setNominationGate('gateTrackQuality',quality>=.4,`${(quality*100).toFixed(1)}% data quality`);
+    setNominationGate('gateForwardError',error<=8,`${error.toFixed(2)} km replay error`);
+    const decision=String(attribution.decision||'ABSTAIN_INSUFFICIENT_EVIDENCE');
+    const abstain=decision.startsWith('ABSTAIN');
+    const verdict=byId('gateVerdict');verdict.className=`gate-verdict ${abstain?'abstain':'shortlist'}`;
+    verdict.querySelector('b').textContent=abstain?'ABSTAIN · INSUFFICIENT SEPARATION':'LIMITED SHORTLIST';
+    const tieCount=candidates.filter(candidate=>Math.abs(Number(candidate.total_score)-score)<1e-9).length;
+    verdict.querySelector('p').textContent=abstain?`${tieCount} displayed candidates share the highest score; a ${Number(margin*100).toFixed(1)}-point lead cannot support nomination.`:'All minimum gates passed. Human investigation and independent verification remain required.';
+  }
+
+  function renderCandidateWorkspace(snapshot) {
+    const attribution=snapshot.attribution||{};
+    const candidates=Array.isArray(attribution.candidates)?attribution.candidates:[];
+    const complete=String(attribution.status||'').toUpperCase()==='COMPLETE';
+    const decision=String(attribution.decision||'NOT_EVALUATED');
+    const abstain=decision.startsWith('ABSTAIN');
+    const status=byId('attributionDecision');status.dataset.state=complete?(abstain?'abstain':'shortlist'):'waiting';status.querySelector('b').textContent=complete?(abstain?'ABSTAIN · INSUFFICIENT EVIDENCE':'LIMITED SHORTLIST'):'WAITING FOR RECONSTRUCTION';status.querySelector('small').textContent=complete?(abstain?'Evidence gates prevent vessel nomination':'Candidate separation passed minimum gates'):'No candidate result available';
+    const top=candidates[0];
+    html('candidatePopulation',compactNumber(attribution.candidate_count));
+    html('highestCandidateScore',top&&finite(top.total_score)?`${(Number(top.total_score)*100).toFixed(1)}%`:'—');
+    html('candidateScoreMargin',finite(attribution.score_margin)?`${(Number(attribution.score_margin)*100).toFixed(1)} pts`:'—');
+    html('candidateSafeOutput',complete?(abstain?'NO NOMINATION':'LIMITED SHORTLIST'):'—');
+    html('candidateSafeReason',complete?(abstain?'Ambiguous evidence remains unresolved':'All minimum evidence gates passed'):'Evidence gate not evaluated');
+    html('candidateMapTime',`${formatUtc(attribution.release_time_utc)} → ${formatUtc(attribution.observation_time_utc)}`);
+    if(!selectedCandidateMmsi&&top)selectedCandidateMmsi=String(top.mmsi);
+    const selected=selectedCandidate(snapshot);
+    renderCandidateInspector(snapshot,selected);
+    renderCandidateRows(snapshot);
+    renderNominationGate(snapshot);
+    const rankingLink=byId('rankingChartLink');rankingLink.hidden=!attribution.ranking_chart_url;if(!rankingLink.hidden)rankingLink.href=attribution.ranking_chart_url;
+    const mapLink=byId('attributionMapLink');mapLink.hidden=!attribution.attribution_map_url;if(!mapLink.hidden)mapLink.href=attribution.attribution_map_url;
+    renderCandidateMap(snapshot);
+  }
+
+  function selectCandidate(mmsi) {
+    selectedCandidateMmsi=String(mmsi);
+    if(!lastSnapshot)return;
+    renderCandidateInspector(lastSnapshot,selectedCandidate(lastSnapshot));
+    renderCandidateRows(lastSnapshot);
+    renderCandidateMap(lastSnapshot);
+  }
+
   function renderHeader(snapshot) {
     const region = snapshot.region || {};
     const bbox = Array.isArray(region.bbox) ? region.bbox : [];
@@ -780,6 +932,7 @@
     renderIntegrity(snapshot);
     renderDetectionWorkbench(snapshot);
     renderReverseDrift(snapshot);
+    renderCandidateWorkspace(snapshot);
     html('mapEvidenceTime', formatUtc(evidenceTime(snapshot)));
     updateMapMode(mapMode);
     syncMapGeometry(snapshot).catch(error => {

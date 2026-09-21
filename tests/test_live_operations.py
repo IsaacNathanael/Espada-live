@@ -125,6 +125,21 @@ def test_live_command_reverse_drift_uses_computed_uncertainty_without_fake_paths
     assert "particle trajectory" not in script
 
 
+def test_live_command_candidate_attribution_exposes_scores_and_abstention_gate() -> None:
+    root = Path(__file__).resolve().parents[1]
+    page = (root / "operator/live_command/index.html").read_text(encoding="utf-8")
+    script = (root / "operator/live_command/app.js").read_text(encoding="utf-8")
+    assert 'id="candidate-attribution"' in page
+    assert "Rank the evidence. Respect the refusal." in page
+    assert "comparative, not probability" in page
+    assert "Lead ≥ 5 points" in page
+    assert "Scores prioritize analyst review" in page
+    assert "candidate_tracks_url" in script
+    assert "forward_consistency" in script
+    assert "silence_classification" in script
+    assert "AIS gaps are contextual evidence only" in page
+
+
 def test_completed_analysis_survives_server_restart(tmp_path: Path) -> None:
     region = LiveRegion("Test region", 70.8, 17.8, 73.0, 20.0)
     first = LiveOperationsEngine(tmp_path, region)
