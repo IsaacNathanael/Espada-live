@@ -6,6 +6,7 @@
   const REFRESH_ENDPOINT = '/api/live/refresh';
   const ANALYZE_ENDPOINT = '/api/live/analyze-latest-sar';
   const REVIEW_ENDPOINT = '/api/live/review';
+  const ATTRIBUTION_ENDPOINT = '/api/live/build-attribution';
   const byId = id => document.getElementById(id);
   let lastSnapshot = null;
   let mapMode = 'live';
@@ -14,6 +15,7 @@
   let geometryLoadKey = '';
   let sarView = 'overview';
   let selectedSceneId = null;
+  let driftView = 'comparison';
 
   const html = (id, value) => { byId(id).textContent = value; };
   const parseTime = value => {
@@ -139,6 +141,7 @@
     byId('mapLoading').hidden = true;
     if (failures.length) html('mapLayerStatus', `Unavailable geometry: ${failures.join(', ')}`);
     renderMap(snapshot);
+    renderDriftMap(snapshot);
   }
 
   function appendMapTitle(selection, value) {
@@ -358,7 +361,16 @@
 
   function renderSceneSelector(snapshot) {
     const select = byId('sarSceneSelect');
-    const scenes = Array.isArray(snapshot.sources?.sentinel?.scenes) ? snapshot.sources.sentinel.scenes : [];
+    const scenes = Array.isArray(snapshot.sources?.sentinel?.scenes) ? [...snapshot.sources.sentinel.scenes] : [];
+    if (snapshot.analysis?.scene_id && !scenes.some(scene => scene.id === snapshot.analysis.scene_id)) {
+      scenes.push({
+        id: snapshot.analysis.scene_id,
+        acquisition_time_utc: snapshot.analysis.acquisition_time_utc,
+        platform: 'Sentinel-1',
+        polarizations: ['VV'],
+        processed_evidence: true
+      });
+    }
     const preferred = selectedSceneId || snapshot.analysis?.requested_scene_id || snapshot.analysis?.scene_id || scenes[0]?.id;
     select.replaceChildren();
     scenes.forEach(scene => {
@@ -366,7 +378,7 @@
       option.value = scene.id;
       const acquired = parseTime(scene.acquisition_time_utc);
       const ageHours = acquired ? (Date.now() - acquired.getTime()) / 3600000 : null;
-      option.textContent = `${formatUtc(scene.acquisition_time_utc)} · ${String(scene.platform || 'Sentinel-1').toUpperCase()} · ${ageHours !== null && ageHours >= 96 ? 'AIS READY' : 'AIS DELAY'}`;
+      option.textContent = `${formatUtc(scene.acquisition_time_utc)} · ${String(scene.platform || 'Sentinel-1').toUpperCase()} · ${scene.processed_evidence ? 'PROCESSED EVIDENCE' : ageHours !== null && ageHours >= 96 ? 'AIS READY' : 'AIS DELAY'}`;
       select.append(option);
     });
     if (scenes.some(scene => scene.id === preferred)) select.value = preferred;
@@ -398,7 +410,13 @@
 
   function renderSarImage(snapshot) {
     const analysis = snapshot.analysis || {};
-    const scene = (snapshot.sources?.sentinel?.scenes || []).find(item => item.id === selectedSceneId);
+    const scene = (snapshot.sources?.sentinel?.scenes || []).find(item => item.id === selectedSceneId) || (analysis.scene_id === selectedSceneId ? {
+      id: analysis.scene_id,
+      acquisition_time_utc: analysis.acquisition_time_utc,
+      platform: 'Sentinel-1',
+      polarizations: ['VV'],
+      processed_evidence: true
+    } : null);
     const matchesAnalysis = Boolean(selectedSceneId && analysis.scene_id === selectedSceneId);
     const urls = {input: analysis.input_url, overview: analysis.overview_url, mask: analysis.mask_url};
     const labels = {input:'CALIBRATED VV BACKSCATTER',overview:'MODEL PROBABILITY + CANDIDATE BOUNDARY',mask:'THRESHOLDED BINARY CANDIDATE'};
@@ -516,6 +534,159 @@
     }
   }
 
+  const coordinatePair = value => Array.isArray(value) ? value.map(Number) : [Number(value?.longitude), Number(value?.latitude)];
+  const distanceKm = (left, right) => {
+    if (!left?.every(finite) || !right?.every(finite)) return null;
+    const radians = degrees => degrees * Math.PI / 180;
+    const dLat = radians(right[1] - left[1]);
+    const dLon = radians(right[0] - left[0]);
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(radians(left[1])) * Math.cos(radians(right[1])) * Math.sin(dLon / 2) ** 2;
+    return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  };
+
+  function setDriftDetail(type, title, copy) {
+    html('driftDetailType', type);
+    html('driftDetailTitle', title);
+    html('driftDetailCopy', copy);
+  }
+
+  function setDriftView(view) {
+    driftView = view;
+    document.querySelectorAll('[data-drift-view]').forEach(button => {
+      const active = button.dataset.driftView === view;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-pressed', String(active));
+    });
+    if (lastSnapshot) renderDriftMap(lastSnapshot);
+  }
+
+  function renderDriftMap(snapshot) {
+    const svgElement = byId('driftMap');
+    if (!svgElement || !window.d3) return;
+    const d3 = window.d3;
+    const svg = d3.select(svgElement);
+    svg.selectAll('*').remove();
+    const attribution = snapshot.attribution || {};
+    const particles = (Array.isArray(attribution.origin_particles) ? attribution.origin_particles : [])
+      .map(coordinatePair).filter(point => point.every(finite));
+    const observed = coordinatePair(attribution.observed_centroid);
+    const origin = coordinatePair(attribution.estimated_origin);
+    const complete = String(attribution.status || '').toUpperCase() === 'COMPLETE' && particles.length > 0;
+    byId('driftMapEmpty').hidden = complete;
+    if (!complete) return;
+
+    const bbox = Array.isArray(snapshot.region?.bbox) ? snapshot.region.bbox.map(Number) : null;
+    if (!bbox || bbox.length !== 4) return;
+    const width = 1040, height = 650;
+    const projection = d3.geoMercator().fitExtent([[28,28],[width-28,height-28]], bboxPolygon(bbox));
+    const path = d3.geoPath(projection);
+    svg.append('rect').attr('class','drift-ocean').attr('width',width).attr('height',height);
+    svg.append('path').datum(d3.geoGraticule().extent([[bbox[0],bbox[1]],[bbox[2],bbox[3]]]).step([0.1,0.1])()).attr('class','drift-grid').attr('d',path);
+    if (mapGeometry.coast) {
+      svg.append('path').datum(mapGeometry.coast).attr('class','drift-coast-halo').attr('d',path);
+      svg.append('path').datum(mapGeometry.coast).attr('class','drift-land').attr('d',path);
+    }
+    svg.append('path').datum(bboxPolygon(bbox)).attr('class','drift-region').attr('d',path);
+
+    const showObserved = driftView !== 'origin';
+    const showOrigin = driftView !== 'observed';
+    if (showObserved && mapGeometry.slick) {
+      svg.append('path').datum(mapGeometry.slick).attr('class','drift-slick-halo').attr('d',path);
+      const slick = svg.append('path').datum(mapGeometry.slick).attr('class','drift-slick').attr('tabindex',0).attr('aria-label','Analyst-approved observed slick').attr('d',path);
+      appendMapTitle(slick,'Analyst-approved slick at satellite observation time').on('click keydown',event=>{
+        if(event.type==='keydown'&&!['Enter',' '].includes(event.key))return;
+        setDriftDetail('OBSERVED · SENTINEL-1','Approved slick geometry',`Observed ${formatUtc(snapshot.analysis?.acquisition_time_utc)} after model, physics and analyst review. This is the reconstruction seed, not proof of pollutant identity.`);
+      });
+      if (observed.every(finite)) {
+        const point=projection(observed);
+        const mark=svg.append('circle').attr('class','drift-observed-point').attr('tabindex',0).attr('aria-label','Observed slick centroid').attr('cx',point[0]).attr('cy',point[1]).attr('r',6);
+        appendMapTitle(mark,`Observed centroid · ${observed[0].toFixed(4)}, ${observed[1].toFixed(4)}`).on('click keydown',event=>{if(event.type==='keydown'&&!['Enter',' '].includes(event.key))return;setDriftDetail('OBSERVED · CENTROID','Observed slick centre',`${observed[0].toFixed(5)}°, ${observed[1].toFixed(5)}° at the Sentinel-1 acquisition time.`);});
+      }
+    }
+
+    if (showOrigin) {
+      if (mapGeometry.origin) {
+        const zone=svg.append('path').datum(mapGeometry.origin).attr('class','drift-origin-zone').attr('tabindex',0).attr('aria-label','Ninety percent probable origin zone').attr('d',path);
+        appendMapTitle(zone,`90% origin zone · ${Number(attribution.credible_radius_90_km).toFixed(2)} km credible radius`).on('click keydown',event=>{if(event.type==='keydown'&&!['Enter',' '].includes(event.key))return;setDriftDetail('INFERRED · UNCERTAINTY','Probable release zone',`This contour contains the central reverse-drift ensemble. Its ${Number(attribution.credible_radius_90_km).toFixed(2)} km radius expresses model uncertainty; it is not an accuracy claim.`);});
+      }
+      const sampleStep=Math.max(1,Math.ceil(particles.length/500));
+      svg.append('g').selectAll('circle').data(particles.filter((_,index)=>index%sampleStep===0)).join('circle').attr('class','drift-particle').attr('cx',point=>projection(point)[0]).attr('cy',point=>projection(point)[1]).attr('r',2.5);
+      if (origin.every(finite)) {
+        const point=projection(origin);
+        svg.append('circle').attr('class','drift-origin-ring').attr('cx',point[0]).attr('cy',point[1]).attr('r',13);
+        const mark=svg.append('circle').attr('class','drift-origin-point').attr('tabindex',0).attr('aria-label','Estimated release origin').attr('cx',point[0]).attr('cy',point[1]).attr('r',6);
+        appendMapTitle(mark,`Estimated origin · ${origin[0].toFixed(4)}, ${origin[1].toFixed(4)}`).on('click keydown',event=>{if(event.type==='keydown'&&!['Enter',' '].includes(event.key))return;setDriftDetail('INFERRED · ENSEMBLE CENTRE','Estimated release origin',`${origin[0].toFixed(5)}°, ${origin[1].toFixed(5)}°. This centre is passed to candidate correlation together with the full uncertainty field.`);});
+      }
+    }
+
+    if (driftView === 'comparison' && observed.every(finite) && origin.every(finite)) {
+      const a=projection(origin),b=projection(observed);
+      svg.append('line').attr('class','drift-displacement').attr('x1',a[0]).attr('y1',a[1]).attr('x2',b[0]).attr('y2',b[1]);
+      svg.append('text').attr('class','drift-displacement-label').attr('x',(a[0]+b[0])/2).attr('y',(a[1]+b[1])/2-9).attr('text-anchor','middle').text(`${distanceKm(origin,observed).toFixed(2)} km centroid displacement`);
+    }
+    const [labelX,labelY]=projection([bbox[0]+(bbox[2]-bbox[0])*.028,bbox[3]-(bbox[3]-bbox[1])*.055]);
+    svg.append('text').attr('class','drift-map-title').attr('x',labelX).attr('y',labelY).text(String(snapshot.region?.name||'WATCH REGION').toUpperCase());
+    svg.append('text').attr('class','drift-map-subtitle').attr('x',labelX).attr('y',labelY+18).text(driftView==='observed'?'SATELLITE OBSERVATION':driftView==='origin'?'INFERRED RELEASE DISTRIBUTION':'OBSERVATION ↔ INFERENCE');
+    html('driftMapLabel',driftView==='observed'?'OBSERVED SLICK':driftView==='origin'?'RELEASE ENSEMBLE':'EVIDENCE COMPARISON');
+  }
+
+  function renderReverseDrift(snapshot) {
+    const review=snapshot.review||{};
+    const attribution=snapshot.attribution||{};
+    const status=String(attribution.status||'NOT_RUN').toUpperCase();
+    const approved=String(review.status||'').toUpperCase()==='APPROVED';
+    const complete=status==='COMPLETE';
+    const running=['QUEUED','RUNNING','RECONSTRUCTING','ATTRIBUTING'].includes(status);
+    const statusBox=byId('driftStatus');
+    statusBox.dataset.state=complete?'complete':running?'running':approved?'ready':status==='FAIL'?'error':'waiting';
+    statusBox.querySelector('b').textContent=complete?'RECONSTRUCTION COMPLETE':running?`${status.replaceAll('_',' ')}…`:approved?'READY TO BUILD':'WAITING FOR APPROVAL';
+    statusBox.querySelector('small').textContent=complete?`${compactNumber(attribution.origin_particles?.length)} ensemble endpoints · ${Number(attribution.credible_radius_90_km).toFixed(2)} km radius`:running?'Physics and evidence correlation are running':approved?'Approved slick can enter reverse drift':'Human-reviewed slick required';
+    const button=byId('buildAttributionButton');
+    button.disabled=!approved||complete||running;
+    button.textContent=complete?'Reconstruction available':running?'Building reconstruction…':'Build reconstruction';
+
+    const releaseTime=attribution.release_time_utc||attribution.top_candidate?.best_match_time_utc;
+    html('driftReleaseTime',formatUtc(releaseTime));
+    html('driftObservationTime',formatUtc(attribution.observation_time_utc||snapshot.analysis?.acquisition_time_utc));
+    html('driftDuration',finite(attribution.assumed_age_hours||review.assumed_age_hours)?`${Number(attribution.assumed_age_hours||review.assumed_age_hours)} HOURS`:'—');
+    html('driftParticleCount',compactNumber(attribution.origin_particles?.length));
+    html('driftRadius',finite(attribution.credible_radius_90_km)?`${Number(attribution.credible_radius_90_km).toFixed(2)} km`:'—');
+    const origin=coordinatePair(attribution.estimated_origin),observed=coordinatePair(attribution.observed_centroid);
+    html('driftOrigin',origin.every(finite)?`${origin[0].toFixed(4)}°, ${origin[1].toFixed(4)}°`:'—');
+    const displacement=distanceKm(origin,observed);
+    html('driftDisplacement',finite(displacement)?`${displacement.toFixed(2)} km`:'—');
+    html('driftForcing',attribution.forcing_source||'No reconstruction forcing record is available.');
+    const forcing=String(attribution.forcing_source||'');
+    html('driftCurrentSource',forcing.includes('Copernicus')?'Copernicus Marine':'—');
+    html('driftWindSource',forcing.includes('Open-Meteo')?'Open-Meteo historical':'—');
+    html('driftMethodStatus',complete?`Computed ${formatUtc(attribution.completed_at_utc)} · ${compactNumber(attribution.origin_particles?.length)} retained endpoints`:'Reverse-drift method has not completed');
+    const link=byId('driftDiagnosticLink');
+    link.hidden=!complete||!attribution.reverse_analysis_url;
+    if(!link.hidden)link.href=attribution.reverse_analysis_url;
+    if(!complete)setDriftDetail('INFERENCE READOUT',approved?'Ready to reconstruct':'Review gate is closed',approved?'The approved slick can now be propagated backward through the recorded environmental fields.':'Approve a physically plausible SAR candidate before the system estimates a release region.');
+    renderDriftMap(snapshot);
+  }
+
+  async function buildAttribution() {
+    const button=byId('buildAttributionButton');
+    button.disabled=true;
+    button.textContent='QUEUED…';
+    try{
+      const response=await fetch(ATTRIBUTION_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+      const result=await response.json().catch(()=>({}));
+      if(!response.ok)throw new Error(result.error||`HTTP ${response.status}`);
+      byId('driftStatus').dataset.state='running';
+      byId('driftStatus').querySelector('b').textContent='RECONSTRUCTION QUEUED';
+      byId('driftStatus').querySelector('small').textContent=result.message||'Physics and evidence correlation started';
+      window.setTimeout(poll,1000);
+    }catch(error){
+      byId('driftStatus').dataset.state='error';
+      byId('driftStatus').querySelector('b').textContent='COULD NOT START';
+      byId('driftStatus').querySelector('small').textContent=error.message;
+      if(lastSnapshot)renderReverseDrift(lastSnapshot);
+    }
+  }
+
   function renderHeader(snapshot) {
     const region = snapshot.region || {};
     const bbox = Array.isArray(region.bbox) ? region.bbox : [];
@@ -608,6 +779,7 @@
     renderEnvironment(snapshot.sources?.environment);
     renderIntegrity(snapshot);
     renderDetectionWorkbench(snapshot);
+    renderReverseDrift(snapshot);
     html('mapEvidenceTime', formatUtc(evidenceTime(snapshot)));
     updateMapMode(mapMode);
     syncMapGeometry(snapshot).catch(error => {
@@ -681,6 +853,8 @@
   byId('analyzeSarButton').addEventListener('click',analyzeSelectedSar);
   byId('approveCandidateButton').addEventListener('click',()=>submitCandidateReview('APPROVE'));
   byId('rejectCandidateButton').addEventListener('click',()=>submitCandidateReview('REJECT'));
+  document.querySelectorAll('[data-drift-view]').forEach(button=>button.addEventListener('click',()=>setDriftView(button.dataset.driftView)));
+  byId('buildAttributionButton').addEventListener('click',buildAttribution);
   updateMapMode('live');
   tickClock();
   poll();

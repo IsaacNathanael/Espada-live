@@ -110,6 +110,21 @@ def test_live_command_detection_workbench_preserves_evidence_gates() -> None:
     assert "Approval allows reverse-drift analysis" in page
 
 
+def test_live_command_reverse_drift_uses_computed_uncertainty_without_fake_paths() -> None:
+    root = Path(__file__).resolve().parents[1]
+    page = (root / "operator/live_command/index.html").read_text(encoding="utf-8")
+    script = (root / "operator/live_command/app.js").read_text(encoding="utf-8")
+    assert 'id="reverse-drift"' in page
+    assert "Trace uncertainty backward—not blame." in page
+    assert "90% credible radius" in page
+    assert "not a particle trajectory" in page
+    assert "/api/live/build-attribution" in script
+    assert "origin_particles" in script
+    assert "origin_zone_url" in script
+    assert "drift-displacement" in script
+    assert "particle trajectory" not in script
+
+
 def test_completed_analysis_survives_server_restart(tmp_path: Path) -> None:
     region = LiveRegion("Test region", 70.8, 17.8, 73.0, 20.0)
     first = LiveOperationsEngine(tmp_path, region)

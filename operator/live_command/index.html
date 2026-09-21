@@ -39,7 +39,7 @@
   <nav class="workflow" aria-label="ESPADA investigation workflow">
     <a class="workflow-step active" href="#overview" aria-current="step"><span>01</span><b>Watch</b><small>Sources & coverage</small></a>
     <a class="workflow-step available" href="#detection-workbench"><span>02</span><b>Detect</b><small>Satellite review</small></a>
-    <span class="workflow-step locked"><span>03</span><b>Reconstruct</b><small>Reverse drift</small></span>
+    <a class="workflow-step available" href="#reverse-drift"><span>03</span><b>Reconstruct</b><small>Reverse drift</small></a>
     <span class="workflow-step locked"><span>04</span><b>Attribute</b><small>Candidate ranking</small></span>
     <span class="workflow-step locked"><span>05</span><b>Respond</b><small>Evidence & impact</small></span>
   </nav>
@@ -250,6 +250,92 @@
           </section>
         </aside>
       </div>
+    </section>
+
+    <section class="drift-section" id="reverse-drift" aria-labelledby="driftTitle">
+      <header class="drift-header">
+        <div>
+          <p class="kicker">REVERSE-DRIFT RECONSTRUCTION · COMPONENT 04</p>
+          <h2 id="driftTitle">Trace uncertainty backward—not blame.</h2>
+          <p>The approved slick is propagated backward through date-matched currents and wind to estimate a release distribution, not a single certain point.</p>
+        </div>
+        <div class="drift-status" id="driftStatus" data-state="waiting" role="status" aria-live="polite">
+          <span>RECONSTRUCTION</span><b>WAITING FOR APPROVAL</b><small>Human-reviewed slick required</small>
+        </div>
+      </header>
+
+      <div class="drift-toolbar">
+        <div class="drift-modes" role="group" aria-label="Reverse-drift evidence view">
+          <button type="button" data-drift-view="observed" aria-pressed="false"><span>01</span> Observed slick</button>
+          <button type="button" data-drift-view="origin" aria-pressed="false"><span>02</span> Release ensemble</button>
+          <button type="button" data-drift-view="comparison" class="active" aria-pressed="true"><span>03</span> Comparison</button>
+        </div>
+        <button type="button" class="build-drift-button" id="buildAttributionButton" disabled>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 7v5h-5M5 17v-5h5M17.5 9A7 7 0 0 0 7 7l-2 2m14 6-2 2a7 7 0 0 1-10.5-2"/></svg>
+          Build reconstruction
+        </button>
+      </div>
+
+      <div class="drift-layout">
+        <div class="drift-map-frame">
+          <svg id="driftMap" viewBox="0 0 1040 650" role="img" aria-labelledby="driftMapTitle driftMapDescription">
+            <title id="driftMapTitle">Reverse-drift reconstruction map</title>
+            <desc id="driftMapDescription">Approved slick observation compared with a Monte Carlo distribution of probable release endpoints.</desc>
+          </svg>
+          <div class="drift-map-empty" id="driftMapEmpty">
+            <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M49 17 35 31M15 47l14-14M40 13h13v13M24 51H11V38M8 31c7-4 13-4 20 0s13 4 28 0"/></svg>
+            <strong>No reconstruction available</strong>
+            <span>An analyst-approved slick is required before reverse drift can run.</span>
+          </div>
+          <div class="drift-map-label" id="driftMapLabel">AWAITING RECONSTRUCTION</div>
+          <div class="drift-legend" aria-label="Reconstruction legend">
+            <span><i class="drift-legend-slick"></i>Approved slick</span>
+            <span><i class="drift-legend-particle"></i>Release endpoint</span>
+            <span><i class="drift-legend-zone"></i>90% origin zone</span>
+            <span><i class="drift-legend-centroid"></i>Estimated origin</span>
+          </div>
+        </div>
+
+        <aside class="drift-evidence" aria-live="polite">
+          <section class="drift-timeline" aria-labelledby="driftTimelineTitle">
+            <div class="aside-heading"><span>BACKWARD INTERVAL</span><h3 id="driftTimelineTitle">Evidence clock</h3></div>
+            <ol>
+              <li><span>RELEASE</span><b id="driftReleaseTime">—</b><small>estimated from approved slick age</small></li>
+              <li class="time-bridge"><i></i><b id="driftDuration">—</b><small>backward integration</small></li>
+              <li><span>OBSERVED</span><b id="driftObservationTime">—</b><small>Sentinel-1 acquisition</small></li>
+            </ol>
+          </section>
+
+          <section class="drift-metrics" aria-label="Reverse-drift uncertainty metrics">
+            <div><span>Ensemble endpoints</span><b id="driftParticleCount">—</b><small>Monte Carlo samples</small></div>
+            <div><span>90% credible radius</span><b id="driftRadius">—</b><small>uncertainty, not accuracy</small></div>
+            <div><span>Estimated origin</span><b id="driftOrigin">—</b><small>ensemble centre</small></div>
+            <div><span>Centroid displacement</span><b id="driftDisplacement">—</b><small>not a travelled path</small></div>
+          </section>
+
+          <section class="forcing-record">
+            <div class="aside-heading"><span>MODEL INPUT</span><h3>Environmental forcing</h3></div>
+            <p id="driftForcing">Waiting for forcing provenance.</p>
+            <dl>
+              <div><dt>Ocean current</dt><dd id="driftCurrentSource">—</dd></div>
+              <div><dt>Wind</dt><dd id="driftWindSource">—</dd></div>
+              <div><dt>Time matching</dt><dd>Incident window</dd></div>
+            </dl>
+          </section>
+
+          <section class="drift-readout">
+            <span id="driftDetailType">INFERENCE READOUT</span>
+            <h3 id="driftDetailTitle">Select evidence on the map</h3>
+            <p id="driftDetailCopy">Inspect the observed slick, ensemble cloud or estimated origin without confusing inference with observation.</p>
+            <div class="drift-boundary"><b>CLAIM BOUNDARY</b>The dots are probable release endpoints. The dashed connector shows centroid displacement; it is not a particle trajectory.</div>
+          </section>
+        </aside>
+      </div>
+
+      <footer class="drift-footer">
+        <span id="driftMethodStatus">Method record unavailable</span>
+        <a id="driftDiagnosticLink" href="#" target="_blank" rel="noopener" hidden>Open reconstruction diagnostic ↗</a>
+      </footer>
     </section>
 
     <section class="section-heading">

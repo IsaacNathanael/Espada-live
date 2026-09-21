@@ -166,6 +166,7 @@ class LiveOperationsEngine:
         self._analysis_thread: threading.Thread | None = None
         self._attribution_thread: threading.Thread | None = None
         self._restore_previous_state()
+        self._recover_completed_case()
         self._prepare_coastline()
         self._write_state()
 
@@ -212,6 +213,134 @@ class LiveOperationsEngine:
                     "message": "The previous evidence job stopped before a final result was recorded.",
                 }
             self._state[section] = saved
+
+    def _recover_completed_case(self) -> None:
+        """Recover the latest completed on-disk case when session state was reset.
+
+        Generated evidence is durable and may outlive a changed watch-window session. Recovery
+        is limited to a case whose analysed SAR crop overlaps the active region and whose full
+        review, drift and ranking artifacts are present.
+        """
+        if str(self._state.get("attribution", {}).get("status")) == "COMPLETE":
+            return
+        analysis_root = self.output_root / "analysis"
+        if not analysis_root.exists():
+            return
+        candidates = sorted(
+            analysis_root.glob("*/attribution/ranking/candidates.json"),
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )
+        for ranking_path in candidates:
+            run_root = ranking_path.parents[2]
+            input_status_path = run_root / "input" / "sentinel1_subset_status.json"
+            result_path = run_root / "segmentation" / "sar_result.json"
+            physics_path = run_root / "segmentation" / "physics_screen.json"
+            approved_slick = run_root / "review" / "approved_slick.geojson"
+            release_path = run_root / "attribution" / "drift" / "release_estimate.json"
+            endpoints_path = run_root / "attribution" / "drift" / "reverse_endpoints.npz"
+            origin_zone = run_root / "attribution" / "origin_zone.geojson"
+            tracks_path = run_root / "attribution" / "candidate_tracks.geojson"
+            required = (
+                input_status_path,
+                result_path,
+                physics_path,
+                approved_slick,
+                release_path,
+                endpoints_path,
+                origin_zone,
+                tracks_path,
+            )
+            if not all(path.exists() for path in required):
+                continue
+            try:
+                input_status = json.loads(input_status_path.read_text(encoding="utf-8"))
+                crop = [float(value) for value in input_status.get("bbox", [])]
+                region = list(self.region.bbox)
+                if len(crop) != 4 or crop[2] < region[0] or crop[0] > region[2] or crop[3] < region[1] or crop[1] > region[3]:
+                    continue
+                result = json.loads(result_path.read_text(encoding="utf-8"))
+                physics = json.loads(physics_path.read_text(encoding="utf-8"))
+                release = json.loads(release_path.read_text(encoding="utf-8"))
+                ranking = json.loads(ranking_path.read_text(encoding="utf-8"))
+                ranked = list(ranking.get("candidates", []))
+                if not ranked:
+                    continue
+                with np.load(endpoints_path) as endpoints:
+                    longitude = np.asarray(endpoints["lon"], dtype=float)
+                    latitude = np.asarray(endpoints["lat"], dtype=float)
+                if longitude.size == 0 or longitude.shape != latitude.shape:
+                    continue
+                sample_indices = np.linspace(0, longitude.size - 1, min(320, longitude.size), dtype=int)
+                origin_particles = [
+                    [float(longitude[index]), float(latitude[index])] for index in sample_indices
+                ]
+                slick = load_slick(approved_slick)
+            except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
+                continue
+            top = ranked[0]
+            runner_score = float(ranked[1]["total_score"]) if len(ranked) > 1 else 0.0
+            margin = float(top["total_score"]) - runner_score
+            limited = (
+                len(ranked) >= 2
+                and float(top["total_score"]) >= 0.40
+                and margin >= 0.05
+                and float(top.get("data_quality", 0.0)) >= 0.40
+                and float(top.get("forward_error_km", 999.0)) <= 8.0
+            )
+            scene_id = str(input_status.get("scene_id") or run_root.name)
+            acquisition = str(input_status.get("acquisition_time_utc") or release.get("observation_time_utc"))
+            self._state["analysis"] = {
+                "status": str(result.get("status", "REVIEW_REQUIRED")),
+                "scene_id": scene_id,
+                "acquisition_time_utc": acquisition,
+                "bbox": crop,
+                "detected_pixel_fraction": float(result.get("detected_pixel_fraction", 0.0)),
+                "detected_components": int(result.get("segmentation", {}).get("detected_components", 0)),
+                "probability_summary": result.get("segmentation", {}).get("probability_summary", {}),
+                "review_status": "approved",
+                "input_url": self._public_url(run_root / "input" / "sentinel1_vv_quicklook.png"),
+                "overview_url": self._public_url(run_root / "segmentation" / "sar_segmentation_overview.png"),
+                "mask_url": self._public_url(run_root / "segmentation" / "slick_mask.png"),
+                "result_url": self._public_url(result_path),
+                "slick_geojson_url": self._public_url(run_root / "segmentation" / "slick_candidate.geojson"),
+                "physics_screen": physics,
+                "message": "Recovered a completed, analyst-reviewed SAR case from durable evidence artifacts.",
+            }
+            self._state["review"] = {
+                "status": "APPROVED",
+                "scene_id": scene_id,
+                "reviewed_at_utc": _format_utc(datetime.fromtimestamp(approved_slick.stat().st_mtime, tz=UTC)),
+                "assumed_age_hours": float(release.get("assumed_age_hours", 19.0)),
+                "approved_slick_url": self._public_url(approved_slick),
+                "message": "Recovered the recorded analyst approval from durable evidence artifacts.",
+            }
+            forcing = release.get("forcing_provenance", {})
+            self._state["attribution"] = {
+                "status": "COMPLETE",
+                "message": "Recovered the completed reconstruction and ranking from durable evidence artifacts.",
+                "observation_time_utc": acquisition,
+                "release_time_utc": release.get("release_time_utc"),
+                "assumed_age_hours": float(release.get("assumed_age_hours", 19.0)),
+                "origin_zone_url": self._public_url(origin_zone),
+                "origin_particles": origin_particles,
+                "observed_centroid": [float(slick.polygon.centroid.x), float(slick.polygon.centroid.y)],
+                "estimated_origin": release.get("estimated_origin"),
+                "credible_radius_90_km": float(release.get("credible_radius_90_km", 0.0)),
+                "reverse_analysis_url": self._public_url(run_root / "attribution" / "drift" / "slick_reverse_analysis.png"),
+                "forcing_source": forcing.get("source", "Recorded date-matched forcing"),
+                "ais_source": "Global Fishing Watch delayed AIS vessel presence",
+                "decision": "LIMITED_SHORTLIST" if limited else "ABSTAIN_INSUFFICIENT_EVIDENCE",
+                "candidate_count": len(ranked),
+                "candidates": ranked[:12],
+                "top_candidate": top,
+                "score_margin": margin,
+                "candidate_tracks_url": self._public_url(tracks_path),
+                "ranking_chart_url": self._public_url(run_root / "attribution" / "ranking" / "candidate_ranking.png"),
+                "attribution_map_url": self._public_url(run_root / "attribution" / "ranking" / "attribution_map.png"),
+                "completed_at_utc": _format_utc(datetime.fromtimestamp(ranking_path.stat().st_mtime, tz=UTC)),
+            }
+            return
 
     @staticmethod
     def _empty_source(provider: str, kind: str) -> dict[str, object]:
