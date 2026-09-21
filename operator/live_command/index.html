@@ -41,7 +41,7 @@
     <a class="workflow-step available" href="#detection-workbench"><span>02</span><b>Detect</b><small>Satellite review</small></a>
     <a class="workflow-step available" href="#reverse-drift"><span>03</span><b>Reconstruct</b><small>Reverse drift</small></a>
     <a class="workflow-step available" href="#candidate-attribution"><span>04</span><b>Attribute</b><small>Candidate ranking</small></a>
-    <span class="workflow-step locked"><span>05</span><b>Respond</b><small>Evidence & impact</small></span>
+    <a class="workflow-step available" href="#respond-workspace"><span>05</span><b>Respond</b><small>Evidence & impact</small></a>
   </nav>
 
   <main id="overview">
@@ -427,6 +427,84 @@
       </div>
 
       <footer class="attribution-boundary"><b>INVESTIGATIVE BOUNDARY</b> Scores prioritize analyst review. They are not guilt probabilities, identity verification, discharge proof or legal findings.</footer>
+    </section>
+
+    <section class="response-section" id="respond-workspace" aria-labelledby="responseTitle">
+      <header class="response-header">
+        <div>
+          <p class="kicker">RESPONSE & EVIDENCE DOSSIER · COMPONENT 06</p>
+          <h2 id="responseTitle">Package the evidence. Control the consequence.</h2>
+          <p>The final stage preserves every source, model result and human decision—then permits only the response supported by the evidence.</p>
+        </div>
+        <div class="response-status" id="responseStatus" data-state="waiting" role="status" aria-live="polite">
+          <span>CASE RESPONSE</span><b>WAITING FOR ATTRIBUTION</b><small>No package is available</small>
+        </div>
+      </header>
+
+      <div class="response-summary" aria-label="Evidence response summary">
+        <div><span>OPERATIONAL OUTPUT</span><b id="responseDecision">—</b><small>controlled by the nomination gate</small></div>
+        <div><span>VERIFIED FILES</span><b id="responseVerified">—</b><small id="responseRequired">required evidence not checked</small></div>
+        <div><span>MISSING REQUIRED</span><b id="responseMissing">—</b><small>zero required for an integrity pass</small></div>
+        <div class="response-action-cell"><span>PERMITTED ACTION</span><b id="responseAction">—</b><small>automatic accusation is never permitted</small></div>
+      </div>
+
+      <div class="response-layout">
+        <article class="decision-record">
+          <div class="decision-record-head"><span>DECISION RECORD</span><b id="responseCaseReference">CASE NOT READY</b></div>
+          <div class="decision-callout" id="responseDecisionCallout" data-state="waiting">
+            <span>FINAL SYSTEM POSITION</span>
+            <h3 id="responseCalloutTitle">Awaiting evidence</h3>
+            <p id="responseRationale">The response layer activates after candidate attribution completes.</p>
+          </div>
+          <div class="consequence-controls" aria-labelledby="consequenceTitle">
+            <h4 id="consequenceTitle">Consequence controls</h4>
+            <div id="controlAccusation" data-state="blocked"><span>01</span><div><b>Automatic vessel accusation</b><small>Never produced by ESPADA</small></div><em>BLOCKED</em></div>
+            <div id="controlReview" data-state="waiting"><span>02</span><div><b>Human analyst review</b><small>Requires a complete evidence package</small></div><em>WAITING</em></div>
+            <div id="controlEvidence" data-state="waiting"><span>03</span><div><b>Supplementary evidence request</b><small>Driven by the decision gate</small></div><em>WAITING</em></div>
+          </div>
+        </article>
+
+        <aside class="evidence-package" aria-live="polite">
+          <div class="package-heading">
+            <div><span>AUDITABLE EXPORT</span><h3>Evidence package</h3></div>
+            <button id="buildResponseButton" type="button" disabled>Build evidence package</button>
+          </div>
+          <div class="package-seal">
+            <span>SHA-256 CHAIN DIGEST</span>
+            <code id="responseDigest">Not generated</code>
+            <small id="responseGenerated">Every included file receives an integrity fingerprint.</small>
+          </div>
+          <div class="package-links" id="responseLinks">
+            <a id="dossierLink" href="#" target="_blank" rel="noopener" hidden>Open evidence dossier ↗</a>
+            <a id="bundleLink" href="#" target="_blank" rel="noopener" hidden>Download evidence bundle ↗</a>
+            <a id="manifestLink" href="#" target="_blank" rel="noopener" hidden>Open integrity manifest ↗</a>
+            <a id="responseSummaryLink" href="#" target="_blank" rel="noopener" hidden>Open decision record ↗</a>
+          </div>
+          <p class="package-note" id="responseMessage">No response package has been generated for this case.</p>
+        </aside>
+      </div>
+
+      <div class="response-lower">
+        <section class="evidence-chain" aria-labelledby="evidenceChainTitle">
+          <header><span>CHAIN OF CUSTODY</span><h3 id="evidenceChainTitle">Six recorded transitions</h3></header>
+          <ol>
+            <li id="chainObservation" data-state="waiting"><span>01</span><div><b>Satellite observation</b><small>Source raster and acquisition metadata</small></div><em>WAITING</em></li>
+            <li id="chainInference" data-state="waiting"><span>02</span><div><b>Model + physics screen</b><small>Frozen inference and plausibility record</small></div><em>WAITING</em></li>
+            <li id="chainReview" data-state="waiting"><span>03</span><div><b>Human review</b><small>Approved geometry, age assumption and timestamp</small></div><em>WAITING</em></li>
+            <li id="chainDrift" data-state="waiting"><span>04</span><div><b>Reverse-drift reconstruction</b><small>Forcing provenance and uncertainty ensemble</small></div><em>WAITING</em></li>
+            <li id="chainCorrelation" data-state="waiting"><span>05</span><div><b>AIS correlation</b><small>Normalized tracks, quality and silence audit</small></div><em>WAITING</em></li>
+            <li id="chainDecision" data-state="waiting"><span>06</span><div><b>Safety decision</b><small>Nomination gates and explicit claim boundary</small></div><em>WAITING</em></li>
+          </ol>
+        </section>
+
+        <section class="response-plan" aria-labelledby="responsePlanTitle">
+          <header><span>CONTROLLED NEXT STEPS</span><h3 id="responsePlanTitle">Recommended response</h3></header>
+          <ol id="responseRecommendations"><li>Complete attribution before issuing a response plan.</li></ol>
+          <div class="blocked-actions"><b>PROHIBITED AUTOMATION</b><ul id="responseBlockedActions"><li>Automatic accusation or enforcement notification</li></ul></div>
+        </section>
+      </div>
+
+      <footer class="response-boundary"><b>ACCOUNTABILITY BOUNDARY</b> ESPADA preserves and explains the evidence. A public allegation, enforcement action or legal finding requires independent corroboration and accountable human authority.</footer>
     </section>
 
     <section class="section-heading">

@@ -23,6 +23,7 @@ from .copernicus import FORECAST_DATASET_ID, normalize_currents
 from .environment import load_environment, sync_historical_wind
 from .historical_ais import GFW_DELAY_HOURS, HistoricalAISRequest, fetch_gfw_presence
 from .live_ais import AISBoundingBox, capture_aisstream
+from .live_response import build_live_response_package
 from .sentinel_catalog import SentinelSearchRequest, discover_sentinel1
 from .sentinel_process import download_sentinel1_subset
 from .sar_physics_gate import evaluate_sar_files
@@ -162,11 +163,16 @@ class LiveOperationsEngine:
                 "message": "Reverse drift starts only after analyst approval.",
                 "candidates": [],
             },
+            "response": {
+                "status": "NOT_BUILT",
+                "message": "The evidence package is created after attribution completes.",
+            },
         }
         self._analysis_thread: threading.Thread | None = None
         self._attribution_thread: threading.Thread | None = None
         self._restore_previous_state()
         self._recover_completed_case()
+        self._recover_response_package()
         self._prepare_coastline()
         self._write_state()
 
@@ -195,7 +201,7 @@ class LiveOperationsEngine:
                     "message": "The previous SAR job was interrupted before a final result was recorded.",
                 }
             self._state["analysis"] = analysis
-        for section in ("review", "attribution"):
+        for section in ("review", "attribution", "response"):
             saved = previous.get(section)
             if not isinstance(saved, dict):
                 continue
@@ -206,6 +212,7 @@ class LiveOperationsEngine:
                 "REVERSING_DRIFT",
                 "FETCHING_AIS",
                 "RANKING",
+                "BUILDING",
             }:
                 saved = {
                     **saved,
@@ -341,6 +348,45 @@ class LiveOperationsEngine:
                 "completed_at_utc": _format_utc(datetime.fromtimestamp(ranking_path.stat().st_mtime, tz=UTC)),
             }
             return
+
+    def _recover_response_package(self) -> None:
+        scene_id = str(self._state.get("analysis", {}).get("scene_id") or "").strip()
+        if not scene_id:
+            return
+        safe_scene_id = "".join(
+            char if char.isalnum() or char in "-_" else "_" for char in scene_id
+        )
+        response_dir = self.output_root / "analysis" / safe_scene_id / "response"
+        summary_path = response_dir / "response_summary.json"
+        manifest_path = response_dir / "evidence_manifest.json"
+        bundle_path = response_dir / "evidence_bundle.json"
+        dossier_path = response_dir / "evidence_dossier.html"
+        if not all(path.exists() for path in (summary_path, manifest_path, bundle_path, dossier_path)):
+            return
+        try:
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return
+        self._state["response"] = {
+            "status": "READY",
+            "message": "Recovered the completed evidence response package.",
+            "response_status": summary.get("response_status"),
+            "operational_decision": summary.get("operational_decision"),
+            "permitted_action": summary.get("permitted_action"),
+            "rationale": summary.get("rationale"),
+            "generated_at_utc": summary.get("generated_at_utc"),
+            "verified_files": int(manifest.get("verified_files", 0)),
+            "required_files": int(manifest.get("required_files", 0)),
+            "missing_required_files": int(manifest.get("missing_required_files", 0)),
+            "chain_digest_sha256": manifest.get("chain_digest_sha256"),
+            "recommended_actions": list(summary.get("recommended_actions", [])),
+            "blocked_actions": list(summary.get("blocked_actions", [])),
+            "dossier_url": self._public_url(dossier_path),
+            "bundle_url": self._public_url(bundle_path),
+            "manifest_url": self._public_url(manifest_path),
+            "summary_url": self._public_url(summary_path),
+        }
 
     @staticmethod
     def _empty_source(provider: str, kind: str) -> dict[str, object]:
@@ -495,6 +541,10 @@ class LiveOperationsEngine:
                 "message": "Reverse drift starts only after analyst approval.",
                 "candidates": [],
             }
+            self._state["response"] = {
+                "status": "NOT_BUILT",
+                "message": "The evidence package is created after attribution completes.",
+            }
             self._analysis_thread = threading.Thread(
                 target=self._analysis_worker, name="espada-live-sar", daemon=True
             )
@@ -544,6 +594,10 @@ class LiveOperationsEngine:
                 "message": "No reverse drift or vessel ranking is permitted after rejection.",
                 "candidates": [],
             }
+            self._state["response"] = {
+                "status": "BLOCKED_BY_REVIEW",
+                "message": "No attribution response package is created after rejection.",
+            }
             self._state["review"] = result
             self._write_state()
             return result
@@ -587,6 +641,10 @@ class LiveOperationsEngine:
             "message": "Ready to build date-matched forcing and vessel evidence.",
             "candidates": [],
         }
+        self._state["response"] = {
+            "status": "NOT_BUILT",
+            "message": "The evidence package is created after attribution completes.",
+        }
         self._write_state()
         return result
 
@@ -603,6 +661,10 @@ class LiveOperationsEngine:
                 "queued_at_utc": _format_utc(_utc_now()),
                 "candidates": [],
             }
+            self._state["response"] = {
+                "status": "NOT_BUILT",
+                "message": "The evidence package is created after attribution completes.",
+            }
             self._attribution_thread = threading.Thread(
                 target=self._attribution_worker,
                 name="espada-live-attribution",
@@ -612,6 +674,62 @@ class LiveOperationsEngine:
             result = dict(self._state["attribution"])
         self._write_state()
         return result
+
+    def build_response_package(self) -> dict[str, object]:
+        with self._lock:
+            analysis = dict(self._state.get("analysis", {}))
+            review = dict(self._state.get("review", {}))
+            attribution = dict(self._state.get("attribution", {}))
+            sources = json.loads(json.dumps(self._state.get("sources", {}), default=str))
+        if attribution.get("status") != "COMPLETE":
+            raise RuntimeError("Complete attribution before building the evidence response package.")
+        scene_id = str(analysis.get("scene_id") or "").strip()
+        if not scene_id:
+            raise RuntimeError("The completed case has no scene identifier.")
+        safe_scene_id = "".join(
+            char if char.isalnum() or char in "-_" else "_" for char in scene_id
+        )
+        run_root = self.output_root / "analysis" / safe_scene_id
+        if not run_root.exists():
+            raise FileNotFoundError("The completed case directory is missing.")
+        self._section_update(
+            "response",
+            status="BUILDING",
+            message="Hashing case artifacts and assembling the evidence dossier.",
+        )
+        try:
+            package = build_live_response_package(
+                run_root,
+                analysis=analysis,
+                review=review,
+                attribution=attribution,
+                sources=sources,
+            )
+            result = {
+                key: value
+                for key, value in package.items()
+                if key not in {"dossier_path", "bundle_path", "manifest_path", "summary_path"}
+            }
+            result.update(
+                {
+                    "status": "READY",
+                    "message": "Evidence package generated from recorded case artifacts.",
+                    "dossier_url": self._public_url(package["dossier_path"]),
+                    "bundle_url": self._public_url(package["bundle_path"]),
+                    "manifest_url": self._public_url(package["manifest_path"]),
+                    "summary_url": self._public_url(package["summary_path"]),
+                }
+            )
+            self._state["response"] = result
+            self._write_state()
+            return dict(result)
+        except Exception as error:
+            self._section_update(
+                "response",
+                status="ERROR",
+                message=f"{type(error).__name__}: {error}",
+            )
+            raise
 
     def _write_origin_zone(
         self, output_path: Path, longitude: np.ndarray, latitude: np.ndarray, properties: dict[str, object]
@@ -1424,6 +1542,7 @@ class LiveOperationsEngine:
             "analysis": state.get("analysis", {"status": "NOT_RUN"}),
             "review": state.get("review", {"status": "NOT_REVIEWED"}),
             "attribution": state.get("attribution", {"status": "NOT_RUN", "candidates": []}),
+            "response": state.get("response", {"status": "NOT_BUILT"}),
             "truth_policy": {
                 "synthetic_fallback": False,
                 "empty_feed_behavior": "show NO DATA and render no objects",
@@ -1456,6 +1575,7 @@ class LiveOperationsEngine:
         analysis_complete = analysis_status in {"PASS", "REVIEW_REQUIRED", "NO_DETECTION"}
         review_status = str(state.get("review", {}).get("status", "NOT_REVIEWED"))
         attribution_status = str(state.get("attribution", {}).get("status", "NOT_RUN"))
+        response_status = str(state.get("response", {}).get("status", "NOT_BUILT"))
         attribution_running = attribution_status in {
             "QUEUED",
             "PREPARING_FORCING",
@@ -1463,7 +1583,11 @@ class LiveOperationsEngine:
             "FETCHING_AIS",
             "RANKING",
         }
-        if attribution_running:
+        if response_status == "READY":
+            stage = "EVIDENCE_PACKAGE_READY"
+        elif response_status == "BUILDING":
+            stage = "EVIDENCE_PACKAGE_BUILDING"
+        elif attribution_running:
             stage = f"EVIDENCE_{attribution_status}"
         elif attribution_status == "COMPLETE":
             stage = "EVIDENCE_SHORTLIST_READY"
@@ -1495,6 +1619,7 @@ class LiveOperationsEngine:
             "slick_detection_ready": analysis_complete,
             "analyst_review_ready": review_status == "APPROVED",
             "attribution_ready": attribution_status in {"COMPLETE", "ABSTAIN_NO_MATCHED_AIS"},
+            "response_ready": response_status == "READY",
             "message": (
                 "No oil candidate is displayed until a calibrated scene is processed and approved."
             ),

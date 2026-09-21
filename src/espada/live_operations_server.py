@@ -107,6 +107,15 @@ class LiveOperationsHandler(SimpleHTTPRequestHandler):
             except Exception as error:
                 self._json(500, {"status": "FAIL", "error": str(error)})
             return
+        if path == "/api/live/build-response":
+            try:
+                response = self.engine.build_response_package()
+                self._json(200, response)
+            except (RuntimeError, FileNotFoundError) as error:
+                self._json(409, {"status": "REJECTED", "error": str(error)})
+            except Exception as error:
+                self._json(500, {"status": "FAIL", "error": str(error)})
+            return
         self._json(404, {"status": "FAIL", "error": "Unknown endpoint"})
 
     def log_message(self, format: str, *args: object) -> None:

@@ -7,6 +7,7 @@
   const ANALYZE_ENDPOINT = '/api/live/analyze-latest-sar';
   const REVIEW_ENDPOINT = '/api/live/review';
   const ATTRIBUTION_ENDPOINT = '/api/live/build-attribution';
+  const RESPONSE_ENDPOINT = '/api/live/build-response';
   const byId = id => document.getElementById(id);
   let lastSnapshot = null;
   let mapMode = 'live';
@@ -839,6 +840,111 @@
     renderCandidateMap(lastSnapshot);
   }
 
+  function setResponseChain(id, state, label) {
+    const item = byId(id);
+    item.dataset.state = state;
+    item.querySelector('em').textContent = label || (state === 'verified' ? 'VERIFIED' : state === 'missing' ? 'MISSING' : 'WAITING');
+  }
+
+  function renderResponseWorkspace(snapshot) {
+    const analysis = snapshot.analysis || {};
+    const review = snapshot.review || {};
+    const attribution = snapshot.attribution || {};
+    const response = snapshot.response || {};
+    const attributionComplete = String(attribution.status || '').toUpperCase() === 'COMPLETE';
+    const responseStatus = String(response.status || 'NOT_BUILT').toUpperCase();
+    const ready = responseStatus === 'READY';
+    const building = responseStatus === 'BUILDING';
+    const error = responseStatus === 'ERROR';
+    const decision = String(response.operational_decision || attribution.decision || 'NOT_EVALUATED');
+    const abstain = decision.startsWith('ABSTAIN');
+    const packageIncomplete = ready && Number(response.missing_required_files || 0) > 0;
+    const status = byId('responseStatus');
+    status.dataset.state = error || packageIncomplete ? 'error' : ready ? (abstain ? 'abstain' : 'ready') : building ? 'ready' : 'waiting';
+    status.querySelector('b').textContent = error ? 'PACKAGE FAILED' : packageIncomplete ? 'PACKAGE INCOMPLETE' : ready ? (abstain ? 'SAFE ABSTENTION READY' : 'ANALYST SHORTLIST READY') : building ? 'BUILDING EVIDENCE PACKAGE…' : attributionComplete ? 'READY TO PACKAGE' : 'WAITING FOR ATTRIBUTION';
+    status.querySelector('small').textContent = error ? String(response.message || 'The response package could not be generated.') : ready ? `${compactNumber(response.verified_files)} evidence files integrity-checked` : building ? 'Hashing artifacts and assembling the dossier' : attributionComplete ? 'Candidate attribution is complete' : 'No package is available';
+
+    const button = byId('buildResponseButton');
+    button.disabled = !attributionComplete || building;
+    button.textContent = building ? 'Building package…' : ready ? 'Refresh evidence package' : 'Build evidence package';
+
+    html('responseDecision', attributionComplete ? (abstain ? 'NO NOMINATION' : 'LIMITED SHORTLIST') : '—');
+    html('responseVerified', ready ? compactNumber(response.verified_files) : '—');
+    html('responseRequired', ready ? `${compactNumber(response.required_files)} required files checked` : 'required evidence not checked');
+    html('responseMissing', ready ? compactNumber(response.missing_required_files) : '—');
+    html('responseAction', ready ? String(response.permitted_action || 'HUMAN REVIEW ONLY').replaceAll('_', ' ') : '—');
+    html('responseCaseReference', analysis.scene_id ? `CASE · ${analysis.scene_id}` : 'CASE NOT READY');
+
+    const callout = byId('responseDecisionCallout');
+    callout.dataset.state = attributionComplete ? (abstain ? 'abstain' : 'shortlist') : 'waiting';
+    html('responseCalloutTitle', attributionComplete ? (abstain ? 'No vessel nominated' : 'Human review shortlist only') : 'Awaiting evidence');
+    html('responseRationale', response.rationale || (attributionComplete ? (abstain ? 'The evidence does not safely separate one vessel from the alternatives. The system preserves the case and requests stronger corroboration.' : 'Minimum ranking gates passed, but independent corroboration and accountable human review remain mandatory.') : 'The response layer activates after candidate attribution completes.'));
+
+    const reviewControl = byId('controlReview');
+    reviewControl.dataset.state = ready ? 'ready' : 'waiting';
+    reviewControl.querySelector('em').textContent = ready ? 'READY' : 'WAITING';
+    reviewControl.querySelector('small').textContent = ready ? 'Auditable package available to an accountable analyst' : 'Requires a complete evidence package';
+    const evidenceControl = byId('controlEvidence');
+    evidenceControl.dataset.state = ready && abstain ? 'ready' : 'waiting';
+    evidenceControl.querySelector('em').textContent = ready && abstain ? 'RECOMMENDED' : 'WAITING';
+    evidenceControl.querySelector('small').textContent = ready && abstain ? 'Seek independent AIS, SAR, optical, port or sampling evidence' : 'Driven by the decision gate';
+
+    const observationVerified = Boolean(analysis.scene_id) && ['REVIEW_REQUIRED', 'COMPLETE'].includes(String(analysis.status || '').toUpperCase());
+    const inferenceVerified = observationVerified && Boolean(analysis.physics_screen);
+    const reviewVerified = String(review.status || '').toUpperCase() === 'APPROVED';
+    const driftVerified = attributionComplete && Boolean(attribution.origin_zone_url) && Boolean(attribution.release_time_utc);
+    const correlationVerified = attributionComplete && Array.isArray(attribution.candidates) && Boolean(attribution.candidate_tracks_url);
+    const decisionVerified = attributionComplete && Boolean(attribution.decision);
+    setResponseChain('chainObservation', observationVerified ? 'verified' : 'waiting');
+    setResponseChain('chainInference', inferenceVerified ? 'verified' : 'waiting');
+    setResponseChain('chainReview', reviewVerified ? 'verified' : 'waiting');
+    setResponseChain('chainDrift', driftVerified ? 'verified' : 'waiting');
+    setResponseChain('chainCorrelation', correlationVerified ? 'verified' : 'waiting');
+    setResponseChain('chainDecision', decisionVerified ? 'verified' : 'waiting');
+
+    html('responseDigest', ready ? response.chain_digest_sha256 || 'Digest unavailable' : 'Not generated');
+    html('responseGenerated', ready ? `Generated ${formatUtc(response.generated_at_utc)} · ${packageIncomplete ? 'required evidence is missing' : 'integrity register complete'}` : 'Every included file receives an integrity fingerprint.');
+    const links = [
+      ['dossierLink', response.dossier_url],
+      ['bundleLink', response.bundle_url],
+      ['manifestLink', response.manifest_url],
+      ['responseSummaryLink', response.summary_url],
+    ];
+    links.forEach(([id, url]) => { const link = byId(id); link.hidden = !ready || !url; if (!link.hidden) link.href = url; });
+    html('responseMessage', response.message || (attributionComplete ? 'The completed attribution can now be sealed into an auditable evidence package.' : 'No response package has been generated for this case.'));
+
+    const recommendations = Array.isArray(response.recommended_actions) && response.recommended_actions.length
+      ? response.recommended_actions
+      : attributionComplete
+        ? ['Generate the evidence package.', 'Preserve the case record.', 'Obtain independent corroborating evidence.', 'Re-run only when new evidence changes the record.']
+        : ['Complete attribution before issuing a response plan.'];
+    byId('responseRecommendations').innerHTML = recommendations.map(item => `<li>${escapeMarkup(item)}</li>`).join('');
+    const blocked = Array.isArray(response.blocked_actions) && response.blocked_actions.length
+      ? response.blocked_actions
+      : ['Automatic vessel accusation', 'Enforcement notification without accountable human review', 'Treating comparative scores as guilt probabilities'];
+    byId('responseBlockedActions').innerHTML = blocked.map(item => `<li>${escapeMarkup(item)}</li>`).join('');
+  }
+
+  async function buildResponsePackage() {
+    const button = byId('buildResponseButton');
+    button.disabled = true;
+    button.textContent = 'Building package…';
+    try {
+      const response = await fetch(RESPONSE_ENDPOINT, {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
+      if (lastSnapshot) renderResponseWorkspace({...lastSnapshot, response: result});
+      window.setTimeout(poll, 400);
+    } catch (error) {
+      byId('responseStatus').dataset.state = 'error';
+      byId('responseStatus').querySelector('b').textContent = 'PACKAGE FAILED';
+      byId('responseStatus').querySelector('small').textContent = error.message;
+      html('responseMessage', `Evidence package failed: ${error.message}`);
+      button.disabled = false;
+      button.textContent = 'Retry evidence package';
+    }
+  }
+
   function renderHeader(snapshot) {
     const region = snapshot.region || {};
     const bbox = Array.isArray(region.bbox) ? region.bbox : [];
@@ -933,6 +1039,7 @@
     renderDetectionWorkbench(snapshot);
     renderReverseDrift(snapshot);
     renderCandidateWorkspace(snapshot);
+    renderResponseWorkspace(snapshot);
     html('mapEvidenceTime', formatUtc(evidenceTime(snapshot)));
     updateMapMode(mapMode);
     syncMapGeometry(snapshot).catch(error => {
@@ -1008,6 +1115,7 @@
   byId('rejectCandidateButton').addEventListener('click',()=>submitCandidateReview('REJECT'));
   document.querySelectorAll('[data-drift-view]').forEach(button=>button.addEventListener('click',()=>setDriftView(button.dataset.driftView)));
   byId('buildAttributionButton').addEventListener('click',buildAttribution);
+  byId('buildResponseButton').addEventListener('click',buildResponsePackage);
   updateMapMode('live');
   tickClock();
   poll();

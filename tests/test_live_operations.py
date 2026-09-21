@@ -140,6 +140,19 @@ def test_live_command_candidate_attribution_exposes_scores_and_abstention_gate()
     assert "AIS gaps are contextual evidence only" in page
 
 
+def test_live_command_response_workspace_builds_an_auditable_safe_output() -> None:
+    root = Path(__file__).resolve().parents[1]
+    page = (root / "operator/live_command/index.html").read_text(encoding="utf-8")
+    script = (root / "operator/live_command/app.js").read_text(encoding="utf-8")
+    assert 'id="respond-workspace"' in page
+    assert "Package the evidence. Control the consequence." in page
+    assert "Automatic vessel accusation" in page
+    assert "Six recorded transitions" in page
+    assert "/api/live/build-response" in script
+    assert "chain_digest_sha256" in script
+    assert "SAFE ABSTENTION READY" in script
+
+
 def test_completed_analysis_survives_server_restart(tmp_path: Path) -> None:
     region = LiveRegion("Test region", 70.8, 17.8, 73.0, 20.0)
     first = LiveOperationsEngine(tmp_path, region)
