@@ -60,6 +60,9 @@ class LiveOperationsHandler(SimpleHTTPRequestHandler):
         if path == "/api/live/snapshot":
             self._json(200, self.engine.snapshot())
             return
+        if path == "/api/live/cases":
+            self._json(200, self.engine.case_register())
+            return
         super().do_GET()
 
     def do_POST(self) -> None:  # noqa: N802 - stdlib server API
@@ -112,6 +115,16 @@ class LiveOperationsHandler(SimpleHTTPRequestHandler):
                 response = self.engine.build_response_package()
                 self._json(200, response)
             except (RuntimeError, FileNotFoundError) as error:
+                self._json(409, {"status": "REJECTED", "error": str(error)})
+            except Exception as error:
+                self._json(500, {"status": "FAIL", "error": str(error)})
+            return
+        if path == "/api/live/verify-case":
+            try:
+                payload = self._request_json()
+                result = self.engine.verify_case(str(payload.get("scene_id") or ""))
+                self._json(200, result)
+            except (ValueError, RuntimeError, FileNotFoundError) as error:
                 self._json(409, {"status": "REJECTED", "error": str(error)})
             except Exception as error:
                 self._json(500, {"status": "FAIL", "error": str(error)})

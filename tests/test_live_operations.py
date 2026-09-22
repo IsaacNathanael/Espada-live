@@ -153,6 +153,19 @@ def test_live_command_response_workspace_builds_an_auditable_safe_output() -> No
     assert "SAFE ABSTENTION READY" in script
 
 
+def test_live_command_case_register_exposes_history_and_integrity_recheck() -> None:
+    root = Path(__file__).resolve().parents[1]
+    page = (root / "operator/live_command/index.html").read_text(encoding="utf-8")
+    script = (root / "operator/live_command/app.js").read_text(encoding="utf-8")
+    assert 'id="case-register"' in page
+    assert "Every run remains inspectable." in page
+    assert "PROVENANCE WARNINGS" in page
+    assert "Verify package integrity" in page
+    assert "/api/live/verify-case" in script
+    assert "provenance_warnings" in script
+    assert "computed_chain_digest_sha256" in script
+
+
 def test_completed_analysis_survives_server_restart(tmp_path: Path) -> None:
     region = LiveRegion("Test region", 70.8, 17.8, 73.0, 20.0)
     first = LiveOperationsEngine(tmp_path, region)

@@ -42,6 +42,7 @@
     <a class="workflow-step available" href="#reverse-drift"><span>03</span><b>Reconstruct</b><small>Reverse drift</small></a>
     <a class="workflow-step available" href="#candidate-attribution"><span>04</span><b>Attribute</b><small>Candidate ranking</small></a>
     <a class="workflow-step available" href="#respond-workspace"><span>05</span><b>Respond</b><small>Evidence & impact</small></a>
+    <a class="workflow-step available" href="#case-register"><span>06</span><b>Preserve</b><small>Case register</small></a>
   </nav>
 
   <main id="overview">
@@ -505,6 +506,86 @@
       </div>
 
       <footer class="response-boundary"><b>ACCOUNTABILITY BOUNDARY</b> ESPADA preserves and explains the evidence. A public allegation, enforcement action or legal finding requires independent corroboration and accountable human authority.</footer>
+    </section>
+
+    <section class="case-register-section" id="case-register" aria-labelledby="caseRegisterTitle">
+      <header class="case-register-header">
+        <div>
+          <p class="kicker">OPERATIONAL CASE REGISTER · COMPONENT 07</p>
+          <h2 id="caseRegisterTitle">Every run remains inspectable.</h2>
+          <p>The register discovers completed and incomplete cases from disk, exposes provenance conflicts, and can recompute every evidence hash before a dossier is trusted.</p>
+        </div>
+        <div class="register-status" id="registerStatus" data-state="waiting" role="status" aria-live="polite">
+          <span>REGISTER STATE</span><b>LOADING CASES</b><small>Reading durable case records</small>
+        </div>
+      </header>
+
+      <div class="register-summary" aria-label="Case register summary">
+        <div><span>RECORDED CASES</span><b id="registerCaseCount">—</b><small>durable analysis directories</small></div>
+        <div><span>SEALED PACKAGES</span><b id="registerSealedCount">—</b><small>complete evidence dossiers</small></div>
+        <div><span>AWAITING REVIEW</span><b id="registerReviewCount">—</b><small>model candidates requiring a decision</small></div>
+        <div class="warning-cell"><span>PROVENANCE WARNINGS</span><b id="registerWarningCount">—</b><small>metadata conflicts requiring inspection</small></div>
+      </div>
+
+      <div class="case-register-layout">
+        <article class="case-index">
+          <header>
+            <div><span>CASE INDEX</span><h3>Durable investigation runs</h3></div>
+            <label for="caseStageFilter">SHOW
+              <select id="caseStageFilter">
+                <option value="all">All cases</option>
+                <option value="sealed">Sealed packages</option>
+                <option value="review">Awaiting review</option>
+                <option value="closed">Closed / incomplete</option>
+              </select>
+            </label>
+          </header>
+          <div class="case-table-wrap">
+            <table class="case-table">
+              <thead><tr><th>Case</th><th>Acquired</th><th>Stage</th><th>Integrity</th><th>Files</th></tr></thead>
+              <tbody id="caseRegisterRows"><tr><td colspan="5">Loading recorded cases…</td></tr></tbody>
+            </table>
+          </div>
+        </article>
+
+        <aside class="case-inspector" aria-live="polite">
+          <div class="case-inspector-head">
+            <span id="selectedCaseIndex">NO CASE SELECTED</span>
+            <div id="selectedCaseIntegrity" data-state="waiting">NOT VERIFIED</div>
+          </div>
+          <h3 id="selectedCaseTitle">Select a case record</h3>
+          <p class="case-id" id="selectedCaseId">—</p>
+          <dl class="case-facts">
+            <div><dt>Acquisition</dt><dd id="selectedCaseAcquired">—</dd></div>
+            <div><dt>Current stage</dt><dd id="selectedCaseStage">—</dd></div>
+            <div><dt>Operational output</dt><dd id="selectedCaseDecision">—</dd></div>
+            <div><dt>Evidence inventory</dt><dd id="selectedCaseFiles">—</dd></div>
+          </dl>
+          <div class="case-milestones" aria-label="Case completion milestones">
+            <div id="milestoneObserved" data-state="waiting"><span>01</span><b>Observe</b></div>
+            <div id="milestoneDetected" data-state="waiting"><span>02</span><b>Detect</b></div>
+            <div id="milestoneReviewed" data-state="waiting"><span>03</span><b>Review</b></div>
+            <div id="milestoneReconstructed" data-state="waiting"><span>04</span><b>Reconstruct</b></div>
+            <div id="milestoneAttributed" data-state="waiting"><span>05</span><b>Attribute</b></div>
+            <div id="milestonePackaged" data-state="waiting"><span>06</span><b>Package</b></div>
+          </div>
+          <div class="provenance-alert" id="caseProvenanceAlert" data-state="clear"><b>PROVENANCE CHECK</b><p>No case selected.</p></div>
+          <div class="case-actions">
+            <button id="verifyCaseButton" type="button" disabled>Verify package integrity</button>
+            <a id="caseDossierLink" href="#" target="_blank" rel="noopener" hidden>Open dossier ↗</a>
+            <a id="caseManifestLink" href="#" target="_blank" rel="noopener" hidden>Open manifest ↗</a>
+            <a id="caseSarLink" href="#" target="_blank" rel="noopener" hidden>Open SAR evidence ↗</a>
+          </div>
+          <div class="verification-receipt" id="verificationReceipt" data-state="waiting">
+            <span>LAST INTEGRITY CHECK</span><b id="verificationResult">Not run</b>
+            <p id="verificationCounts">Select a sealed package to recompute its hashes.</p>
+            <code id="verificationDigest">No verification digest</code>
+            <a id="verificationRecordLink" href="#" target="_blank" rel="noopener" hidden>Open verification receipt ↗</a>
+          </div>
+        </aside>
+      </div>
+
+      <footer class="case-register-boundary"><b>RECORD POLICY</b> A case remains visible when incomplete, rejected or inconclusive. Verification detects file changes; it does not establish the truth of the underlying evidence.</footer>
     </section>
 
     <section class="section-heading">

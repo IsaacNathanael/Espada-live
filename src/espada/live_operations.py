@@ -23,6 +23,7 @@ from .copernicus import FORECAST_DATASET_ID, normalize_currents
 from .environment import load_environment, sync_historical_wind
 from .historical_ais import GFW_DELAY_HOURS, HistoricalAISRequest, fetch_gfw_presence
 from .live_ais import AISBoundingBox, capture_aisstream
+from .live_case_register import build_case_register, verify_case_integrity
 from .live_response import build_live_response_package
 from .sentinel_catalog import SentinelSearchRequest, discover_sentinel1
 from .sentinel_process import download_sentinel1_subset
@@ -730,6 +731,36 @@ class LiveOperationsEngine:
                 message=f"{type(error).__name__}: {error}",
             )
             raise
+
+    def case_register(self) -> dict[str, object]:
+        register = build_case_register(self.output_root / "analysis")
+        for case in register.get("cases", []):
+            if not isinstance(case, dict):
+                continue
+            scene_id = str(case.get("scene_id") or "")
+            case_root = self.output_root / "analysis" / scene_id
+            paths = case.pop("paths", {})
+            case["urls"] = {
+                name: self._public_url(case_root / relative) if relative else None
+                for name, relative in paths.items()
+            }
+            verification_path = case_root / "response/integrity_verification.json"
+            case["urls"]["verification"] = (
+                self._public_url(verification_path) if verification_path.is_file() else None
+            )
+        return register
+
+    def verify_case(self, scene_id: str) -> dict[str, object]:
+        result = verify_case_integrity(self.output_root / "analysis", scene_id)
+        verification_path = (
+            self.output_root
+            / "analysis"
+            / str(result["scene_id"])
+            / "response"
+            / "integrity_verification.json"
+        )
+        result["verification_url"] = self._public_url(verification_path)
+        return result
 
     def _write_origin_zone(
         self, output_path: Path, longitude: np.ndarray, latitude: np.ndarray, properties: dict[str, object]
@@ -1543,6 +1574,7 @@ class LiveOperationsEngine:
             "review": state.get("review", {"status": "NOT_REVIEWED"}),
             "attribution": state.get("attribution", {"status": "NOT_RUN", "candidates": []}),
             "response": state.get("response", {"status": "NOT_BUILT"}),
+            "case_register": self.case_register(),
             "truth_policy": {
                 "synthetic_fallback": False,
                 "empty_feed_behavior": "show NO DATA and render no objects",

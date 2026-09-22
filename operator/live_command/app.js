@@ -8,6 +8,7 @@
   const REVIEW_ENDPOINT = '/api/live/review';
   const ATTRIBUTION_ENDPOINT = '/api/live/build-attribution';
   const RESPONSE_ENDPOINT = '/api/live/build-response';
+  const VERIFY_CASE_ENDPOINT = '/api/live/verify-case';
   const byId = id => document.getElementById(id);
   let lastSnapshot = null;
   let mapMode = 'live';
@@ -18,6 +19,8 @@
   let selectedSceneId = null;
   let driftView = 'comparison';
   let selectedCandidateMmsi = null;
+  let selectedCaseId = null;
+  let caseStageFilter = 'all';
 
   const html = (id, value) => { byId(id).textContent = value; };
   const parseTime = value => {
@@ -945,6 +948,182 @@
     }
   }
 
+  const caseStageLabel = stage => ({
+    EVIDENCE_PACKAGE_READY: 'PACKAGE READY',
+    ATTRIBUTION_COMPLETE: 'ATTRIBUTED',
+    RECONSTRUCTION_COMPLETE: 'RECONSTRUCTED',
+    ANALYST_APPROVED: 'APPROVED',
+    REVIEW_REQUIRED: 'REVIEW REQUIRED',
+    CLOSED_NO_DETECTION: 'NO DETECTION',
+    DETECTION_COMPLETE: 'DETECTED',
+    INGESTED: 'INGESTED',
+  }[String(stage || '').toUpperCase()] || String(stage || 'UNKNOWN').replaceAll('_', ' '));
+
+  const caseStageClass = stage => String(stage || '') === 'EVIDENCE_PACKAGE_READY'
+    ? 'sealed'
+    : String(stage || '') === 'REVIEW_REQUIRED'
+      ? 'review'
+      : '';
+
+  const integrityClass = status => {
+    const value = String(status || 'NOT_VERIFIED').toUpperCase();
+    if (value === 'VERIFIED') return 'verified';
+    if (['TAMPER_DETECTED', 'INCOMPLETE', 'UNAVAILABLE'].includes(value)) return 'warning';
+    return '';
+  };
+
+  function filteredCases(cases) {
+    if (caseStageFilter === 'sealed') return cases.filter(item => item.stage === 'EVIDENCE_PACKAGE_READY');
+    if (caseStageFilter === 'review') return cases.filter(item => item.stage === 'REVIEW_REQUIRED');
+    if (caseStageFilter === 'closed') return cases.filter(item => !['EVIDENCE_PACKAGE_READY', 'REVIEW_REQUIRED'].includes(item.stage));
+    return cases;
+  }
+
+  function selectedCase(snapshot) {
+    const cases = Array.isArray(snapshot.case_register?.cases) ? snapshot.case_register.cases : [];
+    const visible = filteredCases(cases);
+    if (!visible.length) return null;
+    const selected = visible.find(item => item.scene_id === selectedCaseId) || visible[0];
+    selectedCaseId = selected.scene_id;
+    return selected;
+  }
+
+  function setCaseMilestone(id, complete) {
+    byId(id).dataset.state = complete ? 'complete' : 'waiting';
+  }
+
+  function setCaseLink(id, url) {
+    const link = byId(id);
+    link.hidden = !url;
+    if (url) link.href = url;
+  }
+
+  function renderCaseInspector(snapshot, record) {
+    if (!record) {
+      html('selectedCaseIndex', 'NO CASE SELECTED');
+      html('selectedCaseTitle', 'No cases match this view');
+      html('selectedCaseId', '—');
+      byId('verifyCaseButton').disabled = true;
+      ['caseDossierLink', 'caseManifestLink', 'caseSarLink', 'verificationRecordLink'].forEach(id => byId(id).hidden = true);
+      return;
+    }
+    const cases = Array.isArray(snapshot.case_register?.cases) ? snapshot.case_register.cases : [];
+    const position = cases.findIndex(item => item.scene_id === record.scene_id) + 1;
+    html('selectedCaseIndex', `CASE ${String(position).padStart(2, '0')} OF ${String(cases.length).padStart(2, '0')}`);
+    html('selectedCaseTitle', caseStageLabel(record.stage));
+    html('selectedCaseId', record.scene_id);
+    html('selectedCaseAcquired', formatUtc(record.acquisition_time_utc));
+    html('selectedCaseStage', caseStageLabel(record.stage));
+    html('selectedCaseDecision', record.operational_decision ? String(record.operational_decision).replaceAll('_', ' ') : 'NOT YET DECIDED');
+    html('selectedCaseFiles', `${compactNumber(record.artifact_count)} files · ${compactNumber(record.verified_files)} sealed`);
+    const integrity = String(record.integrity_status || 'NOT_VERIFIED').toUpperCase();
+    const integrityBadge = byId('selectedCaseIntegrity');
+    integrityBadge.dataset.state = integrityClass(integrity) || 'waiting';
+    integrityBadge.textContent = integrity.replaceAll('_', ' ');
+    const milestones = record.milestones || {};
+    setCaseMilestone('milestoneObserved', milestones.observed);
+    setCaseMilestone('milestoneDetected', milestones.detected);
+    setCaseMilestone('milestoneReviewed', milestones.reviewed);
+    setCaseMilestone('milestoneReconstructed', milestones.reconstructed);
+    setCaseMilestone('milestoneAttributed', milestones.attributed);
+    setCaseMilestone('milestonePackaged', milestones.packaged);
+
+    const warnings = Array.isArray(record.provenance_warnings) ? record.provenance_warnings : [];
+    const alert = byId('caseProvenanceAlert');
+    alert.dataset.state = warnings.length ? 'warning' : 'clear';
+    alert.querySelector('b').textContent = warnings.length ? 'PROVENANCE WARNING' : 'PROVENANCE CHECK';
+    alert.querySelector('p').textContent = warnings.length ? warnings.join(' ') : 'Directory identity and recorded Sentinel metadata agree.';
+
+    const urls = record.urls || {};
+    const verifyButton = byId('verifyCaseButton');
+    verifyButton.disabled = !urls.manifest;
+    verifyButton.textContent = urls.manifest ? 'Verify package integrity' : 'No package to verify';
+    setCaseLink('caseDossierLink', urls.dossier);
+    setCaseLink('caseManifestLink', urls.manifest);
+    setCaseLink('caseSarLink', urls.sar_diagnostic);
+    setCaseLink('verificationRecordLink', urls.verification);
+
+    const receipt = byId('verificationReceipt');
+    const rechecked = Boolean(record.last_verified_at_utc);
+    receipt.dataset.state = rechecked ? (integrity === 'VERIFIED' ? 'verified' : 'warning') : 'waiting';
+    html('verificationResult', rechecked ? integrity.replaceAll('_', ' ') : urls.manifest ? 'Manifest sealed · recheck available' : 'Not applicable');
+    html('verificationCounts', rechecked ? `${compactNumber(record.verified_files)} manifest artifacts passed the latest recorded check.` : urls.manifest ? 'Run an independent hash recheck against the current files.' : 'This incomplete case has no sealed evidence manifest.');
+    html('verificationDigest', record.chain_digest_sha256 || 'No verification digest');
+  }
+
+  function renderCaseRows(snapshot) {
+    const cases = Array.isArray(snapshot.case_register?.cases) ? snapshot.case_register.cases : [];
+    const visible = filteredCases(cases);
+    const body = byId('caseRegisterRows');
+    if (!visible.length) {
+      body.innerHTML = '<tr><td colspan="5">No recorded cases match this view.</td></tr>';
+      renderCaseInspector(snapshot, null);
+      return;
+    }
+    body.innerHTML = visible.map(record => {
+      const selected = record.scene_id === selectedCaseId;
+      const shortId = String(record.scene_id).replace(/^S1[AD]_IW_GRDH_1SDV_/, '');
+      const integrity = String(record.integrity_status || 'NOT_VERIFIED').replaceAll('_', ' ');
+      return `<tr tabindex="0" data-case-id="${escapeMarkup(record.scene_id)}" class="${selected ? 'selected' : ''}" aria-selected="${selected}"><td><strong>${escapeMarkup(shortId)}</strong><small>${escapeMarkup(record.platform)} · ${escapeMarkup(record.polarization || '—')}</small></td><td>${escapeMarkup(formatUtc(record.acquisition_time_utc))}</td><td><span class="case-stage ${caseStageClass(record.stage)}">${escapeMarkup(caseStageLabel(record.stage))}</span></td><td><span class="case-integrity ${integrityClass(record.integrity_status)}">${escapeMarkup(integrity)}</span></td><td>${compactNumber(record.artifact_count)}</td></tr>`;
+    }).join('');
+    body.querySelectorAll('tr[data-case-id]').forEach(row => {
+      const choose = () => selectCase(row.dataset.caseId);
+      row.addEventListener('click', choose);
+      row.addEventListener('keydown', event => { if (['Enter', ' '].includes(event.key)) { event.preventDefault(); choose(); } });
+    });
+  }
+
+  function renderCaseRegister(snapshot) {
+    const register = snapshot.case_register || {};
+    const cases = Array.isArray(register.cases) ? register.cases : [];
+    const warnings = Number(register.provenance_warning_count || 0);
+    const status = byId('registerStatus');
+    status.dataset.state = warnings ? 'warning' : cases.length ? 'ready' : 'waiting';
+    status.querySelector('b').textContent = warnings ? 'REGISTER READY · REVIEW FLAGS' : cases.length ? 'REGISTER READY' : 'NO RECORDED CASES';
+    status.querySelector('small').textContent = warnings ? `${warnings} provenance conflict${warnings === 1 ? ' requires' : 's require'} inspection` : cases.length ? `${cases.length} durable case record${cases.length === 1 ? '' : 's'} discovered` : 'No case directories were found';
+    html('registerCaseCount', compactNumber(register.case_count));
+    html('registerSealedCount', compactNumber(register.sealed_count));
+    html('registerReviewCount', compactNumber(register.review_required_count));
+    html('registerWarningCount', compactNumber(register.provenance_warning_count));
+    if (!selectedCaseId && cases.length) selectedCaseId = cases[0].scene_id;
+    const record = selectedCase(snapshot);
+    renderCaseRows(snapshot);
+    renderCaseInspector(snapshot, record);
+  }
+
+  function selectCase(sceneId) {
+    selectedCaseId = String(sceneId);
+    if (!lastSnapshot) return;
+    renderCaseRows(lastSnapshot);
+    renderCaseInspector(lastSnapshot, selectedCase(lastSnapshot));
+  }
+
+  async function verifySelectedCase() {
+    if (!selectedCaseId) return;
+    const button = byId('verifyCaseButton');
+    button.disabled = true;
+    button.textContent = 'Recomputing SHA-256 hashes…';
+    try {
+      const response = await fetch(VERIFY_CASE_ENDPOINT, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({scene_id:selectedCaseId})});
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
+      const receipt = byId('verificationReceipt');
+      const verified = result.integrity_status === 'VERIFIED';
+      receipt.dataset.state = verified ? 'verified' : 'warning';
+      html('verificationResult', String(result.integrity_status || 'UNKNOWN').replaceAll('_', ' '));
+      html('verificationCounts', `${compactNumber(result.matched_files)} matched · ${compactNumber(result.modified_files)} modified · ${compactNumber(result.missing_required_files)} required missing`);
+      html('verificationDigest', result.computed_chain_digest_sha256 || 'No computed digest');
+      setCaseLink('verificationRecordLink', result.verification_url);
+      window.setTimeout(poll, 350);
+    } catch (error) {
+      byId('verificationReceipt').dataset.state = 'warning';
+      html('verificationResult', 'VERIFICATION FAILED');
+      html('verificationCounts', error.message);
+      button.disabled = false;
+      button.textContent = 'Retry integrity verification';
+    }
+  }
+
   function renderHeader(snapshot) {
     const region = snapshot.region || {};
     const bbox = Array.isArray(region.bbox) ? region.bbox : [];
@@ -1040,6 +1219,7 @@
     renderReverseDrift(snapshot);
     renderCandidateWorkspace(snapshot);
     renderResponseWorkspace(snapshot);
+    renderCaseRegister(snapshot);
     html('mapEvidenceTime', formatUtc(evidenceTime(snapshot)));
     updateMapMode(mapMode);
     syncMapGeometry(snapshot).catch(error => {
@@ -1116,6 +1296,12 @@
   document.querySelectorAll('[data-drift-view]').forEach(button=>button.addEventListener('click',()=>setDriftView(button.dataset.driftView)));
   byId('buildAttributionButton').addEventListener('click',buildAttribution);
   byId('buildResponseButton').addEventListener('click',buildResponsePackage);
+  byId('caseStageFilter').addEventListener('change', event => {
+    caseStageFilter = event.target.value;
+    selectedCaseId = null;
+    if (lastSnapshot) renderCaseRegister(lastSnapshot);
+  });
+  byId('verifyCaseButton').addEventListener('click', verifySelectedCase);
   updateMapMode('live');
   tickClock();
   poll();
