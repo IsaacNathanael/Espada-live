@@ -193,6 +193,18 @@ def test_live_command_intake_preserves_and_gates_returned_evidence() -> None:
     assert "attribution remains frozen" in script
 
 
+def test_live_command_reanalysis_versions_new_evidence_without_overwrite() -> None:
+    root = Path(__file__).resolve().parents[1]
+    page = (root / "operator/live_command/index.html").read_text(encoding="utf-8")
+    script = (root / "operator/live_command/app.js").read_text(encoding="utf-8")
+    assert 'id="controlled-reanalysis"' in page
+    assert "Re-run the evidence—not history." in page
+    assert "ORIGINAL RECORD" in page
+    assert "IMMUTABLE" in page
+    assert "/api/live/start-reanalysis" in script
+    assert "original case is locked" in script
+
+
 def test_completed_analysis_survives_server_restart(tmp_path: Path) -> None:
     region = LiveRegion("Test region", 70.8, 17.8, 73.0, 20.0)
     first = LiveOperationsEngine(tmp_path, region)

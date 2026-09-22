@@ -45,6 +45,7 @@
     <a class="workflow-step available" href="#case-register"><span>06</span><b>Preserve</b><small>Case register</small></a>
     <a class="workflow-step available" href="#evidence-planner"><span>07</span><b>Resolve</b><small>Evidence retasking</small></a>
     <a class="workflow-step available" href="#evidence-intake"><span>08</span><b>Reopen</b><small>Evidence intake</small></a>
+    <a class="workflow-step available" href="#controlled-reanalysis"><span>09</span><b>Reanalyse</b><small>Versioned rerun</small></a>
   </nav>
 
   <main id="overview">
@@ -733,6 +734,80 @@
       </div>
 
       <footer class="intake-boundary"><b>DECISION BOUNDARY</b> Admission means the evidence may enter a new analysis. The preserved attribution remains unchanged until a separate, explicit rerun completes and passes every safety gate.</footer>
+    </section>
+
+    <section class="reanalysis-section" id="controlled-reanalysis" aria-labelledby="reanalysisTitle">
+      <header class="reanalysis-header">
+        <div>
+          <p class="kicker">CONTROLLED REANALYSIS · COMPONENT 10</p>
+          <h2 id="reanalysisTitle">Re-run the evidence—not history.</h2>
+          <p>Admitted provider evidence enters the same frozen ranker in a new case version. The original result, evidence hashes and safety decision remain untouched for comparison.</p>
+        </div>
+        <div class="reanalysis-status" id="reanalysisStatus" data-state="waiting" role="status" aria-live="polite">
+          <span>REANALYSIS STATE</span><b>NOT READY</b><small>Admit evidence that resolves the blocking gate</small>
+        </div>
+      </header>
+
+      <div class="reanalysis-summary" aria-label="Controlled reanalysis summary">
+        <div><span>BASELINE RESULT</span><b id="reanalysisBaselineDecision">—</b><small>preserved original attribution</small></div>
+        <div><span>ADMITTED INPUTS</span><b id="reanalysisInputCount">0</b><small>hash-verified evidence receipts</small></div>
+        <div><span>CASE VERSION</span><b id="reanalysisVersion">NOT CREATED</b><small>parallel result, never overwrite</small></div>
+        <div class="immutable-cell"><span>ORIGINAL RECORD</span><b>IMMUTABLE</b><small>baseline files remain unchanged</small></div>
+      </div>
+
+      <div class="reanalysis-layout">
+        <article class="reanalysis-contract">
+          <header><span>REPLAY CONTRACT</span><h3>Exactly what changes</h3><small>Everything else stays frozen</small></header>
+          <ol class="reanalysis-steps" aria-label="Versioned reanalysis sequence">
+            <li data-state="locked"><span>01</span><div><b>Verify admitted payloads</b><small>Recompute SHA-256 before use</small></div><em>REQUIRED</em></li>
+            <li data-state="locked"><span>02</span><div><b>Replace declared AIS coverage</b><small>Same MMSI and time window only</small></div><em>SCOPED</em></li>
+            <li data-state="locked"><span>03</span><div><b>Run the frozen attribution model</b><small>Same drift ensemble and safety gates</small></div><em>LOCKED</em></li>
+            <li data-state="locked"><span>04</span><div><b>Write a parallel case version</b><small>Original ranking is never overwritten</small></div><em>VERSIONED</em></li>
+          </ol>
+          <div class="reanalysis-inputs">
+            <span>ELIGIBLE EVIDENCE</span>
+            <div id="reanalysisReceiptList"><p>No admitted rerun evidence is available.</p></div>
+          </div>
+          <button id="startReanalysisButton" type="button" disabled>Run versioned reanalysis</button>
+          <p id="reanalysisActionMessage" aria-live="polite">Admit evidence that resolves the current blocking gate.</p>
+        </article>
+
+        <aside class="reanalysis-comparison" aria-live="polite">
+          <header><span>VERSION COMPARISON</span><h3>Baseline vs latest rerun</h3><small id="reanalysisCompletedAt">No rerun completed</small></header>
+          <div class="reanalysis-compare-grid">
+            <section>
+              <span>ORIGINAL</span>
+              <h4 id="baselineTopCandidate">No candidate</h4>
+              <dl>
+                <div><dt>Decision</dt><dd id="baselineDecision">—</dd></div>
+                <div><dt>Top score</dt><dd id="baselineTopScore">—</dd></div>
+                <div><dt>Lead</dt><dd id="baselineMargin">—</dd></div>
+              </dl>
+            </section>
+            <div class="comparison-arrow" aria-hidden="true">→</div>
+            <section data-state="waiting" id="rerunComparisonCard">
+              <span id="rerunVersionLabel">NEW VERSION</span>
+              <h4 id="rerunTopCandidate">Waiting for admitted evidence</h4>
+              <dl>
+                <div><dt>Decision</dt><dd id="rerunDecision">—</dd></div>
+                <div><dt>Top score</dt><dd id="rerunTopScore">—</dd></div>
+                <div><dt>Lead</dt><dd id="rerunMargin">—</dd></div>
+              </dl>
+            </section>
+          </div>
+          <div class="reanalysis-impact" id="reanalysisImpact" data-state="waiting">
+            <span>DECISION IMPACT</span><b>No versioned comparison yet</b><small>The original result remains authoritative until a new version is reviewed.</small>
+          </div>
+          <div class="reanalysis-links">
+            <a id="reanalysisResultLink" href="#" target="_blank" rel="noopener" hidden>Open version record ↗</a>
+            <a id="reanalysisRankingLink" href="#" target="_blank" rel="noopener" hidden>Open rerun ranking ↗</a>
+            <a id="reanalysisMapLink" href="#" target="_blank" rel="noopener" hidden>Open rerun map ↗</a>
+            <a id="reanalysisMergeLink" href="#" target="_blank" rel="noopener" hidden>Open merge audit ↗</a>
+          </div>
+        </aside>
+      </div>
+
+      <footer class="reanalysis-boundary"><b>VERSION BOUNDARY</b> A rerun may change candidate ordering or keep the system in abstention. It never erases the original result, proves a discharge or authorizes enforcement.</footer>
     </section>
 
     <section class="section-heading">

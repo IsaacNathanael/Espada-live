@@ -29,6 +29,7 @@ from .live_evidence_intake import (
     review_evidence_return,
     stage_evidence_return,
 )
+from .live_reanalysis import load_live_reanalysis, run_live_reanalysis
 from .live_retasking import build_live_retasking_plan, load_live_retasking_plan
 from .live_response import build_live_response_package
 from .sentinel_catalog import SentinelSearchRequest, discover_sentinel1
@@ -183,14 +184,21 @@ class LiveOperationsEngine:
                 "message": "Build a follow-up evidence plan before recording returns.",
                 "receipts": [],
             },
+            "reanalysis": {
+                "status": "NOT_READY",
+                "message": "Admit follow-up evidence before starting a versioned reanalysis.",
+                "original_attribution_unchanged": True,
+            },
         }
         self._analysis_thread: threading.Thread | None = None
         self._attribution_thread: threading.Thread | None = None
+        self._reanalysis_thread: threading.Thread | None = None
         self._restore_previous_state()
         self._recover_completed_case()
         self._recover_response_package()
         self._recover_retasking_plan()
         self._recover_evidence_intake()
+        self._recover_reanalysis()
         self._prepare_coastline()
         self._write_state()
 
@@ -219,7 +227,9 @@ class LiveOperationsEngine:
                     "message": "The previous SAR job was interrupted before a final result was recorded.",
                 }
             self._state["analysis"] = analysis
-        for section in ("review", "attribution", "response", "retasking", "evidence_intake"):
+        for section in (
+            "review", "attribution", "response", "retasking", "evidence_intake", "reanalysis"
+        ):
             saved = previous.get(section)
             if not isinstance(saved, dict):
                 continue
@@ -231,6 +241,9 @@ class LiveOperationsEngine:
                 "FETCHING_AIS",
                 "RANKING",
                 "BUILDING",
+                "VERIFYING_INPUTS",
+                "MERGING_EVIDENCE",
+                "RERANKING",
             }:
                 saved = {
                     **saved,
@@ -442,6 +455,48 @@ class LiveOperationsEngine:
             recovered_intake["register_url"] = self._public_url(register_path)
         self._state["evidence_intake"] = recovered_intake
 
+    def _reanalysis_payload(self, run_root: Path, result: dict[str, Any]) -> dict[str, Any]:
+        payload = {
+            key: value
+            for key, value in result.items()
+            if key not in {
+                "result_path",
+                "ranking_chart_path",
+                "attribution_map_path",
+                "merged_ais_path",
+            }
+        }
+        version = str(payload.get("version") or "").strip()
+        if payload.get("status") == "COMPLETE" and version:
+            version_root = run_root / "reanalysis" / version
+            payload.update(
+                {
+                    "result_url": self._public_url(version_root / "reanalysis_result.json"),
+                    "ranking_chart_url": self._public_url(
+                        version_root / "ranking/candidate_ranking.png"
+                    ),
+                    "attribution_map_url": self._public_url(
+                        version_root / "ranking/attribution_map.png"
+                    ),
+                    "merged_ais_url": self._public_url(
+                        version_root / "ais/ais_normalized.csv"
+                    ),
+                    "merge_audit_url": self._public_url(version_root / "ais/merge_audit.json"),
+                }
+            )
+        return payload
+
+    def _recover_reanalysis(self) -> None:
+        scene_id = str(self._state.get("analysis", {}).get("scene_id") or "").strip()
+        if not scene_id:
+            return
+        safe_scene_id = "".join(
+            char if char.isalnum() or char in "-_" else "_" for char in scene_id
+        )
+        run_root = self.output_root / "analysis" / safe_scene_id
+        result = load_live_reanalysis(run_root)
+        self._state["reanalysis"] = self._reanalysis_payload(run_root, result)
+
     @staticmethod
     def _empty_source(provider: str, kind: str) -> dict[str, object]:
         return {
@@ -608,6 +663,11 @@ class LiveOperationsEngine:
                 "message": "A new evidence plan is required before recording returns.",
                 "receipts": [],
             }
+            self._state["reanalysis"] = {
+                "status": "NOT_READY",
+                "message": "A new admitted evidence set is required before reanalysis.",
+                "original_attribution_unchanged": True,
+            }
             self._analysis_thread = threading.Thread(
                 target=self._analysis_worker, name="espada-live-sar", daemon=True
             )
@@ -670,6 +730,11 @@ class LiveOperationsEngine:
                 "message": "Evidence intake is closed after slick rejection.",
                 "receipts": [],
             }
+            self._state["reanalysis"] = {
+                "status": "BLOCKED_BY_REVIEW",
+                "message": "Reanalysis is blocked after slick rejection.",
+                "original_attribution_unchanged": True,
+            }
             self._state["review"] = result
             self._write_state()
             return result
@@ -726,6 +791,11 @@ class LiveOperationsEngine:
             "message": "A new evidence plan is required before recording returns.",
             "receipts": [],
         }
+        self._state["reanalysis"] = {
+            "status": "NOT_READY",
+            "message": "A new admitted evidence set is required before reanalysis.",
+            "original_attribution_unchanged": True,
+        }
         self._write_state()
         return result
 
@@ -754,6 +824,11 @@ class LiveOperationsEngine:
                 "status": "NOT_READY",
                 "message": "A new evidence plan is required before recording returns.",
                 "receipts": [],
+            }
+            self._state["reanalysis"] = {
+                "status": "NOT_READY",
+                "message": "A new admitted evidence set is required before reanalysis.",
+                "original_attribution_unchanged": True,
             }
             self._attribution_thread = threading.Thread(
                 target=self._attribution_worker,
@@ -797,6 +872,12 @@ class LiveOperationsEngine:
             status="NOT_READY",
             message="Build a follow-up evidence plan before recording returns.",
             receipts=[],
+        )
+        self._section_update(
+            "reanalysis",
+            status="NOT_READY",
+            message="Admit follow-up evidence before starting a versioned reanalysis.",
+            original_attribution_unchanged=True,
         )
         try:
             package = build_live_response_package(
@@ -870,6 +951,9 @@ class LiveOperationsEngine:
             with self._lock:
                 self._state["retasking"] = result
                 self._state["evidence_intake"] = load_evidence_intake(run_root)
+                self._state["reanalysis"] = self._reanalysis_payload(
+                    run_root, load_live_reanalysis(run_root)
+                )
             self._write_state()
             return dict(result)
         except Exception as error:
@@ -900,6 +984,9 @@ class LiveOperationsEngine:
         result["register_url"] = self._public_url(intake["register_path"])
         with self._lock:
             self._state["evidence_intake"] = result
+            self._state["reanalysis"] = self._reanalysis_payload(
+                run_root, load_live_reanalysis(run_root)
+            )
         self._write_state()
         return dict(result)
 
@@ -930,8 +1017,77 @@ class LiveOperationsEngine:
         result["register_url"] = self._public_url(intake["register_path"])
         with self._lock:
             self._state["evidence_intake"] = result
+            self._state["reanalysis"] = self._reanalysis_payload(
+                run_root, load_live_reanalysis(run_root)
+            )
         self._write_state()
         return dict(result)
+
+    def start_reanalysis(self) -> dict[str, object]:
+        with self._lock:
+            if self._reanalysis_thread and self._reanalysis_thread.is_alive():
+                return dict(self._state["reanalysis"])
+            analysis = dict(self._state.get("analysis", {}))
+        scene_id = str(analysis.get("scene_id") or "").strip()
+        if not scene_id:
+            raise RuntimeError("The completed case has no scene identifier.")
+        safe_scene_id = "".join(
+            char if char.isalnum() or char in "-_" else "_" for char in scene_id
+        )
+        run_root = self.output_root / "analysis" / safe_scene_id
+        readiness = load_live_reanalysis(run_root)
+        if readiness.get("status") != "READY":
+            raise RuntimeError(str(readiness.get("message") or "Reanalysis is not ready."))
+        with self._lock:
+            self._state["reanalysis"] = {
+                **self._reanalysis_payload(run_root, readiness),
+                "status": "QUEUED",
+                "message": "Verifying admitted payloads before the versioned rerun.",
+                "queued_at_utc": _format_utc(_utc_now()),
+                "original_attribution_unchanged": True,
+            }
+            self._reanalysis_thread = threading.Thread(
+                target=self._reanalysis_worker,
+                args=(run_root,),
+                name="espada-live-reanalysis",
+                daemon=True,
+            )
+            self._reanalysis_thread.start()
+            result = dict(self._state["reanalysis"])
+        self._write_state()
+        return result
+
+    def _reanalysis_worker(self, run_root: Path) -> None:
+        try:
+            self._section_update(
+                "reanalysis",
+                status="RERANKING",
+                message=(
+                    "Hash-checking admitted evidence, replacing only its declared AIS coverage "
+                    "and rerunning the frozen candidate ranker."
+                ),
+                original_attribution_unchanged=True,
+            )
+            result = run_live_reanalysis(run_root)
+            payload = self._reanalysis_payload(run_root, result)
+            with self._lock:
+                self._state["reanalysis"] = {
+                    **payload,
+                    "status": "COMPLETE",
+                    "message": (
+                        "Versioned reanalysis completed. The original attribution remains unchanged."
+                    ),
+                }
+            self._write_state()
+        except Exception as error:
+            self._section_update(
+                "reanalysis",
+                status="ERROR",
+                decision="ABSTAIN_INSUFFICIENT_EVIDENCE",
+                completed_at_utc=_format_utc(_utc_now()),
+                message=f"{type(error).__name__}: {error}",
+                original_attribution_unchanged=True,
+            )
 
     def case_register(self) -> dict[str, object]:
         register = build_case_register(self.output_root / "analysis")
@@ -1779,6 +1935,13 @@ class LiveOperationsEngine:
             "evidence_intake": state.get(
                 "evidence_intake", {"status": "NOT_READY", "receipts": []}
             ),
+            "reanalysis": state.get(
+                "reanalysis",
+                {
+                    "status": "NOT_READY",
+                    "original_attribution_unchanged": True,
+                },
+            ),
             "case_register": self.case_register(),
             "truth_policy": {
                 "synthetic_fallback": False,
@@ -1815,6 +1978,7 @@ class LiveOperationsEngine:
         response_status = str(state.get("response", {}).get("status", "NOT_BUILT"))
         retasking_status = str(state.get("retasking", {}).get("status", "NOT_BUILT"))
         intake_status = str(state.get("evidence_intake", {}).get("status", "NOT_READY"))
+        reanalysis_status = str(state.get("reanalysis", {}).get("status", "NOT_READY"))
         attribution_running = attribution_status in {
             "QUEUED",
             "PREPARING_FORCING",
@@ -1822,7 +1986,11 @@ class LiveOperationsEngine:
             "FETCHING_AIS",
             "RANKING",
         }
-        if intake_status == "REANALYSIS_READY":
+        if reanalysis_status == "COMPLETE":
+            stage = "VERSIONED_REANALYSIS_COMPLETE"
+        elif reanalysis_status in {"QUEUED", "VERIFYING_INPUTS", "MERGING_EVIDENCE", "RERANKING"}:
+            stage = "VERSIONED_REANALYSIS_RUNNING"
+        elif intake_status == "REANALYSIS_READY":
             stage = "FOLLOW_UP_EVIDENCE_ADMITTED"
         elif intake_status == "RETURNS_RECORDED":
             stage = "FOLLOW_UP_EVIDENCE_REVIEW"
@@ -1873,6 +2041,8 @@ class LiveOperationsEngine:
                 "REANALYSIS_READY",
             },
             "reanalysis_eligible": intake_status == "REANALYSIS_READY",
+            "reanalysis_ready": reanalysis_status in {"READY", "COMPLETE"},
+            "reanalysis_complete": reanalysis_status == "COMPLETE",
             "message": (
                 "No oil candidate is displayed until a calibrated scene is processed and approved."
             ),

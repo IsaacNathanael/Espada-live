@@ -12,6 +12,7 @@
   const EVIDENCE_PLAN_ENDPOINT = '/api/live/build-evidence-plan';
   const STAGE_EVIDENCE_ENDPOINT = '/api/live/stage-evidence-return';
   const REVIEW_EVIDENCE_ENDPOINT = '/api/live/review-evidence-return';
+  const REANALYSIS_ENDPOINT = '/api/live/start-reanalysis';
   const byId = id => document.getElementById(id);
   let lastSnapshot = null;
   let mapMode = 'live';
@@ -1465,6 +1466,109 @@
     }
   }
 
+  function reanalysisCandidateLabel(candidate) {
+    if (!candidate) return 'No candidate';
+    const name = String(candidate.vessel_name || '').trim();
+    const mmsi = String(candidate.mmsi || '').trim();
+    return name && name.toUpperCase() !== 'UNKNOWN' ? name : (mmsi ? `MMSI ${mmsi}` : 'Unverified candidate');
+  }
+
+  function scorePercent(value) {
+    return finite(value) ? `${(Number(value) * 100).toFixed(1)}%` : '—';
+  }
+
+  function renderReanalysis(snapshot) {
+    const analysis = snapshot.reanalysis || {};
+    const statusValue = String(analysis.status || 'NOT_READY').toUpperCase();
+    const running = ['QUEUED','VERIFYING_INPUTS','MERGING_EVIDENCE','RERANKING'].includes(statusValue);
+    const complete = statusValue === 'COMPLETE';
+    const ready = statusValue === 'READY';
+    const status = byId('reanalysisStatus');
+    status.dataset.state = complete ? 'complete' : running ? 'running' : ready ? 'ready' : statusValue === 'ERROR' ? 'error' : 'waiting';
+    status.querySelector('b').textContent = complete ? 'VERSION COMPLETE' : running ? 'REANALYSIS RUNNING' : ready ? 'READY TO RERUN' : statusValue.replaceAll('_',' ');
+    status.querySelector('small').textContent = analysis.message || 'Admit evidence that resolves the blocking gate';
+
+    const baseline = analysis.baseline || {};
+    const baselineTop = baseline.top_candidate || null;
+    const rerun = analysis.rerun || {};
+    const rerunTop = rerun.top_candidate || null;
+    const eligible = Array.isArray(analysis.eligible_receipts) ? analysis.eligible_receipts : [];
+    const used = Array.isArray(analysis.used_receipts) ? analysis.used_receipts : [];
+    const receiptCount = complete ? used.length : eligible.length;
+    html('reanalysisBaselineDecision', String(baseline.decision || 'Not available').replaceAll('_',' '));
+    html('reanalysisInputCount', compactNumber(receiptCount));
+    html('reanalysisVersion', analysis.version || analysis.next_version || 'NOT CREATED');
+
+    const receipts = complete ? used : eligible;
+    const receiptList = byId('reanalysisReceiptList');
+    receiptList.innerHTML = receipts.length ? receipts.map(receipt => {
+      const digest = String(receipt.payload_sha256 || 'hash unavailable');
+      return `<div class="reanalysis-input-item"><div><b>${escapeMarkup(receipt.provider || receipt.request_title || 'Admitted evidence')}</b><small>${escapeMarkup(receipt.receipt_id || 'Recorded receipt')}</small></div><code>${escapeMarkup(digest.slice(0,12))}…</code></div>`;
+    }).join('') : '<p>No admitted rerun evidence is available.</p>';
+
+    const button = byId('startReanalysisButton');
+    button.disabled = !ready || running;
+    button.textContent = running ? 'Running frozen attribution…' : complete ? 'Reanalysis version complete' : 'Run versioned reanalysis';
+    const action = byId('reanalysisActionMessage');
+    action.dataset.state = complete ? 'success' : statusValue === 'ERROR' ? 'error' : '';
+    action.textContent = complete ? `${analysis.version} is preserved beside the original case.` : (analysis.message || 'Admit evidence that resolves the current blocking gate.');
+
+    html('baselineTopCandidate', reanalysisCandidateLabel(baselineTop));
+    html('baselineDecision', String(baseline.decision || '—').replaceAll('_',' '));
+    html('baselineTopScore', scorePercent(baselineTop?.total_score));
+    html('baselineMargin', scorePercent(baseline.score_margin));
+    html('reanalysisCompletedAt', complete ? `Completed ${formatUtc(analysis.completed_at_utc)}` : 'No rerun completed');
+    html('rerunVersionLabel', complete ? String(analysis.version || 'NEW VERSION').toUpperCase() : 'NEW VERSION');
+    html('rerunTopCandidate', complete ? reanalysisCandidateLabel(rerunTop) : 'Waiting for admitted evidence');
+    html('rerunDecision', complete ? String(rerun.decision || '—').replaceAll('_',' ') : '—');
+    html('rerunTopScore', complete ? scorePercent(rerunTop?.total_score) : '—');
+    html('rerunMargin', complete ? scorePercent(rerun.score_margin) : '—');
+    byId('rerunComparisonCard').dataset.state = complete ? 'complete' : 'waiting';
+
+    const impact = byId('reanalysisImpact');
+    const comparison = analysis.comparison || {};
+    if (complete) {
+      const changed = Boolean(comparison.decision_changed || comparison.top_candidate_changed);
+      impact.dataset.state = changed ? 'changed' : 'unchanged';
+      impact.querySelector('b').textContent = changed ? 'Evidence changed the investigative result' : 'Result remained stable after new evidence';
+      impact.querySelector('small').textContent = changed
+        ? 'The new version requires independent analyst review before any operational consequence.'
+        : 'The additional evidence did not change the top candidate or safety decision.';
+    } else {
+      impact.dataset.state = 'waiting';
+      impact.querySelector('b').textContent = 'No versioned comparison yet';
+      impact.querySelector('small').textContent = 'The original result remains authoritative until a new version is reviewed.';
+    }
+    setCaseLink('reanalysisResultLink', complete ? analysis.result_url : null);
+    setCaseLink('reanalysisRankingLink', complete ? analysis.ranking_chart_url : null);
+    setCaseLink('reanalysisMapLink', complete ? analysis.attribution_map_url : null);
+    setCaseLink('reanalysisMergeLink', complete ? analysis.merge_audit_url : null);
+  }
+
+  async function startVersionedReanalysis() {
+    const button = byId('startReanalysisButton');
+    const message = byId('reanalysisActionMessage');
+    button.disabled = true;
+    button.textContent = 'Verifying admitted evidence…';
+    message.dataset.state = '';
+    message.textContent = 'The original case is locked. A parallel result will be created.';
+    try {
+      const response = await fetch(REANALYSIS_ENDPOINT, {method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
+      if (lastSnapshot) {
+        lastSnapshot.reanalysis = result;
+        renderReanalysis(lastSnapshot);
+      }
+      window.setTimeout(poll, 650);
+    } catch (error) {
+      message.dataset.state = 'error';
+      message.textContent = `Reanalysis did not start: ${error.message}`;
+      button.disabled = false;
+      button.textContent = 'Run versioned reanalysis';
+    }
+  }
+
   function renderHeader(snapshot) {
     const region = snapshot.region || {};
     const bbox = Array.isArray(region.bbox) ? region.bbox : [];
@@ -1563,6 +1667,7 @@
     renderCaseRegister(snapshot);
     renderRetasking(snapshot);
     renderEvidenceIntake(snapshot);
+    renderReanalysis(snapshot);
     html('mapEvidenceTime', formatUtc(evidenceTime(snapshot)));
     updateMapMode(mapMode);
     syncMapGeometry(snapshot).catch(error => {
@@ -1661,6 +1766,7 @@
   });
   byId('admitEvidenceButton').addEventListener('click', () => reviewEvidenceReturn('ADMIT'));
   byId('rejectEvidenceButton').addEventListener('click', () => reviewEvidenceReturn('REJECT'));
+  byId('startReanalysisButton').addEventListener('click', startVersionedReanalysis);
   updateMapMode('live');
   tickClock();
   poll();

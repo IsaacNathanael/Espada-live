@@ -152,6 +152,15 @@ class LiveOperationsHandler(SimpleHTTPRequestHandler):
             except Exception as error:
                 self._json(500, {"status": "FAIL", "error": str(error)})
             return
+        if path == "/api/live/start-reanalysis":
+            try:
+                result = self.engine.start_reanalysis()
+                self._json(202, result)
+            except (ValueError, RuntimeError, FileNotFoundError) as error:
+                self._json(409, {"status": "REJECTED", "error": str(error)})
+            except Exception as error:
+                self._json(500, {"status": "FAIL", "error": str(error)})
+            return
         if path == "/api/live/verify-case":
             try:
                 payload = self._request_json()
