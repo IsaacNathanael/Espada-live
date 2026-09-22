@@ -128,6 +128,30 @@ class LiveOperationsHandler(SimpleHTTPRequestHandler):
             except Exception as error:
                 self._json(500, {"status": "FAIL", "error": str(error)})
             return
+        if path == "/api/live/stage-evidence-return":
+            try:
+                payload = self._request_json()
+                result = self.engine.stage_follow_up_evidence(payload)
+                self._json(200, result)
+            except (ValueError, RuntimeError, FileNotFoundError) as error:
+                self._json(409, {"status": "REJECTED", "error": str(error)})
+            except Exception as error:
+                self._json(500, {"status": "FAIL", "error": str(error)})
+            return
+        if path == "/api/live/review-evidence-return":
+            try:
+                payload = self._request_json()
+                result = self.engine.review_follow_up_evidence(
+                    str(payload.get("receipt_id") or ""),
+                    str(payload.get("decision") or ""),
+                    str(payload.get("analyst_note") or ""),
+                )
+                self._json(200, result)
+            except (ValueError, RuntimeError, FileNotFoundError) as error:
+                self._json(409, {"status": "REJECTED", "error": str(error)})
+            except Exception as error:
+                self._json(500, {"status": "FAIL", "error": str(error)})
+            return
         if path == "/api/live/verify-case":
             try:
                 payload = self._request_json()

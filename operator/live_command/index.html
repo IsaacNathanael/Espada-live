@@ -44,6 +44,7 @@
     <a class="workflow-step available" href="#respond-workspace"><span>05</span><b>Respond</b><small>Evidence & impact</small></a>
     <a class="workflow-step available" href="#case-register"><span>06</span><b>Preserve</b><small>Case register</small></a>
     <a class="workflow-step available" href="#evidence-planner"><span>07</span><b>Resolve</b><small>Evidence retasking</small></a>
+    <a class="workflow-step available" href="#evidence-intake"><span>08</span><b>Reopen</b><small>Evidence intake</small></a>
   </nav>
 
   <main id="overview">
@@ -652,6 +653,86 @@
       </div>
 
       <footer class="planner-boundary"><b>ACTION BOUNDARY</b> ESPADA drafts and prioritizes evidence requests. It does not contact providers, retask satellites, identify a vessel, or change the attribution decision until new evidence is acquired and reviewed.</footer>
+    </section>
+
+    <section class="intake-section" id="evidence-intake" aria-labelledby="intakeTitle">
+      <header class="intake-header">
+        <div>
+          <p class="kicker">EVIDENCE RETURN INTAKE · COMPONENT 09</p>
+          <h2 id="intakeTitle">Admit new evidence—never overwrite the old case.</h2>
+          <p>Returned AIS, identity, imagery or operational records are hashed, checked against the original request and held outside attribution until an analyst admits them.</p>
+        </div>
+        <div class="intake-status" id="intakeStatus" data-state="waiting" role="status" aria-live="polite">
+          <span>INTAKE STATE</span><b>WAITING FOR PLAN</b><small>Build an evidence request package first</small>
+        </div>
+      </header>
+
+      <div class="intake-summary" aria-label="Evidence intake summary">
+        <div><span>PLANNED REQUESTS</span><b id="intakeRequestCount">—</b><small>current request-plan tasks</small></div>
+        <div><span>RETURNS RECORDED</span><b id="intakeReturnCount">—</b><small>current-plan evidence receipts</small></div>
+        <div><span>ADMITTED EVIDENCE</span><b id="intakeAdmittedCount">—</b><small>analyst-reviewed returns</small></div>
+        <div class="frozen-cell"><span>ATTRIBUTION STATE</span><b id="intakeAttributionState">FROZEN</b><small>rerun is always explicit</small></div>
+      </div>
+
+      <div class="intake-layout">
+        <form class="intake-form" id="evidenceReturnForm">
+          <header><span>RETURN WORKSHEET</span><h3>Stage provider evidence</h3><small>Nothing is admitted automatically</small></header>
+          <label>Request being answered
+            <select id="intakeRequestSelect" required disabled><option value="">No request plan available</option></select>
+          </label>
+          <div class="intake-scope" aria-label="Requested evidence scope">
+            <div><span>TARGET TIME</span><b id="intakeScopeTime">—</b></div>
+            <div><span>TARGET AREA</span><b id="intakeScopeArea">—</b></div>
+            <div><span>TARGET MMSI</span><b id="intakeScopeMmsi">—</b></div>
+          </div>
+          <div class="intake-fields two-up">
+            <label>Evidence provider<input id="intakeProvider" type="text" maxlength="120" placeholder="Provider or authority" required></label>
+            <label>Source / product reference<input id="intakeSourceReference" type="text" maxlength="180" placeholder="Dataset, product ID or registry reference" required></label>
+            <label>Coverage starts (UTC)<input id="intakeCoverageStart" type="datetime-local" step="1"></label>
+            <label>Coverage ends (UTC)<input id="intakeCoverageEnd" type="datetime-local" step="1"></label>
+          </div>
+          <label>Returned area · min lon, min lat, max lon, max lat
+            <input id="intakeBbox" type="text" placeholder="103.80, 0.90, 104.10, 1.20">
+          </label>
+          <label>Covered MMSIs · comma separated
+            <input id="intakeMmsi" type="text" placeholder="253156000, 253307000">
+          </label>
+          <label class="intake-check"><input id="intakeIncidentValid" type="checkbox"> Identity or record is confirmed valid at the incident time</label>
+          <label>Returned evidence data
+            <textarea id="intakePayload" rows="7" maxlength="20000" placeholder="Paste provider CSV, JSON or a signed text response. The exact content is hashed and preserved." required></textarea>
+          </label>
+          <div class="intake-submit-row">
+            <button id="stageEvidenceButton" type="submit" disabled>Stage evidence return</button>
+            <span id="intakeFormMessage" aria-live="polite">Select a request plan to begin.</span>
+          </div>
+        </form>
+
+        <div class="intake-review-column">
+          <article class="intake-ledger">
+            <header><div><span>RETURN LEDGER</span><h3>Recorded receipts</h3></div><small id="intakeLedgerCount">0 receipts</small></header>
+            <div id="intakeReceiptList" class="intake-receipt-list" aria-live="polite">
+              <p>No evidence returns have been recorded.</p>
+            </div>
+          </article>
+
+          <aside class="intake-receipt" id="intakeReceiptInspector" data-state="empty" aria-live="polite">
+            <div class="intake-receipt-head"><span id="intakeReceiptId">NO RECEIPT SELECTED</span><em id="intakeReceiptState">NOT REVIEWED</em></div>
+            <h3 id="intakeReceiptTitle">Evidence validation receipt</h3>
+            <p id="intakeReceiptSource">Stage a provider return to generate a hash and scope checks.</p>
+            <code id="intakeReceiptDigest">No payload digest</code>
+            <div id="intakeValidationChecks" class="intake-validation-checks"><p>Validation checks will appear here.</p></div>
+            <label>Analyst admission note<textarea id="intakeAnalystNote" rows="3" maxlength="500" placeholder="Explain why this return should be admitted or rejected." disabled></textarea></label>
+            <label class="intake-check"><input id="intakeReviewConfirm" type="checkbox" disabled> I inspected the provider, scope and preserved payload.</label>
+            <div class="intake-review-actions">
+              <button id="admitEvidenceButton" type="button" disabled>Admit for reanalysis</button>
+              <button id="rejectEvidenceButton" type="button" disabled>Reject return</button>
+            </div>
+            <a id="intakeRegisterLink" href="#" target="_blank" rel="noopener" hidden>Open intake register ↗</a>
+          </aside>
+        </div>
+      </div>
+
+      <footer class="intake-boundary"><b>DECISION BOUNDARY</b> Admission means the evidence may enter a new analysis. The preserved attribution remains unchanged until a separate, explicit rerun completes and passes every safety gate.</footer>
     </section>
 
     <section class="section-heading">

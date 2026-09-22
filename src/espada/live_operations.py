@@ -24,6 +24,11 @@ from .environment import load_environment, sync_historical_wind
 from .historical_ais import GFW_DELAY_HOURS, HistoricalAISRequest, fetch_gfw_presence
 from .live_ais import AISBoundingBox, capture_aisstream
 from .live_case_register import build_case_register, verify_case_integrity
+from .live_evidence_intake import (
+    load_evidence_intake,
+    review_evidence_return,
+    stage_evidence_return,
+)
 from .live_retasking import build_live_retasking_plan, load_live_retasking_plan
 from .live_response import build_live_response_package
 from .sentinel_catalog import SentinelSearchRequest, discover_sentinel1
@@ -173,6 +178,11 @@ class LiveOperationsEngine:
                 "status": "NOT_BUILT",
                 "message": "The follow-up evidence plan is created after a response package exists.",
             },
+            "evidence_intake": {
+                "status": "NOT_READY",
+                "message": "Build a follow-up evidence plan before recording returns.",
+                "receipts": [],
+            },
         }
         self._analysis_thread: threading.Thread | None = None
         self._attribution_thread: threading.Thread | None = None
@@ -180,6 +190,7 @@ class LiveOperationsEngine:
         self._recover_completed_case()
         self._recover_response_package()
         self._recover_retasking_plan()
+        self._recover_evidence_intake()
         self._prepare_coastline()
         self._write_state()
 
@@ -208,7 +219,7 @@ class LiveOperationsEngine:
                     "message": "The previous SAR job was interrupted before a final result was recorded.",
                 }
             self._state["analysis"] = analysis
-        for section in ("review", "attribution", "response", "retasking"):
+        for section in ("review", "attribution", "response", "retasking", "evidence_intake"):
             saved = previous.get(section)
             if not isinstance(saved, dict):
                 continue
@@ -414,6 +425,23 @@ class LiveOperationsEngine:
             "requests_csv_url": self._public_url(run_root / "follow_up/evidence_requests.csv"),
         }
 
+    def _recover_evidence_intake(self) -> None:
+        scene_id = str(self._state.get("analysis", {}).get("scene_id") or "").strip()
+        if not scene_id:
+            return
+        safe_scene_id = "".join(
+            char if char.isalnum() or char in "-_" else "_" for char in scene_id
+        )
+        run_root = self.output_root / "analysis" / safe_scene_id
+        intake = load_evidence_intake(run_root)
+        if intake.get("status") == "NOT_READY":
+            return
+        register_path = run_root / "follow_up/intake/evidence_intake_register.json"
+        recovered_intake = {**intake}
+        if register_path.is_file():
+            recovered_intake["register_url"] = self._public_url(register_path)
+        self._state["evidence_intake"] = recovered_intake
+
     @staticmethod
     def _empty_source(provider: str, kind: str) -> dict[str, object]:
         return {
@@ -575,6 +603,11 @@ class LiveOperationsEngine:
                 "status": "NOT_BUILT",
                 "message": "The follow-up evidence plan is created after a response package exists.",
             }
+            self._state["evidence_intake"] = {
+                "status": "NOT_READY",
+                "message": "A new evidence plan is required before recording returns.",
+                "receipts": [],
+            }
             self._analysis_thread = threading.Thread(
                 target=self._analysis_worker, name="espada-live-sar", daemon=True
             )
@@ -632,6 +665,11 @@ class LiveOperationsEngine:
                 "status": "BLOCKED_BY_REVIEW",
                 "message": "No follow-up attribution plan is created after slick rejection.",
             }
+            self._state["evidence_intake"] = {
+                "status": "BLOCKED_BY_REVIEW",
+                "message": "Evidence intake is closed after slick rejection.",
+                "receipts": [],
+            }
             self._state["review"] = result
             self._write_state()
             return result
@@ -683,6 +721,11 @@ class LiveOperationsEngine:
             "status": "NOT_BUILT",
             "message": "The follow-up evidence plan is created after a response package exists.",
         }
+        self._state["evidence_intake"] = {
+            "status": "NOT_READY",
+            "message": "A new evidence plan is required before recording returns.",
+            "receipts": [],
+        }
         self._write_state()
         return result
 
@@ -706,6 +749,11 @@ class LiveOperationsEngine:
             self._state["retasking"] = {
                 "status": "NOT_BUILT",
                 "message": "The follow-up evidence plan is created after a response package exists.",
+            }
+            self._state["evidence_intake"] = {
+                "status": "NOT_READY",
+                "message": "A new evidence plan is required before recording returns.",
+                "receipts": [],
             }
             self._attribution_thread = threading.Thread(
                 target=self._attribution_worker,
@@ -743,6 +791,12 @@ class LiveOperationsEngine:
             "retasking",
             status="NOT_BUILT",
             message="Build the evidence response package before planning follow-up acquisition.",
+        )
+        self._section_update(
+            "evidence_intake",
+            status="NOT_READY",
+            message="Build a follow-up evidence plan before recording returns.",
+            receipts=[],
         )
         try:
             package = build_live_response_package(
@@ -815,6 +869,7 @@ class LiveOperationsEngine:
             )
             with self._lock:
                 self._state["retasking"] = result
+                self._state["evidence_intake"] = load_evidence_intake(run_root)
             self._write_state()
             return dict(result)
         except Exception as error:
@@ -824,6 +879,59 @@ class LiveOperationsEngine:
                 message=f"{type(error).__name__}: {error}",
             )
             raise
+
+    def stage_follow_up_evidence(self, submission: dict[str, Any]) -> dict[str, object]:
+        with self._lock:
+            analysis = dict(self._state.get("analysis", {}))
+            retasking = dict(self._state.get("retasking", {}))
+        if retasking.get("status") != "READY":
+            raise RuntimeError("Build a follow-up evidence plan before recording a return.")
+        scene_id = str(analysis.get("scene_id") or "").strip()
+        if not scene_id:
+            raise RuntimeError("The completed case has no scene identifier.")
+        safe_scene_id = "".join(
+            char if char.isalnum() or char in "-_" else "_" for char in scene_id
+        )
+        run_root = self.output_root / "analysis" / safe_scene_id
+        intake = stage_evidence_return(run_root, submission)
+        result = {
+            key: value for key, value in intake.items() if key != "register_path"
+        }
+        result["register_url"] = self._public_url(intake["register_path"])
+        with self._lock:
+            self._state["evidence_intake"] = result
+        self._write_state()
+        return dict(result)
+
+    def review_follow_up_evidence(
+        self,
+        receipt_id: str,
+        decision: str,
+        analyst_note: str,
+    ) -> dict[str, object]:
+        with self._lock:
+            analysis = dict(self._state.get("analysis", {}))
+        scene_id = str(analysis.get("scene_id") or "").strip()
+        if not scene_id:
+            raise RuntimeError("The completed case has no scene identifier.")
+        safe_scene_id = "".join(
+            char if char.isalnum() or char in "-_" else "_" for char in scene_id
+        )
+        run_root = self.output_root / "analysis" / safe_scene_id
+        intake = review_evidence_return(
+            run_root,
+            receipt_id,
+            decision,
+            analyst_note,
+        )
+        result = {
+            key: value for key, value in intake.items() if key != "register_path"
+        }
+        result["register_url"] = self._public_url(intake["register_path"])
+        with self._lock:
+            self._state["evidence_intake"] = result
+        self._write_state()
+        return dict(result)
 
     def case_register(self) -> dict[str, object]:
         register = build_case_register(self.output_root / "analysis")
@@ -1668,6 +1776,9 @@ class LiveOperationsEngine:
             "attribution": state.get("attribution", {"status": "NOT_RUN", "candidates": []}),
             "response": state.get("response", {"status": "NOT_BUILT"}),
             "retasking": state.get("retasking", {"status": "NOT_BUILT", "tasks": []}),
+            "evidence_intake": state.get(
+                "evidence_intake", {"status": "NOT_READY", "receipts": []}
+            ),
             "case_register": self.case_register(),
             "truth_policy": {
                 "synthetic_fallback": False,
@@ -1703,6 +1814,7 @@ class LiveOperationsEngine:
         attribution_status = str(state.get("attribution", {}).get("status", "NOT_RUN"))
         response_status = str(state.get("response", {}).get("status", "NOT_BUILT"))
         retasking_status = str(state.get("retasking", {}).get("status", "NOT_BUILT"))
+        intake_status = str(state.get("evidence_intake", {}).get("status", "NOT_READY"))
         attribution_running = attribution_status in {
             "QUEUED",
             "PREPARING_FORCING",
@@ -1710,7 +1822,11 @@ class LiveOperationsEngine:
             "FETCHING_AIS",
             "RANKING",
         }
-        if retasking_status == "READY":
+        if intake_status == "REANALYSIS_READY":
+            stage = "FOLLOW_UP_EVIDENCE_ADMITTED"
+        elif intake_status == "RETURNS_RECORDED":
+            stage = "FOLLOW_UP_EVIDENCE_REVIEW"
+        elif retasking_status == "READY":
             stage = "FOLLOW_UP_EVIDENCE_PLAN_READY"
         elif retasking_status == "BUILDING":
             stage = "FOLLOW_UP_EVIDENCE_PLAN_BUILDING"
@@ -1752,6 +1868,11 @@ class LiveOperationsEngine:
             "attribution_ready": attribution_status in {"COMPLETE", "ABSTAIN_NO_MATCHED_AIS"},
             "response_ready": response_status == "READY",
             "retasking_ready": retasking_status == "READY",
+            "evidence_intake_ready": intake_status in {
+                "RETURNS_RECORDED",
+                "REANALYSIS_READY",
+            },
+            "reanalysis_eligible": intake_status == "REANALYSIS_READY",
             "message": (
                 "No oil candidate is displayed until a calibrated scene is processed and approved."
             ),

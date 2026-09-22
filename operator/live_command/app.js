@@ -10,6 +10,8 @@
   const RESPONSE_ENDPOINT = '/api/live/build-response';
   const VERIFY_CASE_ENDPOINT = '/api/live/verify-case';
   const EVIDENCE_PLAN_ENDPOINT = '/api/live/build-evidence-plan';
+  const STAGE_EVIDENCE_ENDPOINT = '/api/live/stage-evidence-return';
+  const REVIEW_EVIDENCE_ENDPOINT = '/api/live/review-evidence-return';
   const byId = id => document.getElementById(id);
   let lastSnapshot = null;
   let mapMode = 'live';
@@ -23,6 +25,8 @@
   let selectedCaseId = null;
   let caseStageFilter = 'all';
   let selectedEvidenceTaskId = null;
+  let selectedIntakeRequestId = null;
+  let selectedIntakeReceiptId = null;
 
   const html = (id, value) => { byId(id).textContent = value; };
   const parseTime = value => {
@@ -1250,6 +1254,217 @@
     }
   }
 
+  const utcInputValue = value => {
+    const parsed = parseTime(value);
+    return parsed ? parsed.toISOString().slice(0, 19) : '';
+  };
+
+  const utcFromInput = value => {
+    if (!value) return null;
+    const parsed = new Date(`${value}Z`);
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+  };
+
+  function intakeTasks(snapshot) {
+    const plan = snapshot.retasking || {};
+    return plan.status === 'READY' && Array.isArray(plan.tasks) ? plan.tasks : [];
+  }
+
+  function intakeTaskById(snapshot, taskId) {
+    return intakeTasks(snapshot).find(task => String(task.id) === String(taskId)) || null;
+  }
+
+  function renderIntakeScope(task) {
+    const scope = task?.request_scope || {};
+    const time = scope.start_utc && scope.end_utc
+      ? `${formatUtc(scope.start_utc)} — ${formatUtc(scope.end_utc)}`
+      : scope.as_of_utc ? `As of ${formatUtc(scope.as_of_utc)}` : 'Not time-bounded';
+    const bbox = Array.isArray(scope.bbox_wgs84) ? scope.bbox_wgs84 : [];
+    const mmsi = Array.isArray(scope.mmsi) ? scope.mmsi : [];
+    html('intakeScopeTime', task ? time : '—');
+    html('intakeScopeArea', bbox.length === 4 ? bbox.join(', ') : 'Not spatially bounded');
+    html('intakeScopeMmsi', mmsi.length ? mmsi.join(' · ') : 'No vessel scope');
+  }
+
+  function applyIntakeTaskDefaults(task) {
+    const scope = task?.request_scope || {};
+    byId('intakeCoverageStart').value = utcInputValue(scope.start_utc || scope.as_of_utc);
+    byId('intakeCoverageEnd').value = utcInputValue(scope.end_utc || scope.as_of_utc);
+    byId('intakeBbox').value = Array.isArray(scope.bbox_wgs84) ? scope.bbox_wgs84.join(', ') : '';
+    byId('intakeMmsi').value = Array.isArray(scope.mmsi) ? scope.mmsi.join(', ') : '';
+    byId('intakeIncidentValid').checked = false;
+    renderIntakeScope(task);
+  }
+
+  function setIntakeFormEnabled(enabled) {
+    ['intakeRequestSelect','intakeProvider','intakeSourceReference','intakeCoverageStart','intakeCoverageEnd','intakeBbox','intakeMmsi','intakeIncidentValid','intakePayload'].forEach(id => { byId(id).disabled = !enabled; });
+    byId('stageEvidenceButton').disabled = !enabled;
+  }
+
+  function updateReceiptReviewButtons(receipt = null) {
+    const staged = receipt?.admission_status === 'STAGED';
+    const confirmed = byId('intakeReviewConfirm').checked;
+    const hasNote = byId('intakeAnalystNote').value.trim().length >= 8;
+    byId('admitEvidenceButton').disabled = !(staged && confirmed && hasNote && receipt?.validation_status === 'PASS');
+    byId('rejectEvidenceButton').disabled = !(staged && confirmed && hasNote);
+  }
+
+  function renderIntakeReceipt(receipt) {
+    const note = byId('intakeAnalystNote');
+    const confirm = byId('intakeReviewConfirm');
+    const inspector = byId('intakeReceiptInspector');
+    if (!receipt) {
+      inspector.dataset.receiptId = '';
+      html('intakeReceiptId', 'NO RECEIPT SELECTED');
+      html('intakeReceiptState', 'NOT REVIEWED');
+      html('intakeReceiptTitle', 'Evidence validation receipt');
+      html('intakeReceiptSource', 'Stage a provider return to generate a hash and scope checks.');
+      html('intakeReceiptDigest', 'No payload digest');
+      byId('intakeValidationChecks').innerHTML = '<p>Validation checks will appear here.</p>';
+      note.value = '';
+      note.disabled = true;
+      confirm.checked = false;
+      confirm.disabled = true;
+      updateReceiptReviewButtons(null);
+      return;
+    }
+    const receiptChanged = inspector.dataset.receiptId !== String(receipt.receipt_id || '');
+    inspector.dataset.receiptId = String(receipt.receipt_id || '');
+    html('intakeReceiptId', receipt.receipt_id || 'UNNAMED RECEIPT');
+    html('intakeReceiptState', String(receipt.admission_status || 'STAGED').replaceAll('_', ' '));
+    html('intakeReceiptTitle', receipt.request_title || 'Evidence return');
+    html('intakeReceiptSource', `${receipt.provider || 'Unknown provider'} · ${receipt.source_reference || 'No source reference'}`);
+    html('intakeReceiptDigest', receipt.payload_sha256 || 'No payload digest');
+    const checks = Array.isArray(receipt.validation_checks) ? receipt.validation_checks : [];
+    byId('intakeValidationChecks').innerHTML = checks.length
+      ? checks.map((check, index) => `<div class="intake-validation-check" data-state="${check.passed ? 'pass' : 'fail'}"><span>${String(index + 1).padStart(2, '0')}</span><div><b>${escapeMarkup(check.label)}</b><small>${escapeMarkup(check.detail)}</small></div><em>${check.passed ? 'PASS' : 'GAP'}</em></div>`).join('')
+      : '<p>No validation checks were recorded.</p>';
+    const staged = receipt.admission_status === 'STAGED';
+    if (receiptChanged || !staged) note.value = receipt.analyst_note || '';
+    note.disabled = !staged;
+    if (receiptChanged || !staged) confirm.checked = false;
+    confirm.disabled = !staged;
+    updateReceiptReviewButtons(receipt);
+  }
+
+  function renderEvidenceIntake(snapshot) {
+    const intake = snapshot.evidence_intake || {};
+    const tasks = intakeTasks(snapshot);
+    const ready = tasks.length > 0;
+    const statusValue = String(intake.status || 'NOT_READY').toUpperCase();
+    const status = byId('intakeStatus');
+    status.dataset.state = statusValue === 'REANALYSIS_READY' ? 'ready' : statusValue === 'RETURNS_RECORDED' ? 'review' : 'waiting';
+    status.querySelector('b').textContent = statusValue === 'REANALYSIS_READY' ? 'REANALYSIS ELIGIBLE' : statusValue === 'RETURNS_RECORDED' ? 'RETURNS REQUIRE REVIEW' : ready ? 'NO RETURNS RECEIVED' : 'WAITING FOR PLAN';
+    status.querySelector('small').textContent = intake.message || (ready ? 'No follow-up evidence has been returned' : 'Build an evidence request package first');
+    html('intakeRequestCount', ready ? compactNumber(tasks.length) : '—');
+    html('intakeReturnCount', ready ? compactNumber(intake.return_count || 0) : '—');
+    html('intakeAdmittedCount', ready ? compactNumber(intake.admitted_count || 0) : '—');
+    const reanalysis = Boolean(intake.reanalysis_eligible);
+    html('intakeAttributionState', reanalysis ? 'ELIGIBLE TO RERUN' : 'FROZEN');
+    document.querySelector('.intake-summary .frozen-cell').dataset.state = reanalysis ? 'ready' : 'frozen';
+
+    const select = byId('intakeRequestSelect');
+    const signature = tasks.map(task => task.id).join('|');
+    if (select.dataset.signature !== signature) {
+      select.innerHTML = tasks.length
+        ? tasks.map(task => `<option value="${escapeMarkup(task.id)}">${escapeMarkup(`${task.priority} · ${task.title}`)}</option>`).join('')
+        : '<option value="">No request plan available</option>';
+      select.dataset.signature = signature;
+      selectedIntakeRequestId = tasks[0]?.id || null;
+      if (selectedIntakeRequestId) select.value = selectedIntakeRequestId;
+      applyIntakeTaskDefaults(tasks[0] || null);
+    }
+    if (selectedIntakeRequestId && tasks.some(task => task.id === selectedIntakeRequestId)) select.value = selectedIntakeRequestId;
+    setIntakeFormEnabled(ready);
+    renderIntakeScope(intakeTaskById(snapshot, selectedIntakeRequestId));
+    if (ready && !byId('intakeFormMessage').dataset.state) html('intakeFormMessage', 'Returned content is preserved locally and never transmitted by ESPADA.');
+
+    const receipts = Array.isArray(intake.receipts) ? intake.receipts : [];
+    if (receipts.length && !receipts.some(item => item.receipt_id === selectedIntakeReceiptId)) selectedIntakeReceiptId = receipts[receipts.length - 1].receipt_id;
+    html('intakeLedgerCount', `${receipts.length} receipt${receipts.length === 1 ? '' : 's'}`);
+    const list = byId('intakeReceiptList');
+    if (!receipts.length) {
+      list.innerHTML = '<p>No evidence returns have been recorded.</p>';
+      renderIntakeReceipt(null);
+    } else {
+      list.innerHTML = receipts.slice().reverse().map((receipt, index) => {
+        const state = receipt.admission_status === 'STAGED' && receipt.validation_status !== 'PASS' ? 'GAPS' : receipt.admission_status;
+        return `<button class="intake-receipt-item" type="button" data-receipt-id="${escapeMarkup(receipt.receipt_id)}" data-state="${escapeMarkup(state)}" aria-pressed="${receipt.receipt_id === selectedIntakeReceiptId}"><span>${String(receipts.length - index).padStart(2, '0')}</span><div><b>${escapeMarkup(receipt.request_title || receipt.request_id)}</b><small>${escapeMarkup(receipt.provider || 'Unknown provider')}</small></div><em>${escapeMarkup(state)}</em></button>`;
+      }).join('');
+      list.querySelectorAll('[data-receipt-id]').forEach(button => button.addEventListener('click', () => {
+        selectedIntakeReceiptId = button.dataset.receiptId;
+        renderEvidenceIntake(lastSnapshot);
+      }));
+      renderIntakeReceipt(receipts.find(item => item.receipt_id === selectedIntakeReceiptId) || receipts[receipts.length - 1]);
+    }
+    setCaseLink('intakeRegisterLink', ready && intake.register_url ? intake.register_url : null);
+  }
+
+  async function stageEvidenceReturn(event) {
+    event.preventDefault();
+    const button = byId('stageEvidenceButton');
+    const message = byId('intakeFormMessage');
+    button.disabled = true;
+    button.textContent = 'Hashing and checking…';
+    message.dataset.state = '';
+    message.textContent = 'Validating returned evidence against the original request.';
+    const payload = {
+      request_id: byId('intakeRequestSelect').value,
+      provider: byId('intakeProvider').value,
+      source_reference: byId('intakeSourceReference').value,
+      coverage_start_utc: utcFromInput(byId('intakeCoverageStart').value),
+      coverage_end_utc: utcFromInput(byId('intakeCoverageEnd').value),
+      bbox_wgs84: byId('intakeBbox').value,
+      covered_mmsi: byId('intakeMmsi').value,
+      incident_time_valid: byId('intakeIncidentValid').checked,
+      payload_text: byId('intakePayload').value,
+    };
+    try {
+      const response = await fetch(STAGE_EVIDENCE_ENDPOINT, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
+      selectedIntakeReceiptId = result.staged_receipt?.receipt_id || null;
+      byId('intakePayload').value = '';
+      message.dataset.state = 'success';
+      message.textContent = result.staged_receipt?.validation_status === 'PASS' ? 'Return staged with every scope check passed.' : 'Return staged, but scope gaps prevent admission.';
+      if (lastSnapshot) {
+        lastSnapshot.evidence_intake = result;
+        renderEvidenceIntake(lastSnapshot);
+      }
+      window.setTimeout(poll, 350);
+    } catch (error) {
+      message.dataset.state = 'error';
+      message.textContent = error.message;
+    } finally {
+      button.textContent = 'Stage evidence return';
+      button.disabled = false;
+    }
+  }
+
+  async function reviewEvidenceReturn(decision) {
+    const receipt = (lastSnapshot?.evidence_intake?.receipts || []).find(item => item.receipt_id === selectedIntakeReceiptId);
+    if (!receipt) return;
+    const buttons = [byId('admitEvidenceButton'), byId('rejectEvidenceButton')];
+    buttons.forEach(button => { button.disabled = true; });
+    const message = byId('intakeFormMessage');
+    try {
+      const response = await fetch(REVIEW_EVIDENCE_ENDPOINT, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({receipt_id:receipt.receipt_id,decision,analyst_note:byId('intakeAnalystNote').value})});
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
+      message.dataset.state = 'success';
+      message.textContent = decision === 'ADMIT' ? 'Evidence admitted. The previous attribution remains frozen until an explicit rerun.' : 'Evidence return rejected and retained in the audit record.';
+      if (lastSnapshot) {
+        lastSnapshot.evidence_intake = result;
+        renderEvidenceIntake(lastSnapshot);
+      }
+      window.setTimeout(poll, 350);
+    } catch (error) {
+      message.dataset.state = 'error';
+      message.textContent = error.message;
+      updateReceiptReviewButtons(receipt);
+    }
+  }
+
   function renderHeader(snapshot) {
     const region = snapshot.region || {};
     const bbox = Array.isArray(region.bbox) ? region.bbox : [];
@@ -1347,6 +1562,7 @@
     renderResponseWorkspace(snapshot);
     renderCaseRegister(snapshot);
     renderRetasking(snapshot);
+    renderEvidenceIntake(snapshot);
     html('mapEvidenceTime', formatUtc(evidenceTime(snapshot)));
     updateMapMode(mapMode);
     syncMapGeometry(snapshot).catch(error => {
@@ -1430,6 +1646,21 @@
   });
   byId('verifyCaseButton').addEventListener('click', verifySelectedCase);
   byId('buildEvidencePlanButton').addEventListener('click', buildEvidencePlan);
+  byId('intakeRequestSelect').addEventListener('change', event => {
+    selectedIntakeRequestId = event.target.value;
+    applyIntakeTaskDefaults(intakeTaskById(lastSnapshot || {}, selectedIntakeRequestId));
+  });
+  byId('evidenceReturnForm').addEventListener('submit', stageEvidenceReturn);
+  byId('intakeAnalystNote').addEventListener('input', () => {
+    const receipt = (lastSnapshot?.evidence_intake?.receipts || []).find(item => item.receipt_id === selectedIntakeReceiptId);
+    updateReceiptReviewButtons(receipt);
+  });
+  byId('intakeReviewConfirm').addEventListener('change', () => {
+    const receipt = (lastSnapshot?.evidence_intake?.receipts || []).find(item => item.receipt_id === selectedIntakeReceiptId);
+    updateReceiptReviewButtons(receipt);
+  });
+  byId('admitEvidenceButton').addEventListener('click', () => reviewEvidenceReturn('ADMIT'));
+  byId('rejectEvidenceButton').addEventListener('click', () => reviewEvidenceReturn('REJECT'));
   updateMapMode('live');
   tickClock();
   poll();

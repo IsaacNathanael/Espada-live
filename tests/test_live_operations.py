@@ -180,6 +180,19 @@ def test_live_command_retasking_drafts_scoped_requests_without_dispatch() -> Non
     assert "acceptance_criteria" in script
 
 
+def test_live_command_intake_preserves_and_gates_returned_evidence() -> None:
+    root = Path(__file__).resolve().parents[1]
+    page = (root / "operator/live_command/index.html").read_text(encoding="utf-8")
+    script = (root / "operator/live_command/app.js").read_text(encoding="utf-8")
+    assert 'id="evidence-intake"' in page
+    assert "Admit new evidence—never overwrite the old case." in page
+    assert "ATTRIBUTION STATE" in page
+    assert "rerun is always explicit" in page
+    assert "/api/live/stage-evidence-return" in script
+    assert "/api/live/review-evidence-return" in script
+    assert "attribution remains frozen" in script
+
+
 def test_completed_analysis_survives_server_restart(tmp_path: Path) -> None:
     region = LiveRegion("Test region", 70.8, 17.8, 73.0, 20.0)
     first = LiveOperationsEngine(tmp_path, region)
