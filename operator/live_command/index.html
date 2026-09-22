@@ -46,6 +46,7 @@
     <a class="workflow-step available" href="#evidence-planner"><span>07</span><b>Resolve</b><small>Evidence retasking</small></a>
     <a class="workflow-step available" href="#evidence-intake"><span>08</span><b>Reopen</b><small>Evidence intake</small></a>
     <a class="workflow-step available" href="#controlled-reanalysis"><span>09</span><b>Reanalyse</b><small>Versioned rerun</small></a>
+    <a class="workflow-step available" href="#decision-closure"><span>10</span><b>Close</b><small>Decision record</small></a>
   </nav>
 
   <main id="overview">
@@ -808,6 +809,75 @@
       </div>
 
       <footer class="reanalysis-boundary"><b>VERSION BOUNDARY</b> A rerun may change candidate ordering or keep the system in abstention. It never erases the original result, proves a discharge or authorizes enforcement.</footer>
+    </section>
+
+    <section class="closure-section" id="decision-closure" aria-labelledby="closureTitle">
+      <header class="closure-header">
+        <div>
+          <p class="kicker">DECISION COMPARISON &amp; CLOSURE · COMPONENT 11</p>
+          <h2 id="closureTitle">Close the workflow. Preserve the uncertainty.</h2>
+          <p>Every attribution version remains visible. An accountable analyst may keep the case open, close it as inconclusive or refer the package for authorized review—without converting a score into guilt.</p>
+        </div>
+        <div class="closure-status" id="closureStatus" data-state="waiting" role="status" aria-live="polite">
+          <span>CASE DISPOSITION</span><b>NOT READY</b><small>Complete attribution before recording a disposition</small>
+        </div>
+      </header>
+
+      <div class="closure-summary" aria-label="Case closure summary">
+        <div><span>OPERATIVE VERSION</span><b id="closureOperativeVersion">—</b><small>latest immutable evidence result</small></div>
+        <div><span>SAFETY DECISION</span><b id="closureSafetyDecision">—</b><small>algorithmic evidence gate output</small></div>
+        <div><span>VERSION HISTORY</span><b id="closureVersionCount">0</b><small>baseline plus completed reruns</small></div>
+        <div><span>CASE STATE</span><b id="closureCaseState">NOT READY</b><small id="closureEventCount">0 recorded disposition events</small></div>
+      </div>
+
+      <div class="closure-layout">
+        <article class="closure-ledger">
+          <header><span>IMMUTABLE VERSION LEDGER</span><h3>What changed—and what did not</h3><small>Inspect any version; disposition always uses the newest</small></header>
+          <div class="closure-version-list" id="closureVersionList"><p>No attribution version is available.</p></div>
+          <section class="closure-version-detail" id="closureVersionDetail">
+            <div class="closure-version-head"><span id="closureSelectedVersion">NO VERSION</span><em id="closureSelectedDecision">NOT READY</em></div>
+            <h4 id="closureSelectedCandidate">No candidate result</h4>
+            <dl>
+              <div><dt>Top score</dt><dd id="closureSelectedScore">—</dd></div>
+              <div><dt>Lead</dt><dd id="closureSelectedMargin">—</dd></div>
+              <div><dt>Candidates</dt><dd id="closureSelectedCandidates">—</dd></div>
+              <div><dt>Recorded</dt><dd id="closureSelectedTime">—</dd></div>
+            </dl>
+            <div class="closure-change" id="closureChange" data-state="stable"><span>VERSION EFFECT</span><b>Waiting for a result</b><small>No comparison is available.</small></div>
+            <div class="closure-gates" id="closureGateList"><p>Decision gates will appear here.</p></div>
+          </section>
+        </article>
+
+        <aside class="closure-decision">
+          <header><span>ACCOUNTABLE DISPOSITION</span><h3>Record the operational next step</h3><small>No external message or enforcement action is sent</small></header>
+          <form id="closureForm">
+            <fieldset id="closureDispositionOptions">
+              <legend>Choose one disposition</legend>
+              <label><input type="radio" name="closureDisposition" value="KEEP_OPEN_ACQUIRE_EVIDENCE"><span><b>Continue evidence collection</b><small>Keep or reopen the case for another evidence cycle.</small></span></label>
+              <label><input type="radio" name="closureDisposition" value="CLOSE_INCONCLUSIVE"><span><b>Close as inconclusive</b><small>Record that available evidence supports no vessel nomination.</small></span></label>
+              <label><input type="radio" name="closureDisposition" value="REFER_AUTHORIZED_REVIEW"><span><b>Refer for authorized review</b><small>Send only the preserved package to an accountable human process.</small></span></label>
+            </fieldset>
+            <label>Reviewer role<input id="closureReviewerRole" type="text" maxlength="80" placeholder="Example: Senior maritime analyst" autocomplete="off"></label>
+            <label>Decision rationale<textarea id="closureRationale" rows="4" maxlength="1000" placeholder="Explain which evidence version and safety gates support this workflow decision."></textarea></label>
+            <label class="closure-check"><input id="closureAcknowledge" type="checkbox"> I understand this disposition is not a guilt finding or enforcement authorization.</label>
+            <button id="recordClosureButton" type="submit" disabled>Record disposition</button>
+            <p id="closureActionMessage" aria-live="polite">Complete attribution before recording a disposition.</p>
+          </form>
+
+          <section class="closure-receipt" id="closureReceipt" data-state="empty">
+            <span>LATEST DISPOSITION RECEIPT</span>
+            <h4 id="closureReceiptTitle">No disposition recorded</h4>
+            <p id="closureReceiptMeta">The version ledger remains available for review.</p>
+            <code id="closureReceiptHash">No event digest</code>
+            <div class="closure-links">
+              <a id="closureRecordLink" href="#" target="_blank" rel="noopener" hidden>Open current disposition ↗</a>
+              <a id="closureVersionLink" href="#" target="_blank" rel="noopener" hidden>Open operative version ↗</a>
+            </div>
+          </section>
+        </aside>
+      </div>
+
+      <footer class="closure-boundary"><b>AUTHORITY BOUNDARY</b> ESPADA records evidence-supported workflow decisions. Public allegation, detention, penalty or legal finding remains outside the system and requires independent corroboration and lawful human authority.</footer>
     </section>
 
     <section class="section-heading">

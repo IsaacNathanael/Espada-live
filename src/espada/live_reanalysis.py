@@ -49,7 +49,8 @@ def _parse_utc(value: object) -> pd.Timestamp | None:
     return None if pd.isna(parsed) else parsed
 
 
-def _decision(candidates: list[dict[str, Any]]) -> dict[str, Any]:
+def evaluate_candidate_decision(candidates: list[dict[str, Any]]) -> dict[str, Any]:
+    """Apply the frozen nomination gates to an ordered candidate list."""
     if not candidates:
         return {
             "decision": "ABSTAIN_INSUFFICIENT_EVIDENCE",
@@ -103,7 +104,7 @@ def _decision(candidates: list[dict[str, Any]]) -> dict[str, Any]:
 def _baseline(run_root: Path) -> dict[str, Any]:
     ranking = _read_json(run_root / "attribution/ranking/candidates.json")
     candidates = [item for item in ranking.get("candidates", []) if isinstance(item, dict)]
-    outcome = _decision(candidates)
+    outcome = evaluate_candidate_decision(candidates)
     return {
         "candidate_count": len(candidates),
         "top_candidate": candidates[0] if candidates else None,
@@ -362,7 +363,7 @@ def run_live_reanalysis(run_root: Path) -> dict[str, Any]:
         "candidate_count": len(candidates),
         "top_candidate": candidates[0] if candidates else None,
         "candidates": candidates[:12],
-        **_decision(candidates),
+        **evaluate_candidate_decision(candidates),
     }
     baseline = _baseline(run_root)
     baseline_top = baseline.get("top_candidate") or {}

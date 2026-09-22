@@ -13,6 +13,7 @@
   const STAGE_EVIDENCE_ENDPOINT = '/api/live/stage-evidence-return';
   const REVIEW_EVIDENCE_ENDPOINT = '/api/live/review-evidence-return';
   const REANALYSIS_ENDPOINT = '/api/live/start-reanalysis';
+  const CLOSURE_ENDPOINT = '/api/live/record-case-disposition';
   const byId = id => document.getElementById(id);
   let lastSnapshot = null;
   let mapMode = 'live';
@@ -28,6 +29,7 @@
   let selectedEvidenceTaskId = null;
   let selectedIntakeRequestId = null;
   let selectedIntakeReceiptId = null;
+  let selectedClosureVersion = null;
 
   const html = (id, value) => { byId(id).textContent = value; };
   const parseTime = value => {
@@ -1569,6 +1571,169 @@
     }
   }
 
+  function closureCandidateLabel(candidate) {
+    if (!candidate) return 'No candidate result';
+    const name = String(candidate.vessel_name || '').trim();
+    const mmsi = String(candidate.mmsi || '').trim();
+    return name && name.toUpperCase() !== 'UNKNOWN' ? name : (mmsi ? `MMSI ${mmsi}` : 'Unverified candidate');
+  }
+
+  function closureDecisionLabel(value) {
+    return String(value || 'NOT READY').replaceAll('_', ' ');
+  }
+
+  function renderClosureVersion(closure, version) {
+    if (!version) {
+      html('closureSelectedVersion', 'NO VERSION');
+      html('closureSelectedDecision', 'NOT READY');
+      html('closureSelectedCandidate', 'No candidate result');
+      html('closureSelectedScore', '—');
+      html('closureSelectedMargin', '—');
+      html('closureSelectedCandidates', '—');
+      html('closureSelectedTime', '—');
+      byId('closureGateList').innerHTML = '<p>Decision gates will appear here.</p>';
+      return;
+    }
+    html('closureSelectedVersion', version.version || 'VERSION');
+    html('closureSelectedDecision', closureDecisionLabel(version.decision));
+    html('closureSelectedCandidate', closureCandidateLabel(version.top_candidate));
+    html('closureSelectedScore', scorePercent(version.top_candidate?.total_score));
+    html('closureSelectedMargin', scorePercent(version.score_margin));
+    html('closureSelectedCandidates', compactNumber(version.candidate_count));
+    html('closureSelectedTime', formatUtc(version.completed_at_utc));
+    const change = version.change || {};
+    const changed = Boolean(change.decision_changed || change.top_candidate_changed);
+    const changeBox = byId('closureChange');
+    changeBox.dataset.state = changed ? 'changed' : 'stable';
+    changeBox.querySelector('b').textContent = version.version === 'BASELINE'
+      ? 'Original attribution preserved'
+      : changed ? 'The evidence changed the result' : 'The result remained stable';
+    changeBox.querySelector('small').textContent = change.summary || 'No comparison is available.';
+    const gates = Array.isArray(version.gates) ? version.gates : [];
+    byId('closureGateList').innerHTML = gates.length ? gates.map(gate => {
+      const state = gate.passed ? 'pass' : 'fail';
+      const value = finite(gate.value) ? Number(gate.value) : null;
+      const threshold = finite(gate.threshold) ? Number(gate.threshold) : null;
+      const unitKm = String(gate.id || '').includes('ERROR');
+      const displayValue = value === null ? '—' : unitKm ? `${value.toFixed(2)} km` : `${(value * 100).toFixed(1)}%`;
+      const displayThreshold = threshold === null ? '—' : unitKm ? `${threshold.toFixed(1)} km` : `${(threshold * 100).toFixed(1)}%`;
+      return `<div class="closure-gate" data-state="${state}"><div><b>${escapeMarkup(gate.label || gate.id || 'Evidence gate')}</b><small>${escapeMarkup(displayValue)} · threshold ${escapeMarkup(displayThreshold)}</small></div><em>${gate.passed ? 'PASS' : 'FAIL'}</em></div>`;
+    }).join('') : '<p>No decision-gate record is available for this version.</p>';
+    document.querySelectorAll('.closure-version-button').forEach(button => {
+      button.setAttribute('aria-pressed', String(button.dataset.version === selectedClosureVersion));
+    });
+  }
+
+  function closureFormReady() {
+    const closure = lastSnapshot?.closure || {};
+    const workflowReady = ['READY','SUPERSEDED','RECORDED'].includes(String(closure.status || '').toUpperCase()) && Boolean(closure.latest_version);
+    const disposition = document.querySelector('input[name="closureDisposition"]:checked');
+    return workflowReady
+      && Boolean(disposition)
+      && byId('closureReviewerRole').value.trim().length >= 3
+      && byId('closureRationale').value.trim().length >= 20
+      && byId('closureAcknowledge').checked;
+  }
+
+  function updateClosureButton() {
+    byId('recordClosureButton').disabled = !closureFormReady();
+  }
+
+  function renderClosure(snapshot) {
+    const closure = snapshot.closure || {};
+    const statusValue = String(closure.status || 'NOT_READY').toUpperCase();
+    const versions = Array.isArray(closure.versions) ? closure.versions : [];
+    const latest = versions[versions.length - 1] || null;
+    if (!selectedClosureVersion || !versions.some(item => item.version === selectedClosureVersion)) {
+      selectedClosureVersion = latest?.version || null;
+    }
+    const selected = versions.find(item => item.version === selectedClosureVersion) || latest;
+    const status = byId('closureStatus');
+    status.dataset.state = statusValue === 'RECORDED' ? 'recorded' : statusValue === 'SUPERSEDED' ? 'review' : statusValue === 'READY' ? 'ready' : statusValue === 'ERROR' ? 'error' : 'waiting';
+    status.querySelector('b').textContent = statusValue === 'RECORDED' ? closureDecisionLabel(closure.case_state) : statusValue.replaceAll('_',' ');
+    status.querySelector('small').textContent = closure.message || 'Complete attribution before recording a disposition';
+
+    html('closureOperativeVersion', closure.latest_version || '—');
+    html('closureSafetyDecision', closureDecisionLabel(latest?.decision));
+    html('closureVersionCount', compactNumber(closure.version_count || versions.length));
+    html('closureCaseState', closureDecisionLabel(closure.case_state));
+    html('closureEventCount', `${compactNumber(closure.event_count || 0)} recorded disposition event${Number(closure.event_count || 0) === 1 ? '' : 's'}`);
+
+    const list = byId('closureVersionList');
+    list.innerHTML = versions.length ? versions.map((version, index) => {
+      const candidate = closureCandidateLabel(version.top_candidate);
+      return `<button class="closure-version-button" type="button" data-version="${escapeMarkup(version.version)}" aria-pressed="${version.version === selectedClosureVersion}"><span>${String(index + 1).padStart(2,'0')} · ${escapeMarkup(version.version)}</span><b>${escapeMarkup(closureDecisionLabel(version.decision))}</b><small>${escapeMarkup(candidate)}</small></button>`;
+    }).join('') : '<p>No attribution version is available.</p>';
+    list.querySelectorAll('.closure-version-button').forEach(button => button.addEventListener('click', () => {
+      selectedClosureVersion = button.dataset.version;
+      renderClosureVersion(closure, versions.find(item => item.version === selectedClosureVersion));
+    }));
+    renderClosureVersion(closure, selected);
+
+    const workflowReady = ['READY','SUPERSEDED','RECORDED'].includes(statusValue) && Boolean(latest);
+    byId('closureDispositionOptions').disabled = !workflowReady;
+    byId('closureReviewerRole').disabled = !workflowReady;
+    byId('closureRationale').disabled = !workflowReady;
+    byId('closureAcknowledge').disabled = !workflowReady;
+    updateClosureButton();
+    const message = byId('closureActionMessage');
+    if (!workflowReady) {
+      message.dataset.state = '';
+      message.textContent = closure.message || 'Complete attribution before recording a disposition.';
+    } else if (statusValue === 'SUPERSEDED') {
+      message.dataset.state = 'error';
+      message.textContent = 'A prior disposition is superseded. Record a new decision against the latest version.';
+    } else if (statusValue === 'RECORDED') {
+      message.dataset.state = 'success';
+      message.textContent = 'A new event may close, refer or reopen the case without deleting prior events.';
+    } else {
+      message.dataset.state = '';
+      message.textContent = 'Select a disposition and document the reasoning.';
+    }
+
+    const current = closure.current_disposition || null;
+    const receipt = byId('closureReceipt');
+    receipt.dataset.state = current ? 'recorded' : 'empty';
+    html('closureReceiptTitle', current ? (current.disposition_label || closureDecisionLabel(current.disposition)) : 'No disposition recorded');
+    html('closureReceiptMeta', current ? `${current.event_id || 'Recorded event'} · ${formatUtc(current.recorded_at_utc)} · ${current.reviewer_role || 'role unavailable'}` : 'The version ledger remains available for review.');
+    html('closureReceiptHash', current?.event_sha256 || 'No event digest');
+    setCaseLink('closureRecordLink', closure.current_record_url || closure.recorded_event_url || null);
+    setCaseLink('closureVersionLink', closure.latest_version_url || null);
+  }
+
+  async function recordClosureDisposition(event) {
+    event.preventDefault();
+    if (!closureFormReady()) return;
+    const button = byId('recordClosureButton');
+    const message = byId('closureActionMessage');
+    button.disabled = true;
+    button.textContent = 'Writing append-only event…';
+    message.dataset.state = '';
+    message.textContent = 'Hashing the disposition and linking it to the previous event.';
+    const payload = {
+      selected_version: lastSnapshot?.closure?.latest_version,
+      disposition: document.querySelector('input[name="closureDisposition"]:checked')?.value,
+      reviewer_role: byId('closureReviewerRole').value,
+      rationale: byId('closureRationale').value,
+      acknowledged: byId('closureAcknowledge').checked,
+    };
+    try {
+      const response = await fetch(CLOSURE_ENDPOINT, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
+      lastSnapshot.closure = result;
+      renderClosure(lastSnapshot);
+      message.dataset.state = 'success';
+      message.textContent = 'Disposition recorded. Prior events and evidence versions remain unchanged.';
+      button.textContent = 'Record another disposition';
+    } catch (error) {
+      message.dataset.state = 'error';
+      message.textContent = `Disposition was not recorded: ${error.message}`;
+      button.textContent = 'Record disposition';
+      updateClosureButton();
+    }
+  }
+
   function renderHeader(snapshot) {
     const region = snapshot.region || {};
     const bbox = Array.isArray(region.bbox) ? region.bbox : [];
@@ -1668,6 +1833,7 @@
     renderRetasking(snapshot);
     renderEvidenceIntake(snapshot);
     renderReanalysis(snapshot);
+    renderClosure(snapshot);
     html('mapEvidenceTime', formatUtc(evidenceTime(snapshot)));
     updateMapMode(mapMode);
     syncMapGeometry(snapshot).catch(error => {
@@ -1767,6 +1933,11 @@
   byId('admitEvidenceButton').addEventListener('click', () => reviewEvidenceReturn('ADMIT'));
   byId('rejectEvidenceButton').addEventListener('click', () => reviewEvidenceReturn('REJECT'));
   byId('startReanalysisButton').addEventListener('click', startVersionedReanalysis);
+  byId('closureForm').addEventListener('submit', recordClosureDisposition);
+  byId('closureDispositionOptions').addEventListener('change', updateClosureButton);
+  byId('closureReviewerRole').addEventListener('input', updateClosureButton);
+  byId('closureRationale').addEventListener('input', updateClosureButton);
+  byId('closureAcknowledge').addEventListener('change', updateClosureButton);
   updateMapMode('live');
   tickClock();
   poll();

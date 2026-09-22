@@ -24,6 +24,7 @@ from .environment import load_environment, sync_historical_wind
 from .historical_ais import GFW_DELAY_HOURS, HistoricalAISRequest, fetch_gfw_presence
 from .live_ais import AISBoundingBox, capture_aisstream
 from .live_case_register import build_case_register, verify_case_integrity
+from .live_closure import load_case_closure, record_case_disposition as write_case_disposition
 from .live_evidence_intake import (
     load_evidence_intake,
     review_evidence_return,
@@ -189,6 +190,11 @@ class LiveOperationsEngine:
                 "message": "Admit follow-up evidence before starting a versioned reanalysis.",
                 "original_attribution_unchanged": True,
             },
+            "closure": {
+                "status": "NOT_READY",
+                "message": "Complete attribution before recording a case disposition.",
+                "versions": [],
+            },
         }
         self._analysis_thread: threading.Thread | None = None
         self._attribution_thread: threading.Thread | None = None
@@ -199,6 +205,7 @@ class LiveOperationsEngine:
         self._recover_retasking_plan()
         self._recover_evidence_intake()
         self._recover_reanalysis()
+        self._recover_closure()
         self._prepare_coastline()
         self._write_state()
 
@@ -228,7 +235,8 @@ class LiveOperationsEngine:
                 }
             self._state["analysis"] = analysis
         for section in (
-            "review", "attribution", "response", "retasking", "evidence_intake", "reanalysis"
+            "review", "attribution", "response", "retasking", "evidence_intake", "reanalysis",
+            "closure",
         ):
             saved = previous.get(section)
             if not isinstance(saved, dict):
@@ -497,6 +505,41 @@ class LiveOperationsEngine:
         result = load_live_reanalysis(run_root)
         self._state["reanalysis"] = self._reanalysis_payload(run_root, result)
 
+    def _closure_payload(self, run_root: Path, result: dict[str, Any]) -> dict[str, Any]:
+        payload = {
+            key: value
+            for key, value in result.items()
+            if key not in {"event_path", "current_path"}
+        }
+        current_path = run_root / "closure/current.json"
+        if current_path.is_file():
+            payload["current_record_url"] = self._public_url(current_path)
+        event_path = result.get("event_path")
+        if isinstance(event_path, Path) and event_path.is_file():
+            payload["recorded_event_url"] = self._public_url(event_path)
+        latest_version = str(payload.get("latest_version") or "")
+        if latest_version == "BASELINE":
+            version_path = run_root / "attribution/ranking/candidates.json"
+        elif latest_version:
+            version_path = run_root / "reanalysis" / latest_version / "reanalysis_result.json"
+        else:
+            version_path = Path()
+        if latest_version and version_path.is_file():
+            payload["latest_version_url"] = self._public_url(version_path)
+        return payload
+
+    def _recover_closure(self) -> None:
+        scene_id = str(self._state.get("analysis", {}).get("scene_id") or "").strip()
+        if not scene_id:
+            return
+        safe_scene_id = "".join(
+            char if char.isalnum() or char in "-_" else "_" for char in scene_id
+        )
+        run_root = self.output_root / "analysis" / safe_scene_id
+        self._state["closure"] = self._closure_payload(
+            run_root, load_case_closure(run_root)
+        )
+
     @staticmethod
     def _empty_source(provider: str, kind: str) -> dict[str, object]:
         return {
@@ -668,6 +711,11 @@ class LiveOperationsEngine:
                 "message": "A new admitted evidence set is required before reanalysis.",
                 "original_attribution_unchanged": True,
             }
+            self._state["closure"] = {
+                "status": "NOT_READY",
+                "message": "Complete attribution before recording a case disposition.",
+                "versions": [],
+            }
             self._analysis_thread = threading.Thread(
                 target=self._analysis_worker, name="espada-live-sar", daemon=True
             )
@@ -735,6 +783,11 @@ class LiveOperationsEngine:
                 "message": "Reanalysis is blocked after slick rejection.",
                 "original_attribution_unchanged": True,
             }
+            self._state["closure"] = {
+                "status": "BLOCKED_BY_REVIEW",
+                "message": "No attribution result exists to close after slick rejection.",
+                "versions": [],
+            }
             self._state["review"] = result
             self._write_state()
             return result
@@ -796,6 +849,11 @@ class LiveOperationsEngine:
             "message": "A new admitted evidence set is required before reanalysis.",
             "original_attribution_unchanged": True,
         }
+        self._state["closure"] = {
+            "status": "NOT_READY",
+            "message": "Complete attribution before recording a case disposition.",
+            "versions": [],
+        }
         self._write_state()
         return result
 
@@ -829,6 +887,11 @@ class LiveOperationsEngine:
                 "status": "NOT_READY",
                 "message": "A new admitted evidence set is required before reanalysis.",
                 "original_attribution_unchanged": True,
+            }
+            self._state["closure"] = {
+                "status": "NOT_READY",
+                "message": "Attribution is running; no case disposition can be recorded yet.",
+                "versions": [],
             }
             self._attribution_thread = threading.Thread(
                 target=self._attribution_worker,
@@ -1078,6 +1141,9 @@ class LiveOperationsEngine:
                         "Versioned reanalysis completed. The original attribution remains unchanged."
                     ),
                 }
+                self._state["closure"] = self._closure_payload(
+                    run_root, load_case_closure(run_root)
+                )
             self._write_state()
         except Exception as error:
             self._section_update(
@@ -1088,6 +1154,23 @@ class LiveOperationsEngine:
                 message=f"{type(error).__name__}: {error}",
                 original_attribution_unchanged=True,
             )
+
+    def record_case_disposition(self, submission: dict[str, Any]) -> dict[str, object]:
+        with self._lock:
+            analysis = dict(self._state.get("analysis", {}))
+        scene_id = str(analysis.get("scene_id") or "").strip()
+        if not scene_id:
+            raise RuntimeError("The completed case has no scene identifier.")
+        safe_scene_id = "".join(
+            char if char.isalnum() or char in "-_" else "_" for char in scene_id
+        )
+        run_root = self.output_root / "analysis" / safe_scene_id
+        result = write_case_disposition(run_root, submission)
+        payload = self._closure_payload(run_root, result)
+        with self._lock:
+            self._state["closure"] = payload
+        self._write_state()
+        return dict(payload)
 
     def case_register(self) -> dict[str, object]:
         register = build_case_register(self.output_root / "analysis")
@@ -1422,6 +1505,11 @@ class LiveOperationsEngine:
                 completed_at_utc=_format_utc(_utc_now()),
                 **base_result,
             )
+            with self._lock:
+                self._state["closure"] = self._closure_payload(
+                    run_root, load_case_closure(run_root)
+                )
+            self._write_state()
         except Exception as error:
             self._section_update(
                 "attribution",
@@ -1942,6 +2030,10 @@ class LiveOperationsEngine:
                     "original_attribution_unchanged": True,
                 },
             ),
+            "closure": state.get(
+                "closure",
+                {"status": "NOT_READY", "versions": []},
+            ),
             "case_register": self.case_register(),
             "truth_policy": {
                 "synthetic_fallback": False,
@@ -1979,6 +2071,8 @@ class LiveOperationsEngine:
         retasking_status = str(state.get("retasking", {}).get("status", "NOT_BUILT"))
         intake_status = str(state.get("evidence_intake", {}).get("status", "NOT_READY"))
         reanalysis_status = str(state.get("reanalysis", {}).get("status", "NOT_READY"))
+        closure_status = str(state.get("closure", {}).get("status", "NOT_READY"))
+        case_state = str(state.get("closure", {}).get("case_state", ""))
         attribution_running = attribution_status in {
             "QUEUED",
             "PREPARING_FORCING",
@@ -1986,7 +2080,15 @@ class LiveOperationsEngine:
             "FETCHING_AIS",
             "RANKING",
         }
-        if reanalysis_status == "COMPLETE":
+        if closure_status == "RECORDED" and case_state == "CLOSED_INCONCLUSIVE":
+            stage = "CASE_CLOSED_INCONCLUSIVE"
+        elif closure_status == "RECORDED" and case_state == "REFERRED_FOR_REVIEW":
+            stage = "CASE_REFERRED_FOR_REVIEW"
+        elif closure_status == "RECORDED" and case_state == "OPEN":
+            stage = "CASE_OPEN_EVIDENCE_COLLECTION"
+        elif closure_status == "SUPERSEDED":
+            stage = "CASE_DISPOSITION_REVIEW_REQUIRED"
+        elif reanalysis_status == "COMPLETE":
             stage = "VERSIONED_REANALYSIS_COMPLETE"
         elif reanalysis_status in {"QUEUED", "VERIFYING_INPUTS", "MERGING_EVIDENCE", "RERANKING"}:
             stage = "VERSIONED_REANALYSIS_RUNNING"
@@ -2043,6 +2145,8 @@ class LiveOperationsEngine:
             "reanalysis_eligible": intake_status == "REANALYSIS_READY",
             "reanalysis_ready": reanalysis_status in {"READY", "COMPLETE"},
             "reanalysis_complete": reanalysis_status == "COMPLETE",
+            "closure_ready": closure_status in {"READY", "SUPERSEDED", "RECORDED"},
+            "closure_recorded": closure_status == "RECORDED",
             "message": (
                 "No oil candidate is displayed until a calibrated scene is processed and approved."
             ),
