@@ -24,6 +24,7 @@ from .environment import load_environment, sync_historical_wind
 from .historical_ais import GFW_DELAY_HOURS, HistoricalAISRequest, fetch_gfw_presence
 from .live_ais import AISBoundingBox, capture_aisstream
 from .live_case_register import build_case_register, verify_case_integrity
+from .live_retasking import build_live_retasking_plan, load_live_retasking_plan
 from .live_response import build_live_response_package
 from .sentinel_catalog import SentinelSearchRequest, discover_sentinel1
 from .sentinel_process import download_sentinel1_subset
@@ -168,12 +169,17 @@ class LiveOperationsEngine:
                 "status": "NOT_BUILT",
                 "message": "The evidence package is created after attribution completes.",
             },
+            "retasking": {
+                "status": "NOT_BUILT",
+                "message": "The follow-up evidence plan is created after a response package exists.",
+            },
         }
         self._analysis_thread: threading.Thread | None = None
         self._attribution_thread: threading.Thread | None = None
         self._restore_previous_state()
         self._recover_completed_case()
         self._recover_response_package()
+        self._recover_retasking_plan()
         self._prepare_coastline()
         self._write_state()
 
@@ -202,7 +208,7 @@ class LiveOperationsEngine:
                     "message": "The previous SAR job was interrupted before a final result was recorded.",
                 }
             self._state["analysis"] = analysis
-        for section in ("review", "attribution", "response"):
+        for section in ("review", "attribution", "response", "retasking"):
             saved = previous.get(section)
             if not isinstance(saved, dict):
                 continue
@@ -389,6 +395,25 @@ class LiveOperationsEngine:
             "summary_url": self._public_url(summary_path),
         }
 
+    def _recover_retasking_plan(self) -> None:
+        scene_id = str(self._state.get("analysis", {}).get("scene_id") or "").strip()
+        if not scene_id:
+            return
+        safe_scene_id = "".join(
+            char if char.isalnum() or char in "-_" else "_" for char in scene_id
+        )
+        run_root = self.output_root / "analysis" / safe_scene_id
+        plan = load_live_retasking_plan(run_root)
+        if not plan:
+            return
+        self._state["retasking"] = {
+            **plan,
+            "status": "READY",
+            "message": "Recovered the recorded follow-up evidence request package.",
+            "plan_url": self._public_url(run_root / "follow_up/evidence_acquisition_plan.json"),
+            "requests_csv_url": self._public_url(run_root / "follow_up/evidence_requests.csv"),
+        }
+
     @staticmethod
     def _empty_source(provider: str, kind: str) -> dict[str, object]:
         return {
@@ -546,6 +571,10 @@ class LiveOperationsEngine:
                 "status": "NOT_BUILT",
                 "message": "The evidence package is created after attribution completes.",
             }
+            self._state["retasking"] = {
+                "status": "NOT_BUILT",
+                "message": "The follow-up evidence plan is created after a response package exists.",
+            }
             self._analysis_thread = threading.Thread(
                 target=self._analysis_worker, name="espada-live-sar", daemon=True
             )
@@ -599,6 +628,10 @@ class LiveOperationsEngine:
                 "status": "BLOCKED_BY_REVIEW",
                 "message": "No attribution response package is created after rejection.",
             }
+            self._state["retasking"] = {
+                "status": "BLOCKED_BY_REVIEW",
+                "message": "No follow-up attribution plan is created after slick rejection.",
+            }
             self._state["review"] = result
             self._write_state()
             return result
@@ -646,6 +679,10 @@ class LiveOperationsEngine:
             "status": "NOT_BUILT",
             "message": "The evidence package is created after attribution completes.",
         }
+        self._state["retasking"] = {
+            "status": "NOT_BUILT",
+            "message": "The follow-up evidence plan is created after a response package exists.",
+        }
         self._write_state()
         return result
 
@@ -665,6 +702,10 @@ class LiveOperationsEngine:
             self._state["response"] = {
                 "status": "NOT_BUILT",
                 "message": "The evidence package is created after attribution completes.",
+            }
+            self._state["retasking"] = {
+                "status": "NOT_BUILT",
+                "message": "The follow-up evidence plan is created after a response package exists.",
             }
             self._attribution_thread = threading.Thread(
                 target=self._attribution_worker,
@@ -698,6 +739,11 @@ class LiveOperationsEngine:
             status="BUILDING",
             message="Hashing case artifacts and assembling the evidence dossier.",
         )
+        self._section_update(
+            "retasking",
+            status="NOT_BUILT",
+            message="Build the evidence response package before planning follow-up acquisition.",
+        )
         try:
             package = build_live_response_package(
                 run_root,
@@ -727,6 +773,53 @@ class LiveOperationsEngine:
         except Exception as error:
             self._section_update(
                 "response",
+                status="ERROR",
+                message=f"{type(error).__name__}: {error}",
+            )
+            raise
+
+    def build_evidence_plan(self) -> dict[str, object]:
+        with self._lock:
+            analysis = dict(self._state.get("analysis", {}))
+            response = dict(self._state.get("response", {}))
+        if response.get("status") != "READY":
+            raise RuntimeError("Build the evidence response package before planning follow-up acquisition.")
+        scene_id = str(analysis.get("scene_id") or "").strip()
+        if not scene_id:
+            raise RuntimeError("The completed case has no scene identifier.")
+        safe_scene_id = "".join(
+            char if char.isalnum() or char in "-_" else "_" for char in scene_id
+        )
+        run_root = self.output_root / "analysis" / safe_scene_id
+        if not run_root.is_dir():
+            raise FileNotFoundError("The completed case directory is missing.")
+        self._section_update(
+            "retasking",
+            status="BUILDING",
+            message="Reading failed evidence gates and drafting acquisition scopes.",
+        )
+        try:
+            plan = build_live_retasking_plan(run_root)
+            result = {
+                key: value
+                for key, value in plan.items()
+                if key not in {"plan_path", "requests_csv_path"}
+            }
+            result.update(
+                {
+                    "status": "READY",
+                    "message": "Follow-up evidence request package generated without dispatching it.",
+                    "plan_url": self._public_url(plan["plan_path"]),
+                    "requests_csv_url": self._public_url(plan["requests_csv_path"]),
+                }
+            )
+            with self._lock:
+                self._state["retasking"] = result
+            self._write_state()
+            return dict(result)
+        except Exception as error:
+            self._section_update(
+                "retasking",
                 status="ERROR",
                 message=f"{type(error).__name__}: {error}",
             )
@@ -1574,6 +1667,7 @@ class LiveOperationsEngine:
             "review": state.get("review", {"status": "NOT_REVIEWED"}),
             "attribution": state.get("attribution", {"status": "NOT_RUN", "candidates": []}),
             "response": state.get("response", {"status": "NOT_BUILT"}),
+            "retasking": state.get("retasking", {"status": "NOT_BUILT", "tasks": []}),
             "case_register": self.case_register(),
             "truth_policy": {
                 "synthetic_fallback": False,
@@ -1608,6 +1702,7 @@ class LiveOperationsEngine:
         review_status = str(state.get("review", {}).get("status", "NOT_REVIEWED"))
         attribution_status = str(state.get("attribution", {}).get("status", "NOT_RUN"))
         response_status = str(state.get("response", {}).get("status", "NOT_BUILT"))
+        retasking_status = str(state.get("retasking", {}).get("status", "NOT_BUILT"))
         attribution_running = attribution_status in {
             "QUEUED",
             "PREPARING_FORCING",
@@ -1615,7 +1710,11 @@ class LiveOperationsEngine:
             "FETCHING_AIS",
             "RANKING",
         }
-        if response_status == "READY":
+        if retasking_status == "READY":
+            stage = "FOLLOW_UP_EVIDENCE_PLAN_READY"
+        elif retasking_status == "BUILDING":
+            stage = "FOLLOW_UP_EVIDENCE_PLAN_BUILDING"
+        elif response_status == "READY":
             stage = "EVIDENCE_PACKAGE_READY"
         elif response_status == "BUILDING":
             stage = "EVIDENCE_PACKAGE_BUILDING"
@@ -1652,6 +1751,7 @@ class LiveOperationsEngine:
             "analyst_review_ready": review_status == "APPROVED",
             "attribution_ready": attribution_status in {"COMPLETE", "ABSTAIN_NO_MATCHED_AIS"},
             "response_ready": response_status == "READY",
+            "retasking_ready": retasking_status == "READY",
             "message": (
                 "No oil candidate is displayed until a calibrated scene is processed and approved."
             ),

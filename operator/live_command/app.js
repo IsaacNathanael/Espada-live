@@ -9,6 +9,7 @@
   const ATTRIBUTION_ENDPOINT = '/api/live/build-attribution';
   const RESPONSE_ENDPOINT = '/api/live/build-response';
   const VERIFY_CASE_ENDPOINT = '/api/live/verify-case';
+  const EVIDENCE_PLAN_ENDPOINT = '/api/live/build-evidence-plan';
   const byId = id => document.getElementById(id);
   let lastSnapshot = null;
   let mapMode = 'live';
@@ -21,6 +22,7 @@
   let selectedCandidateMmsi = null;
   let selectedCaseId = null;
   let caseStageFilter = 'all';
+  let selectedEvidenceTaskId = null;
 
   const html = (id, value) => { byId(id).textContent = value; };
   const parseTime = value => {
@@ -1124,6 +1126,130 @@
     }
   }
 
+  const gateValue = gate => {
+    if (!gate || !finite(gate.observed)) return '—';
+    const observed = Number(gate.observed);
+    const required = Number(gate.required);
+    if (gate.unit === 'km') return `${observed.toFixed(2)} km · limit ${required.toFixed(1)} km`;
+    return `${(observed * 100).toFixed(1)}% · requires ${(required * 100).toFixed(1)}%`;
+  };
+
+  const shortWindow = windowValue => {
+    const start = parseTime(windowValue?.start);
+    const end = parseTime(windowValue?.end);
+    if (!start || !end) return '—';
+    const day = start.toISOString().slice(0, 10);
+    return `${day} · ${start.toISOString().slice(11, 16)}–${end.toISOString().slice(11, 16)} UTC`;
+  };
+
+  function renderPlannerGates(plan) {
+    const gates = Array.isArray(plan.decision_gates) ? plan.decision_gates : [];
+    const grid = byId('plannerGateGrid');
+    if (!gates.length) {
+      grid.innerHTML = '<div data-state="waiting"><span>—</span><div><b>No gate diagnosis</b><small>Build the request plan after a response package exists.</small></div><em>WAITING</em></div>';
+      return;
+    }
+    grid.innerHTML = gates.map((gate, index) => `<div data-state="${gate.passed ? 'pass' : 'fail'}"><span>${String(index + 1).padStart(2, '0')}</span><div><b>${escapeMarkup(gate.label)}</b><small>${escapeMarkup(gateValue(gate))}</small></div><em>${gate.passed ? 'PASS' : 'FAIL'}</em></div>`).join('');
+  }
+
+  function renderRequestInspector(task) {
+    if (!task) {
+      html('requestPriority', 'NO REQUEST SELECTED');
+      html('requestDispatchState', 'NOT SENT');
+      html('requestTitle', 'Evidence request details');
+      html('requestObjective', 'Build the evidence plan to inspect a request.');
+      html('requestTo', '—');
+      html('requestTime', '—');
+      html('requestArea', '—');
+      html('requestVessels', '—');
+      html('requestResolves', 'No unresolved gate selected');
+      byId('requestAcceptance').innerHTML = '<li>Generate a plan to view evidence-quality requirements.</li>';
+      return;
+    }
+    const scope = task.request_scope || {};
+    const time = scope.start_utc && scope.end_utc
+      ? `${formatUtc(scope.start_utc)} — ${formatUtc(scope.end_utc)}`
+      : scope.as_of_utc ? `As of ${formatUtc(scope.as_of_utc)}` : 'Not time-bounded';
+    const bbox = Array.isArray(scope.bbox_wgs84) ? scope.bbox_wgs84 : [];
+    const vessels = Array.isArray(scope.mmsi) ? scope.mmsi : [];
+    html('requestPriority', `${task.priority || '—'} · ${task.evidence_type || 'EVIDENCE'}`);
+    html('requestDispatchState', String(task.dispatch_status || 'DRAFT_NOT_SENT').replaceAll('_', ' '));
+    html('requestTitle', task.title || 'Untitled evidence request');
+    html('requestObjective', task.objective || 'No objective recorded.');
+    html('requestTo', task.request_to || '—');
+    html('requestTime', time);
+    html('requestArea', bbox.length === 4 ? bbox.map(value => Number(value).toFixed(4)).join(', ') : 'Not spatially bounded');
+    html('requestVessels', vessels.length ? vessels.join(' · ') : 'No vessel-specific scope');
+    html('requestResolves', Array.isArray(task.resolves) ? task.resolves.map(value => String(value).replaceAll('_', ' ')).join(' · ') : 'Independent corroboration');
+    const criteria = Array.isArray(task.acceptance_criteria) ? task.acceptance_criteria : [];
+    byId('requestAcceptance').innerHTML = criteria.length ? criteria.map(item => `<li>${escapeMarkup(item)}</li>`).join('') : '<li>No acceptance criteria recorded.</li>';
+  }
+
+  function selectEvidenceTask(taskId) {
+    selectedEvidenceTaskId = String(taskId);
+    if (lastSnapshot) renderRetasking(lastSnapshot);
+  }
+
+  function renderRetasking(snapshot) {
+    const plan = snapshot.retasking || {};
+    const responseReady = snapshot.response?.status === 'READY';
+    const statusValue = String(plan.status || 'NOT_BUILT').toUpperCase();
+    const ready = statusValue === 'READY';
+    const building = statusValue === 'BUILDING';
+    const status = byId('plannerStatus');
+    status.dataset.state = ready ? 'ready' : building ? 'building' : statusValue === 'ERROR' ? 'error' : 'waiting';
+    status.querySelector('b').textContent = ready ? 'REQUEST PACKAGE READY' : building ? 'BUILDING REQUESTS' : statusValue === 'ERROR' ? 'PLAN FAILED' : 'PLAN NOT BUILT';
+    status.querySelector('small').textContent = plan.message || (responseReady ? 'Response package ready for follow-up planning' : 'Waiting for a sealed response package');
+    const button = byId('buildEvidencePlanButton');
+    button.disabled = !responseReady || building;
+    button.textContent = building ? 'Building evidence scopes…' : ready ? 'Rebuild from current evidence' : 'Build evidence request plan';
+
+    html('plannerBlockingGate', ready ? String(plan.blocking_gate || 'CORROBORATION').replaceAll('_', ' ') : '—');
+    html('plannerTiedCount', ready ? compactNumber(plan.tied_candidate_count) : '—');
+    html('plannerReleaseWindow', ready ? shortWindow(plan.release_window_utc) : '—');
+    html('plannerDispatch', ready ? String(plan.dispatch_status || 'NOT_SENT').replaceAll('_', ' ') : 'NOT SENT');
+    renderPlannerGates(ready ? plan : {});
+
+    const tasks = ready && Array.isArray(plan.tasks) ? plan.tasks : [];
+    if (tasks.length && !tasks.some(task => task.id === selectedEvidenceTaskId)) selectedEvidenceTaskId = tasks[0].id;
+    html('plannerTaskCount', `${tasks.length} draft request${tasks.length === 1 ? '' : 's'} · ${compactNumber(plan.p1_task_count)} priority 1`);
+    const list = byId('plannerTaskList');
+    if (!tasks.length) {
+      list.innerHTML = `<p class="request-empty">${responseReady ? 'Build a plan to convert the current evidence gaps into scoped requests.' : 'Complete and seal the evidence response before planning follow-up acquisition.'}</p>`;
+      renderRequestInspector(null);
+    } else {
+      list.innerHTML = tasks.map(task => `<button class="request-item" type="button" data-request-id="${escapeMarkup(task.id)}" aria-pressed="${task.id === selectedEvidenceTaskId}"><span>${escapeMarkup(task.priority)}</span><div><b>${escapeMarkup(task.title)}</b><small>${escapeMarkup(task.objective)}</small></div><em>${escapeMarkup(String(task.dispatch_status).replaceAll('_', ' '))}</em></button>`).join('');
+      list.querySelectorAll('[data-request-id]').forEach(item => item.addEventListener('click', () => selectEvidenceTask(item.dataset.requestId)));
+      renderRequestInspector(tasks.find(task => task.id === selectedEvidenceTaskId) || tasks[0]);
+    }
+    setCaseLink('evidencePlanLink', ready ? plan.plan_url : null);
+    setCaseLink('evidenceRequestsCsvLink', ready ? plan.requests_csv_url : null);
+  }
+
+  async function buildEvidencePlan() {
+    const button = byId('buildEvidencePlanButton');
+    button.disabled = true;
+    button.textContent = 'Reading failed gates…';
+    try {
+      const response = await fetch(EVIDENCE_PLAN_ENDPOINT, {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
+      selectedEvidenceTaskId = null;
+      if (lastSnapshot) {
+        lastSnapshot.retasking = result;
+        renderRetasking(lastSnapshot);
+      }
+      window.setTimeout(poll, 350);
+    } catch (error) {
+      const status = byId('plannerStatus');
+      status.dataset.state = 'error';
+      status.querySelector('b').textContent = 'PLAN FAILED';
+      status.querySelector('small').textContent = error.message;
+      button.disabled = false;
+      button.textContent = 'Retry evidence request plan';
+    }
+  }
+
   function renderHeader(snapshot) {
     const region = snapshot.region || {};
     const bbox = Array.isArray(region.bbox) ? region.bbox : [];
@@ -1220,6 +1346,7 @@
     renderCandidateWorkspace(snapshot);
     renderResponseWorkspace(snapshot);
     renderCaseRegister(snapshot);
+    renderRetasking(snapshot);
     html('mapEvidenceTime', formatUtc(evidenceTime(snapshot)));
     updateMapMode(mapMode);
     syncMapGeometry(snapshot).catch(error => {
@@ -1302,6 +1429,7 @@
     if (lastSnapshot) renderCaseRegister(lastSnapshot);
   });
   byId('verifyCaseButton').addEventListener('click', verifySelectedCase);
+  byId('buildEvidencePlanButton').addEventListener('click', buildEvidencePlan);
   updateMapMode('live');
   tickClock();
   poll();

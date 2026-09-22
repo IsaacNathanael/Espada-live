@@ -43,6 +43,7 @@
     <a class="workflow-step available" href="#candidate-attribution"><span>04</span><b>Attribute</b><small>Candidate ranking</small></a>
     <a class="workflow-step available" href="#respond-workspace"><span>05</span><b>Respond</b><small>Evidence & impact</small></a>
     <a class="workflow-step available" href="#case-register"><span>06</span><b>Preserve</b><small>Case register</small></a>
+    <a class="workflow-step available" href="#evidence-planner"><span>07</span><b>Resolve</b><small>Evidence retasking</small></a>
   </nav>
 
   <main id="overview">
@@ -586,6 +587,71 @@
       </div>
 
       <footer class="case-register-boundary"><b>RECORD POLICY</b> A case remains visible when incomplete, rejected or inconclusive. Verification detects file changes; it does not establish the truth of the underlying evidence.</footer>
+    </section>
+
+    <section class="planner-section" id="evidence-planner" aria-labelledby="plannerTitle">
+      <header class="planner-header">
+        <div>
+          <p class="kicker">EVIDENCE RETASKING DESK · COMPONENT 08</p>
+          <h2 id="plannerTitle">Turn abstention into a precise evidence request.</h2>
+          <p>The planner reads the actual failed decision gate, incident window, origin zone and tied candidates. It drafts the smallest useful acquisition package without contacting any provider.</p>
+        </div>
+        <div class="planner-control">
+          <div class="planner-status" id="plannerStatus" data-state="waiting" role="status" aria-live="polite">
+            <span>FOLLOW-UP STATE</span><b>PLAN NOT BUILT</b><small>Waiting for a sealed response package</small>
+          </div>
+          <button id="buildEvidencePlanButton" type="button" disabled>Build evidence request plan</button>
+        </div>
+      </header>
+
+      <div class="planner-summary" aria-label="Evidence resolution summary">
+        <div class="blocking-cell"><span>BLOCKING GATE</span><b id="plannerBlockingGate">—</b><small>first unresolved decision condition</small></div>
+        <div><span>TIED LEADERS</span><b id="plannerTiedCount">—</b><small>candidates requiring separation</small></div>
+        <div><span>RELEASE WINDOW</span><b id="plannerReleaseWindow">—</b><small>target for discriminating evidence</small></div>
+        <div><span>EXTERNAL DISPATCH</span><b id="plannerDispatch">NOT SENT</b><small>drafts never leave ESPADA automatically</small></div>
+      </div>
+
+      <section class="planner-gates" aria-labelledby="plannerGateTitle">
+        <header><span>WHY THE SYSTEM STOPPED</span><h3 id="plannerGateTitle">Decision-gate diagnosis</h3></header>
+        <div id="plannerGateGrid" class="planner-gate-grid">
+          <div data-state="waiting"><span>01</span><div><b>Top comparative score</b><small>Waiting for attribution</small></div><em>WAITING</em></div>
+          <div data-state="waiting"><span>02</span><div><b>Candidate separation</b><small>Waiting for attribution</small></div><em>WAITING</em></div>
+          <div data-state="waiting"><span>03</span><div><b>Track quality</b><small>Waiting for attribution</small></div><em>WAITING</em></div>
+          <div data-state="waiting"><span>04</span><div><b>Forward verification</b><small>Waiting for attribution</small></div><em>WAITING</em></div>
+        </div>
+      </section>
+
+      <div class="planner-layout">
+        <article class="request-queue">
+          <header>
+            <div><span>PRIORITY QUEUE</span><h3>Minimum useful evidence package</h3></div>
+            <small id="plannerTaskCount">0 draft requests</small>
+          </header>
+          <div id="plannerTaskList" class="request-list" aria-live="polite">
+            <p class="request-empty">Build a plan to convert the current evidence gaps into scoped requests.</p>
+          </div>
+        </article>
+
+        <aside class="request-inspector" aria-live="polite">
+          <div class="request-inspector-head"><span id="requestPriority">NO REQUEST SELECTED</span><div id="requestDispatchState">NOT SENT</div></div>
+          <h3 id="requestTitle">Evidence request details</h3>
+          <p id="requestObjective">Select a generated request to inspect its exact scope and acceptance rules.</p>
+          <dl class="request-facts">
+            <div><dt>Request to</dt><dd id="requestTo">—</dd></div>
+            <div><dt>Target time</dt><dd id="requestTime">—</dd></div>
+            <div><dt>Target area</dt><dd id="requestArea">—</dd></div>
+            <div><dt>Target vessels</dt><dd id="requestVessels">—</dd></div>
+          </dl>
+          <div class="request-resolves"><span>RESOLVES</span><div id="requestResolves">No unresolved gate selected</div></div>
+          <div class="acceptance-box"><b>ACCEPTANCE CRITERIA</b><ol id="requestAcceptance"><li>Generate a plan to view evidence-quality requirements.</li></ol></div>
+          <div class="planner-links">
+            <a id="evidencePlanLink" href="#" target="_blank" rel="noopener" hidden>Open acquisition plan ↗</a>
+            <a id="evidenceRequestsCsvLink" href="#" target="_blank" rel="noopener" hidden>Download request ledger ↗</a>
+          </div>
+        </aside>
+      </div>
+
+      <footer class="planner-boundary"><b>ACTION BOUNDARY</b> ESPADA drafts and prioritizes evidence requests. It does not contact providers, retask satellites, identify a vessel, or change the attribution decision until new evidence is acquired and reviewed.</footer>
     </section>
 
     <section class="section-heading">

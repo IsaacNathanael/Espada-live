@@ -119,6 +119,15 @@ class LiveOperationsHandler(SimpleHTTPRequestHandler):
             except Exception as error:
                 self._json(500, {"status": "FAIL", "error": str(error)})
             return
+        if path == "/api/live/build-evidence-plan":
+            try:
+                plan = self.engine.build_evidence_plan()
+                self._json(200, plan)
+            except (RuntimeError, FileNotFoundError) as error:
+                self._json(409, {"status": "REJECTED", "error": str(error)})
+            except Exception as error:
+                self._json(500, {"status": "FAIL", "error": str(error)})
+            return
         if path == "/api/live/verify-case":
             try:
                 payload = self._request_json()

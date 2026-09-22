@@ -166,6 +166,20 @@ def test_live_command_case_register_exposes_history_and_integrity_recheck() -> N
     assert "computed_chain_digest_sha256" in script
 
 
+def test_live_command_retasking_drafts_scoped_requests_without_dispatch() -> None:
+    root = Path(__file__).resolve().parents[1]
+    page = (root / "operator/live_command/index.html").read_text(encoding="utf-8")
+    script = (root / "operator/live_command/app.js").read_text(encoding="utf-8")
+    assert 'id="evidence-planner"' in page
+    assert "Turn abstention into a precise evidence request." in page
+    assert "Decision-gate diagnosis" in page
+    assert "EXTERNAL DISPATCH" in page
+    assert "does not contact providers" in page
+    assert "/api/live/build-evidence-plan" in script
+    assert "decision_gates" in script
+    assert "acceptance_criteria" in script
+
+
 def test_completed_analysis_survives_server_restart(tmp_path: Path) -> None:
     region = LiveRegion("Test region", 70.8, 17.8, 73.0, 20.0)
     first = LiveOperationsEngine(tmp_path, region)
