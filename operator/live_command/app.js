@@ -23,6 +23,8 @@
   let sarView = 'overview';
   let selectedSceneId = null;
   let driftView = 'comparison';
+  let aisFilterView = 'retained';
+  let selectedFilterMmsi = null;
   let selectedCandidateMmsi = null;
   let selectedCaseId = null;
   let caseStageFilter = 'all';
@@ -54,7 +56,15 @@
     return `${(seconds / 86400).toFixed(seconds < 259200 ? 1 : 0)} days ago`;
   };
   const compactNumber = value => Number.isFinite(Number(value)) ? new Intl.NumberFormat('en-IN').format(Number(value)) : '—';
-  const finite = value => Number.isFinite(Number(value));
+  const finite = value => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
+  const operatorMessage = value => {
+    const message = String(value || '').trim();
+    if (!message) return '';
+    if (/traceback|site-packages|\\src\\|\.py", line|dll load failed/i.test(message)) {
+      return 'Processing stopped safely. Open the preserved technical error record for diagnostics.';
+    }
+    return message.length > 220 ? message.slice(0,217) + '…' : message;
+  };
   const cardinal = (east, north) => {
     if (!finite(east) || !finite(north)) return 'Direction unavailable';
     const degrees = (Math.atan2(Number(east), Number(north)) * 180 / Math.PI + 360) % 360;
@@ -166,13 +176,16 @@
   }
 
   function detailForVessel(vessel, trackPoints) {
+    const motion = String(vessel.motion_state || 'unknown').toUpperCase();
     setDetail({
       type: 'OBSERVED · AIS POSITION',
       title: vessel.vessel_name && vessel.vessel_name !== 'UNKNOWN' ? vessel.vessel_name : `MMSI ${vessel.mmsi}`,
-      summary: 'Latest provider-supplied position inside the active live reception window.',
+      summary: 'Latest provider-supplied position for this MMSI inside the rolling live window.',
       fields: [
         ['MMSI', vessel.mmsi],
+        ['Motion state', motion],
         ['Received', formatUtc(vessel.timestamp_utc)],
+        ['Report age', ageLabel(vessel.timestamp_utc)],
         ['Speed over ground', finite(vessel.sog) ? `${Number(vessel.sog).toFixed(1)} kn` : 'Not supplied'],
         ['Course over ground', finite(vessel.cog) ? `${Math.round(Number(vessel.cog))}°` : 'Not supplied'],
         ['Track observations', trackPoints || 1],
@@ -286,16 +299,28 @@
     }
 
     const positions = Array.isArray(snapshot.ais?.positions) ? snapshot.ais.positions : [];
-    if (mapMode === 'live' && layerVisible('vessels')) {
+    const showUnderway = layerVisible('vessels');
+    const showStationary = layerVisible('stationary');
+    const visiblePositions = positions.filter(vessel =>
+      (vessel.motion_state === 'underway' && showUnderway)
+      || (vessel.motion_state === 'stationary' && showStationary)
+    );
+    if (mapMode === 'live' && (showUnderway || showStationary)) {
       const tracks = snapshot.ais?.tracks || {};
-      const trackFeatures = Object.entries(tracks).filter(([,points]) => Array.isArray(points) && points.length > 1).map(([mmsi,points]) => ({type:'Feature',properties:{mmsi},geometry:{type:'LineString',coordinates:points.map(point=>[Number(point[0]),Number(point[1])])}}));
-      svg.append('g').selectAll('path').data(trackFeatures).join('path').attr('class','ais-track').attr('d',path);
+      const stateByMmsi = Object.fromEntries(positions.map(vessel => [String(vessel.mmsi), vessel.motion_state]));
+      const trackFeatures = Object.entries(tracks)
+        .filter(([mmsi,points]) => Array.isArray(points) && points.length > 1 && (
+          (stateByMmsi[mmsi] === 'underway' && showUnderway)
+          || (stateByMmsi[mmsi] === 'stationary' && showStationary)
+        ))
+        .map(([mmsi,points]) => ({type:'Feature',properties:{mmsi,motion_state:stateByMmsi[mmsi]},geometry:{type:'LineString',coordinates:points.map(point=>[Number(point[0]),Number(point[1])])}}));
+      svg.append('g').selectAll('path').data(trackFeatures).join('path').attr('class',feature=>`ais-track ${feature.properties.motion_state}`).attr('d',path);
       const vesselGroup = svg.append('g');
-      positions.forEach(vessel => {
+      visiblePositions.forEach(vessel => {
         if (!finite(vessel.longitude) || !finite(vessel.latitude)) return;
         const point = projection([Number(vessel.longitude),Number(vessel.latitude)]);
         if (!point) return;
-        const mark = vesselGroup.append('path').attr('class','vessel-mark').attr('tabindex',0).attr('aria-label',`AIS vessel ${vessel.vessel_name || vessel.mmsi}`)
+        const mark = vesselGroup.append('path').attr('class',`vessel-mark ${vessel.motion_state}`).attr('tabindex',0).attr('aria-label',`AIS vessel ${vessel.vessel_name || vessel.mmsi}`)
           .attr('d','M0,-10 C4,-7 5,3 3,8 L0,11 L-3,8 C-5,3 -4,-7 0,-10 Z M-3,2 L3,2')
           .attr('transform',`translate(${point[0]},${point[1]}) rotate(${finite(vessel.cog) ? Number(vessel.cog) : 0})`);
         appendMapTitle(mark, `${vessel.vessel_name || 'UNKNOWN'} · MMSI ${vessel.mmsi}`)
@@ -329,11 +354,14 @@
     byId('mapScale').style.width=`${scalePixels}px`;
     byId('mapScale').dataset.label='10 km';
 
-    const empty = mapMode === 'live' && layerVisible('vessels') && positions.length === 0;
+    const empty = mapMode === 'live' && (showUnderway || showStationary) && visiblePositions.length === 0;
     byId('mapEmpty').hidden = !empty;
     const visibleLabels=[];
     if(mapMode==='live'){
-      visibleLabels.push(`${positions.length} AIS vessel${positions.length===1?'':'s'}`);
+      if(showUnderway)visibleLabels.push(`${snapshot.ais?.underway_count || 0} underway`);
+      if(showStationary)visibleLabels.push(`${snapshot.ais?.stationary_count || 0} stationary`);
+      if(snapshot.ais?.unknown_motion_count)visibleLabels.push(`${snapshot.ais.unknown_motion_count} unknown-motion withheld`);
+      visibleLabels.push(`${compactNumber(snapshot.ais?.window_minutes)} min rolling window`);
       if(layerVisible('satellite'))visibleLabels.push(`${mapFeatureCount(mapGeometry.footprints)} catalogue footprint${mapFeatureCount(mapGeometry.footprints)===1?'':'s'}`);
     }else{
       if(layerVisible('slick')&&mapGeometry.slick)visibleLabels.push('approved slick');
@@ -355,8 +383,10 @@
     html('mapEvidenceTime',lastSnapshot ? formatUtc(evidenceTime(lastSnapshot)) : 'Waiting for evidence time');
     html('mapTimeRule',incident?'Only evidence tied to the selected SAR investigation is shown.':'Only recent provider AIS and current source state are shown.');
     for (const name of ['slick','origin']) byId('layerControls').querySelector(`[data-layer="${name}"]`).disabled=!incident;
+    for (const name of ['vessels','stationary']) byId('layerControls').querySelector(`[data-layer="${name}"]`).disabled=incident;
     byId('layerControls').querySelector('[data-layer="environment"]').disabled=incident;
-    setDetail(incident?{type:'INCIDENT TIMELINE',title:'Historical evidence isolated',summary:'Approved slick, reconstructed origin and temporally matched candidate tracks share the selected investigation timeline.',fields:[['SAR observation',formatUtc(lastSnapshot?.analysis?.acquisition_time_utc)],['Estimated release',formatUtc(lastSnapshot?.attribution?.top_candidate?.best_match_time_utc)],['Candidate population',compactNumber(lastSnapshot?.attribution?.candidate_count || lastSnapshot?.attribution?.candidates_compared)],['Decision',String(lastSnapshot?.attribution?.decision || 'Not available').replaceAll('_',' ')]],noteTitle:'NO LIVE OVERLAY',note:'Present-day AIS is intentionally hidden here.'}:{type:'LIVE WATCH',title:'Current maritime picture',summary:'Only positions actually received in the active provider window are eligible for display.',fields:[['Latest AIS',formatUtc(lastSnapshot?.sources?.ais?.latest_observation_utc)],['Received vessels',compactNumber(lastSnapshot?.ais?.vessel_count)],['Satellite catalogue',`${compactNumber(lastSnapshot?.sources?.sentinel?.scenes_returned)} scene records`],['Environment time',formatUtc(lastSnapshot?.sources?.environment?.latest_observation_utc)]],noteTitle:'NO SYNTHETIC FALLBACK',note:'If the live provider returns nothing, the map remains empty.'});
+    byId('trafficSnapshot').hidden=incident;
+    setDetail(incident?{type:'INCIDENT TIMELINE',title:'Historical evidence isolated',summary:'Approved slick, reconstructed origin and temporally matched candidate tracks share the selected investigation timeline.',fields:[['SAR observation',formatUtc(lastSnapshot?.analysis?.acquisition_time_utc)],['Estimated release',formatUtc(lastSnapshot?.attribution?.top_candidate?.best_match_time_utc)],['Candidate population',compactNumber(lastSnapshot?.attribution?.candidate_count || lastSnapshot?.attribution?.candidates_compared)],['Decision',String(lastSnapshot?.attribution?.decision || 'Not available').replaceAll('_',' ')]],noteTitle:'NO LIVE OVERLAY',note:'Present-day AIS is intentionally hidden here.'}:{type:'LIVE WATCH',title:'Current maritime picture',summary:'One latest in-bounds report per MMSI; stale reports leave the map automatically.',fields:[['Latest AIS',formatUtc(lastSnapshot?.sources?.ais?.latest_observation_utc)],['Current vessels',compactNumber(lastSnapshot?.ais?.vessel_count)],['Underway / stationary',`${compactNumber(lastSnapshot?.ais?.underway_count)} / ${compactNumber(lastSnapshot?.ais?.stationary_count)}`],['Rolling window',`${compactNumber(lastSnapshot?.ais?.window_minutes)} minutes`]],noteTitle:'NO SYNTHETIC FALLBACK',note:'If the live provider returns nothing, the map remains empty.'});
     if(lastSnapshot) renderMap(lastSnapshot);
   }
 
@@ -378,6 +408,7 @@
   function renderSceneSelector(snapshot) {
     const select = byId('sarSceneSelect');
     const scenes = Array.isArray(snapshot.sources?.sentinel?.scenes) ? [...snapshot.sources.sentinel.scenes] : [];
+    scenes.forEach(scene => { if (scene.id === snapshot.analysis?.scene_id) scene.processed_evidence = true; });
     if (snapshot.analysis?.scene_id && !scenes.some(scene => scene.id === snapshot.analysis.scene_id)) {
       scenes.push({
         id: snapshot.analysis.scene_id,
@@ -458,8 +489,16 @@
     }
     html('sarSceneId',scene?.id || '—');
     html('sarAcquired',formatUtc(scene?.acquisition_time_utc));
-    html('sarPolarisation',Array.isArray(scene?.polarizations) ? scene.polarizations.join(' + ') : '—');
-    html('sarFootprint',finite(scene?.aoi_overlap_fraction) ? `${(Number(scene.aoi_overlap_fraction)*100).toFixed(1)}% AOI overlap` : '—');
+    const input = matchesAnalysis ? analysis.input_provenance || {} : {};
+    const model = matchesAnalysis ? analysis.model_provenance || {} : {};
+    const polarization = input.polarization || (Array.isArray(scene?.polarizations) ? scene.polarizations.join(' + ') : '—');
+    const measurement = input.measurement ? ` · ${String(input.measurement).replaceAll('-',' ')}` : '';
+    html('sarPolarisation',`${polarization}${measurement}`);
+    const orbit = scene?.orbit_state ? String(scene.orbit_state).toUpperCase() : 'ORBIT —';
+    const coverage = finite(scene?.aoi_overlap_fraction) ? `${(Number(scene.aoi_overlap_fraction)*100).toFixed(1)}% AOI` : 'COVERAGE —';
+    html('sarFootprint',`${orbit} · ${coverage}`);
+    html('sarModel',model.model_generation ? `${model.model_generation} · T=${finite(model.threshold) ? Number(model.threshold).toFixed(3) : '—'}` : '—');
+    html('sarIntegrity',matchesAnalysis && analysis.provenance_verified ? 'VERIFIED' : matchesAnalysis && analysis.status === 'ERROR' ? 'STOPPED SAFELY' : 'NOT PROCESSED');
   }
 
   function renderDetectionWorkbench(snapshot) {
@@ -468,15 +507,18 @@
     const review = snapshot.review || {status:'NOT_REVIEWED'};
     const current = Boolean(scene && analysis.scene_id === scene.id);
     const busy = analysisBusy(analysis.status);
-    const reviewable = current && analysis.status === 'REVIEW_REQUIRED' && !['APPROVED','REJECTED'].includes(review.status);
     const approved = current && review.status === 'APPROVED';
     const rejected = current && review.status === 'REJECTED';
     const physics = current ? analysis.physics_screen || {} : {};
+    const physicsPass = String(physics.status || '') === 'PLAUSIBLE_DARK_SIGNATURE' && physics.contrast_gate_passed === true && physics.wind_gate_passed === true;
+    const reviewable = current && analysis.status === 'REVIEW_REQUIRED' && !['APPROVED','REJECTED'].includes(review.status);
+    const approvalReady = reviewable && physicsPass;
 
     const analyzeButton = byId('analyzeSarButton');
     analyzeButton.disabled = !scene || busy || current && ['REVIEW_REQUIRED','NO_DETECTION'].includes(analysis.status);
-    analyzeButton.textContent = busy ? String(analysis.status).replaceAll('_',' ') + '…' : current ? 'Analysis already available' : 'Analyze selected scene';
+    analyzeButton.textContent = busy ? String(analysis.status).replaceAll('_',' ') + '…' : current && analysis.status === 'ERROR' ? 'Retry exact scene' : current ? 'Analysis already available' : 'Analyze selected scene';
     if (busy) setDetectionStatus('busy',String(analysis.status).replaceAll('_',' '),'Calibrated scene processing is active');
+    else if (current && analysis.status === 'ERROR') setDetectionStatus('error','ANALYSIS STOPPED SAFELY',operatorMessage(analysis.message));
     else if (approved) setDetectionStatus('approved','APPROVED FOR RECONSTRUCTION',`Recorded ${formatUtc(review.reviewed_at_utc)}`);
     else if (rejected) setDetectionStatus('rejected','CANDIDATE REJECTED','Reverse drift remains blocked');
     else if (reviewable) setDetectionStatus('review','ANALYST REVIEW REQUIRED','Automation has stopped at the human gate');
@@ -493,9 +535,13 @@
       setGate('analystGate','waiting','LOCKED','Human review remains unavailable');
     } else {
       setGate('modelGate','pass',analysis.status === 'NO_DETECTION'?'NO CANDIDATE':'CANDIDATE',analysis.status === 'NO_DETECTION'?'No pixels exceeded the frozen threshold':`${compactNumber(analysis.detected_components)} regions exceeded the frozen threshold`);
-      const physicsPass = String(physics.status || '').includes('PLAUSIBLE') || physics.contrast_gate_passed && physics.wind_gate_passed;
-      setGate('physicsGate',physicsPass?'pass':physics.status?'fail':'waiting',physicsPass?'PLAUSIBLE':physics.status?'REJECTED':'NOT RUN',physics.method || 'Contrast and acquisition wind plausibility');
-      setGate('analystGate',approved?'pass':rejected?'fail':reviewable?'review':'waiting',approved?'APPROVED':rejected?'REJECTED':reviewable?'REVIEW':'NOT REQUIRED',approved?'Decision recorded with assumed slick age':rejected?'Attribution is blocked':reviewable?'Automation paused for a human decision':'No model candidate requires review');
+      if (analysis.status === 'NO_DETECTION') {
+        setGate('physicsGate','skip','NOT REQUIRED','No model candidate entered physical screening');
+        setGate('analystGate','skip','NOT REQUIRED','No candidate requires a human decision');
+      } else {
+        setGate('physicsGate',physicsPass?'pass':physics.status?'fail':'waiting',physicsPass?'PLAUSIBLE':physics.status?String(physics.status).replaceAll('_',' '):'NOT RUN',physics.method || 'Contrast and acquisition wind plausibility');
+        setGate('analystGate',approved?'pass':rejected?'fail':reviewable?'review':'waiting',approved?'APPROVED':rejected?'REJECTED':approvalReady?'REVIEW':'REJECT / HOLD',approved?'Decision recorded with assumed slick age':rejected?'Attribution is blocked':approvalReady?'Automation paused for a human decision':'Approval locked because the physics evidence is incomplete or implausible');
+      }
     }
 
     html('candidateFraction',current && finite(analysis.detected_pixel_fraction) ? `${(Number(analysis.detected_pixel_fraction)*100).toFixed(3)}%` : '—');
@@ -509,12 +555,12 @@
     html('windGate',physics.wind_gate_passed === true?'PASS':physics.wind_gate_passed === false?'FAIL':'—');
 
     html('reviewHeading',approved?'Candidate approved':rejected?'Candidate rejected':reviewable?'Decision required':'No reviewable candidate');
-    html('reviewMessage',review.message || analysis.message || 'A decision becomes available only after the model and physics gates complete.');
+    html('reviewMessage',operatorMessage(review.message || analysis.message) || 'A decision becomes available only after the model and physics gates complete.');
     const age = finite(review.assumed_age_hours) ? Number(review.assumed_age_hours) : Number(byId('releaseAgeInput').value || 19);
     byId('releaseAgeInput').value = String(age);
     html('releaseAgeValue',`${age} h`);
-    byId('releaseAgeInput').disabled = !reviewable;
-    byId('approveCandidateButton').disabled = !reviewable;
+    byId('releaseAgeInput').disabled = !approvalReady;
+    byId('approveCandidateButton').disabled = !approvalReady;
     byId('rejectCandidateButton').disabled = !reviewable;
     renderSarImage(snapshot);
   }
@@ -530,7 +576,7 @@
       setDetectionStatus('busy','ANALYSIS QUEUED','The server is downloading and processing real SAR pixels');
       window.setTimeout(poll,1000);
     } catch(error) {
-      setDetectionStatus('error','ANALYSIS COULD NOT START',error.message);
+      setDetectionStatus('error','ANALYSIS COULD NOT START',operatorMessage(error.message));
       button.disabled = false;
       button.textContent = 'Analyze selected scene';
     }
@@ -545,7 +591,7 @@
       setDetectionStatus(decision === 'APPROVE'?'approved':'rejected',decision === 'APPROVE'?'DECISION RECORDED':'CANDIDATE REJECTED',result.message || 'Review state updated');
       window.setTimeout(poll,600);
     } catch(error) {
-      setDetectionStatus('error','REVIEW COULD NOT BE RECORDED',error.message);
+      setDetectionStatus('error','REVIEW COULD NOT BE RECORDED',operatorMessage(error.message));
       if(lastSnapshot) renderDetectionWorkbench(lastSnapshot);
     }
   }
@@ -585,9 +631,11 @@
     const attribution = snapshot.attribution || {};
     const particles = (Array.isArray(attribution.origin_particles) ? attribution.origin_particles : [])
       .map(coordinatePair).filter(point => point.every(finite));
+    const forwardParticles = (Array.isArray(attribution.forward_replay_particles) ? attribution.forward_replay_particles : [])
+      .map(coordinatePair).filter(point => point.every(finite));
     const observed = coordinatePair(attribution.observed_centroid);
     const origin = coordinatePair(attribution.estimated_origin);
-    const complete = String(attribution.status || '').toUpperCase() === 'COMPLETE' && particles.length > 0;
+    const complete = String(attribution.drift_status || '').toUpperCase() === 'COMPLETE' && particles.length > 0;
     byId('driftMapEmpty').hidden = complete;
     if (!complete) return;
 
@@ -604,8 +652,9 @@
     }
     svg.append('path').datum(bboxPolygon(bbox)).attr('class','drift-region').attr('d',path);
 
-    const showObserved = driftView !== 'origin';
-    const showOrigin = driftView !== 'observed';
+    const showObserved = ['observed','forward','comparison'].includes(driftView);
+    const showOrigin = ['origin','comparison'].includes(driftView);
+    const showForward = ['forward','comparison'].includes(driftView);
     if (showObserved && mapGeometry.slick) {
       svg.append('path').datum(mapGeometry.slick).attr('class','drift-slick-halo').attr('d',path);
       const slick = svg.append('path').datum(mapGeometry.slick).attr('class','drift-slick').attr('tabindex',0).attr('aria-label','Analyst-approved observed slick').attr('d',path);
@@ -635,6 +684,12 @@
       }
     }
 
+    if (showForward && forwardParticles.length) {
+      const sampleStep=Math.max(1,Math.ceil(forwardParticles.length/500));
+      const cloud=svg.append('g').selectAll('circle').data(forwardParticles.filter((_,index)=>index%sampleStep===0)).join('circle').attr('class','drift-forward-particle').attr('cx',point=>projection(point)[0]).attr('cy',point=>projection(point)[1]).attr('r',2.5);
+      appendMapTitle(cloud,`Forward replay · ${forwardParticles.length} displayed endpoints`);
+    }
+
     if (driftView === 'comparison' && observed.every(finite) && origin.every(finite)) {
       const a=projection(origin),b=projection(observed);
       svg.append('line').attr('class','drift-displacement').attr('x1',a[0]).attr('y1',a[1]).attr('x2',b[0]).attr('y2',b[1]);
@@ -642,8 +697,10 @@
     }
     const [labelX,labelY]=projection([bbox[0]+(bbox[2]-bbox[0])*.028,bbox[3]-(bbox[3]-bbox[1])*.055]);
     svg.append('text').attr('class','drift-map-title').attr('x',labelX).attr('y',labelY).text(String(snapshot.region?.name||'WATCH REGION').toUpperCase());
-    svg.append('text').attr('class','drift-map-subtitle').attr('x',labelX).attr('y',labelY+18).text(driftView==='observed'?'SATELLITE OBSERVATION':driftView==='origin'?'INFERRED RELEASE DISTRIBUTION':'OBSERVATION ↔ INFERENCE');
-    html('driftMapLabel',driftView==='observed'?'OBSERVED SLICK':driftView==='origin'?'RELEASE ENSEMBLE':'EVIDENCE COMPARISON');
+    const subtitle=driftView==='observed'?'SATELLITE OBSERVATION':driftView==='origin'?'INFERRED RELEASE DISTRIBUTION':driftView==='forward'?'POSTERIOR FORWARD CLOSURE':'OBSERVATION ↔ REVERSE ↔ FORWARD';
+    const mapLabel=driftView==='observed'?'OBSERVED SLICK':driftView==='origin'?'RELEASE ENSEMBLE':driftView==='forward'?'FORWARD REPLAY':'FULL DRIFT COMPARISON';
+    svg.append('text').attr('class','drift-map-subtitle').attr('x',labelX).attr('y',labelY+18).text(subtitle);
+    html('driftMapLabel',mapLabel);
   }
 
   function renderReverseDrift(snapshot) {
@@ -651,17 +708,29 @@
     const attribution=snapshot.attribution||{};
     const status=String(attribution.status||'NOT_RUN').toUpperCase();
     const approved=String(review.status||'').toUpperCase()==='APPROVED';
-    const complete=status==='COMPLETE';
-    const running=['QUEUED','RUNNING','RECONSTRUCTING','ATTRIBUTING'].includes(status);
+    const driftComplete=String(attribution.drift_status||'').toUpperCase()==='COMPLETE'||status==='COMPLETE';
+    const handoffReady=approved&&String(review.handoff_status||'').toUpperCase()==='SEALED'&&review.handoff_verified===true;
+    const running=['QUEUED','RUNNING','PREPARING_FORCING','REVERSING_DRIFT','RECONSTRUCTING'].includes(status);
+    const seal=byId('incidentSeal');
+    seal.dataset.state=handoffReady?'sealed':driftComplete?'legacy':'waiting';
+    seal.querySelector('b').textContent=handoffReady?'SEALED · VERIFIED':driftComplete?'LEGACY RECORD':'NOT SEALED';
+    html('handoffObservation',formatUtc(snapshot.analysis?.acquisition_time_utc||attribution.observation_time_utc));
+    html('handoffAge',finite(review.assumed_age_hours||attribution.assumed_age_hours)?`${Number(review.assumed_age_hours||attribution.assumed_age_hours)} hours`:'—');
+    html('handoffRelease',formatUtc(review.estimated_release_time_utc||attribution.release_time_utc));
+    const slickHash=String(review.slick_geometry_sha256||'');
+    html('handoffGeometry',slickHash?`${slickHash.slice(0,12)}… SHA-256`:driftComplete?'Recorded before handoff v1':'—');
+    const handoffLink=byId('handoffRecordLink');
+    handoffLink.hidden=!handoffReady||!review.handoff_url;
+    if(!handoffLink.hidden)handoffLink.href=review.handoff_url;
     const statusBox=byId('driftStatus');
-    statusBox.dataset.state=complete?'complete':running?'running':approved?'ready':status==='FAIL'?'error':'waiting';
-    statusBox.querySelector('b').textContent=complete?'RECONSTRUCTION COMPLETE':running?`${status.replaceAll('_',' ')}…`:approved?'READY TO BUILD':'WAITING FOR APPROVAL';
-    statusBox.querySelector('small').textContent=complete?`${compactNumber(attribution.origin_particles?.length)} ensemble endpoints · ${Number(attribution.credible_radius_90_km).toFixed(2)} km radius`:running?'Physics and evidence correlation are running':approved?'Approved slick can enter reverse drift':'Human-reviewed slick required';
+    statusBox.dataset.state=driftComplete?'complete':running?'running':handoffReady?'ready':status==='FAIL'||status==='ERROR'?'error':'waiting';
+    statusBox.querySelector('b').textContent=driftComplete?'DRIFT CLOSURE COMPLETE':running?`${status.replaceAll('_',' ')}…`:handoffReady?'READY TO BUILD':approved?'HANDOFF REQUIRED':'WAITING FOR APPROVAL';
+    statusBox.querySelector('small').textContent=driftComplete?`${compactNumber(attribution.origin_particles?.length)} displayed reverse endpoints · forward closure recorded`:running?'Date-matched forcing and particles are running':handoffReady?'Sealed observation, geometry and release window':approved?'Seal verification is required':'Human-reviewed slick required';
     const button=byId('buildAttributionButton');
-    button.disabled=!approved||complete||running;
-    button.textContent=complete?'Reconstruction available':running?'Building reconstruction…':'Build reconstruction';
+    button.disabled=!handoffReady||driftComplete||running;
+    button.textContent=driftComplete?'Drift reconstruction available':running?'Building drift model…':'Build reconstruction';
 
-    const releaseTime=attribution.release_time_utc||attribution.top_candidate?.best_match_time_utc;
+    const releaseTime=attribution.release_time_utc||review.estimated_release_time_utc||attribution.top_candidate?.best_match_time_utc;
     html('driftReleaseTime',formatUtc(releaseTime));
     html('driftObservationTime',formatUtc(attribution.observation_time_utc||snapshot.analysis?.acquisition_time_utc));
     html('driftDuration',finite(attribution.assumed_age_hours||review.assumed_age_hours)?`${Number(attribution.assumed_age_hours||review.assumed_age_hours)} HOURS`:'—');
@@ -671,15 +740,19 @@
     html('driftOrigin',origin.every(finite)?`${origin[0].toFixed(4)}°, ${origin[1].toFixed(4)}°`:'—');
     const displacement=distanceKm(origin,observed);
     html('driftDisplacement',finite(displacement)?`${displacement.toFixed(2)} km`:'—');
+    const closure=attribution.forward_closure||{};
+    html('driftForwardCentroid',finite(closure.centroid_error_km)?`${Number(closure.centroid_error_km).toFixed(2)} km`:'—');
+    html('driftForwardShape',finite(closure.cloud_shape_error_km)?`${Number(closure.cloud_shape_error_km).toFixed(2)} km`:'—');
     html('driftForcing',attribution.forcing_source||'No reconstruction forcing record is available.');
     const forcing=String(attribution.forcing_source||'');
     html('driftCurrentSource',forcing.includes('Copernicus')?'Copernicus Marine':'—');
     html('driftWindSource',forcing.includes('Open-Meteo')?'Open-Meteo historical':'—');
-    html('driftMethodStatus',complete?`Computed ${formatUtc(attribution.completed_at_utc)} · ${compactNumber(attribution.origin_particles?.length)} retained endpoints`:'Reverse-drift method has not completed');
+    html('driftMethodStatus',driftComplete?`Reverse ensemble + posterior forward closure · ${compactNumber(closure.particles_retained)} replay particles`:'Drift reconstruction has not completed');
     const link=byId('driftDiagnosticLink');
-    link.hidden=!complete||!attribution.reverse_analysis_url;
+    link.hidden=!driftComplete||!attribution.reverse_analysis_url;
     if(!link.hidden)link.href=attribution.reverse_analysis_url;
-    if(!complete)setDriftDetail('INFERENCE READOUT',approved?'Ready to reconstruct':'Review gate is closed',approved?'The approved slick can now be propagated backward through the recorded environmental fields.':'Approve a physically plausible SAR candidate before the system estimates a release region.');
+    if(driftComplete)setDriftDetail('MODEL CLOSURE',finite(closure.centroid_error_km)?'Forward replay completed':'Reverse reconstruction completed',finite(closure.centroid_error_km)?`The reconstructed origin replayed to within ${Number(closure.centroid_error_km).toFixed(2)} km of the observed centroid; this is internal consistency, not external accuracy.`:'The origin uncertainty field is available; this legacy run predates the forward-closure record.');
+    else setDriftDetail('INFERENCE READOUT',handoffReady?'Ready to reconstruct':approved?'Input contract unavailable':'Review gate is closed',handoffReady?'The sealed slick can now be propagated backward and replayed forward through date-matched environmental fields.':approved?'Reconstruction remains locked until the approved geometry, observation time and age assumption are sealed.':'Approve a physically plausible SAR candidate before the system estimates a release region.');
     renderDriftMap(snapshot);
   }
 
@@ -701,6 +774,122 @@
       byId('driftStatus').querySelector('small').textContent=error.message;
       if(lastSnapshot)renderReverseDrift(lastSnapshot);
     }
+  }
+
+  const filterReasonLabel = reason => ({
+    space_time_gate_passed: 'SPACE + TIME PASS',
+    outside_release_window: 'OUTSIDE TIME WINDOW',
+    outside_origin_search_area: 'OUTSIDE ORIGIN AREA'
+  })[String(reason || '')] || String(reason || 'NOT RECORDED').replaceAll('_',' ').toUpperCase();
+
+  const filterTrackName = record => record?.vessel_name && record.vessel_name !== 'UNKNOWN'
+    ? record.vessel_name
+    : 'Unverified vessel identity';
+
+  function selectedFilterTrack(filter) {
+    const records = Array.isArray(filter?.[aisFilterView]) ? filter[aisFilterView] : [];
+    if (!records.length) return null;
+    const selected = records.find(record => String(record.mmsi) === String(selectedFilterMmsi)) || records[0];
+    selectedFilterMmsi = String(selected.mmsi);
+    return selected;
+  }
+
+  function renderAisFilterInspector(record) {
+    if (!record) {
+      html('aisFilterSelectedState','NO TRACK SELECTED');
+      html('aisFilterSelectedName','Filtering has not produced this view');
+      html('aisFilterSelectedMmsi','MMSI —');
+      ['aisFilterClosestTime','aisFilterDistance','aisFilterOffset','aisFilterMotion','aisFilterDirection','aisFilterContinuity'].forEach(id=>html(id,'—'));
+      const verdict=byId('aisFilterVerdict');
+      verdict.dataset.state='waiting';
+      verdict.querySelector('b').textContent='NOT EVALUATED';
+      verdict.querySelector('p').textContent='A track must overlap the release window and pass through the conservative origin search area.';
+      return;
+    }
+    const retained=String(record.disposition).toLowerCase()==='retained';
+    html('aisFilterSelectedState',retained?'RETAINED FOR COMPARISON':'EXCLUDED AS IRRELEVANT');
+    html('aisFilterSelectedName',filterTrackName(record));
+    html('aisFilterSelectedMmsi',`MMSI ${record.mmsi}`);
+    html('aisFilterClosestTime',formatUtc(record.closest_report_time_utc));
+    html('aisFilterDistance',finite(record.closest_release_distance_km)?`${Number(record.closest_release_distance_km).toFixed(2)} km`:'—');
+    const offset=Number(record.closest_time_offset_hours);
+    html('aisFilterOffset',finite(offset)?`${offset>=0?'+':''}${offset.toFixed(2)} h`:'—');
+    html('aisFilterMotion',String(record.motion_state||'not available').replaceAll('_',' ').toUpperCase());
+    const course=String(record.course_evidence||'not_available').replaceAll('_',' ').toUpperCase();
+    const delta=finite(record.course_difference_degrees)?` · ${Number(record.course_difference_degrees).toFixed(0)}° delta`:'';
+    html('aisFilterDirection',`${course}${delta}`);
+    html('aisFilterContinuity',`${String(record.track_continuity||'not available').replaceAll('_',' ').toUpperCase()} · ${compactNumber(record.positions)} FIX${Number(record.positions)===1?'':'ES'}`);
+    const verdict=byId('aisFilterVerdict');
+    verdict.dataset.state=retained?'retained':'excluded';
+    verdict.querySelector('b').textContent=filterReasonLabel(record.reason);
+    verdict.querySelector('p').textContent=retained
+      ? 'The track passed both relevance gates. It may now be forward-verified and ranked; no suspicion is implied.'
+      : record.reason==='outside_release_window'
+        ? 'No received fix overlaps the declared release window.'
+        : 'No incident-time fix enters the conservative probable-origin search area.';
+  }
+
+  function renderAisFilterRows(filter) {
+    const records=Array.isArray(filter?.[aisFilterView])?filter[aisFilterView]:[];
+    const body=byId('aisFilterRows');
+    if(!records.length){
+      body.innerHTML=`<tr><td colspan="6">${filter?.status==='PASS'?'No tracks in this view.':'Waiting for incident-matched AIS.'}</td></tr>`;
+      renderAisFilterInspector(null);
+      return;
+    }
+    const sorted=[...records].sort((left,right)=>Number(left.closest_release_distance_km??1e9)-Number(right.closest_release_distance_km??1e9));
+    body.innerHTML=sorted.map(record=>{
+      const selected=String(record.mmsi)===String(selectedFilterMmsi);
+      const retained=String(record.disposition).toLowerCase()==='retained';
+      const offset=Number(record.closest_time_offset_hours);
+      return `<tr tabindex="0" data-filter-mmsi="${escapeMarkup(record.mmsi)}" class="${selected?'selected':''}" aria-selected="${selected}"><td><strong>${escapeMarkup(filterTrackName(record))}</strong><small>MMSI ${escapeMarkup(record.mmsi)}</small></td><td>${finite(record.closest_release_distance_km)?Number(record.closest_release_distance_km).toFixed(2)+' km':'—'}</td><td>${finite(offset)?(offset>=0?'+':'')+offset.toFixed(2)+' h':'—'}</td><td>${escapeMarkup(String(record.motion_state||'unknown').replaceAll('_',' '))}</td><td>${escapeMarkup(String(record.track_continuity||'unknown').replaceAll('_',' '))}</td><td><span class="ais-filter-result ${retained?'retained':'excluded'}">${escapeMarkup(filterReasonLabel(record.reason))}</span></td></tr>`;
+    }).join('');
+    body.querySelectorAll('tr[data-filter-mmsi]').forEach(row=>{
+      const choose=()=>{selectedFilterMmsi=String(row.dataset.filterMmsi);renderAisFilterRows(filter);};
+      row.addEventListener('click',choose);
+      row.addEventListener('keydown',event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();choose();}});
+    });
+    renderAisFilterInspector(selectedFilterTrack(filter));
+  }
+
+  function setAisFilterView(view) {
+    aisFilterView=view==='excluded'?'excluded':'retained';
+    selectedFilterMmsi=null;
+    document.querySelectorAll('[data-ais-filter-view]').forEach(button=>{
+      const active=button.dataset.aisFilterView===aisFilterView;
+      button.classList.toggle('active',active);
+      button.setAttribute('aria-pressed',String(active));
+    });
+    if(lastSnapshot)renderAisFilterRows(lastSnapshot.attribution?.ais_filter||{});
+  }
+
+  function renderAisFilter(snapshot) {
+    const attribution=snapshot.attribution||{};
+    const filter=attribution.ais_filter||{};
+    const ready=String(filter.status||'').toUpperCase()==='PASS';
+    const running=String(attribution.status||'').toUpperCase()==='FILTERING_AIS';
+    const retained=Number(filter.retained_vessels||0);
+    const status=byId('aisFilterStatus');
+    status.dataset.state=ready?(retained?'complete':'empty'):running?'running':'waiting';
+    status.querySelector('b').textContent=ready?(retained?'FILTER COMPLETE':'NO RELEVANT TRACKS'):running?'FILTERING INCIDENT TRAFFIC':'WAITING FOR RECONSTRUCTION';
+    status.querySelector('small').textContent=ready?(retained?`${retained} of ${compactNumber(filter.raw_vessels)} identities retained for ranking`:'The system refused to force a candidate list'):running?'Testing time and origin-area compatibility':'Release time and origin area are required';
+    html('aisFilterRaw',ready?compactNumber(filter.raw_vessels):'—');
+    html('aisFilterTime',ready?compactNumber(filter.release_window_vessels):'—');
+    html('aisFilterOrigin',ready?compactNumber(filter.origin_zone_vessels):'—');
+    html('aisFilterRetained',ready?compactNumber(filter.retained_vessels):'—');
+    html('aisFilterWindow',ready&&finite(filter.release_window_hours)?`±${Number(filter.release_window_hours).toFixed(1)} h from release`:'incident-time gate');
+    html('aisFilterRadius',ready&&finite(filter.search_radius_km)?`within ${Number(filter.search_radius_km).toFixed(2)} km`:'space gate');
+    [['aisFunnelRaw','raw_vessels'],['aisFunnelTime','release_window_vessels'],['aisFunnelOrigin','origin_zone_vessels'],['aisFunnelRetained','retained_vessels']].forEach(([id,key])=>html(id,ready?compactNumber(filter[key]):'—'));
+    html('aisRetainedTabCount',ready?compactNumber(filter.retained_vessels):'—');
+    html('aisExcludedTabCount',ready?compactNumber(filter.excluded_vessels):'—');
+    if(ready){
+      const records=Array.isArray(filter[aisFilterView])?filter[aisFilterView]:[];
+      if(!records.some(record=>String(record.mmsi)===String(selectedFilterMmsi)))selectedFilterMmsi=records[0]?.mmsi||null;
+    }
+    renderAisFilterRows(filter);
+    const link=byId('aisFilterReportLink');
+    link.hidden=!ready||!filter.report_url;
+    if(!link.hidden)link.href=filter.report_url;
   }
 
   const candidateDisplayName = candidate => candidate?.vessel_name && candidate.vessel_name !== 'UNKNOWN'
@@ -764,6 +953,8 @@
   function renderCandidateInspector(snapshot,candidate) {
     if(!candidate){
       html('selectedCandidateRank','SELECT A CANDIDATE');html('selectedCandidateName','No vessel selected');html('selectedCandidateMmsi','MMSI —');html('selectedCandidateScore','—');
+      ['candidateIdentityStatus','candidateForwardError','candidatePositionType','candidateMatchTime','candidateMotionState','candidateTrackDirection','candidateSilence'].forEach(id=>html(id,'—'));
+      ['presence','forward','quality'].forEach(name=>{html(`${name}ScoreLabel`,'—');byId(`${name}ScoreBar`).style.width='0%';});
       return;
     }
     html('selectedCandidateRank',`RANK ${candidate.rank} OF ${compactNumber(snapshot.attribution?.candidate_count)}`);
@@ -772,9 +963,12 @@
     html('selectedCandidateScore',finite(candidate.total_score)?`${(Number(candidate.total_score)*100).toFixed(1)}%`:'—');
     const measures=[['presence',candidate.presence_score],['forward',candidate.forward_consistency],['quality',candidate.data_quality]];
     measures.forEach(([name,value])=>{html(`${name}ScoreLabel`,finite(value)?`${(Number(value)*100).toFixed(1)}%`:'—');byId(`${name}ScoreBar`).style.width=finite(value)?`${Math.max(0,Math.min(100,Number(value)*100))}%`:'0%';});
+    html('candidateIdentityStatus',String(candidate.identity_status||'unverified').replaceAll('_',' ').toUpperCase());
     html('candidateForwardError',finite(candidate.forward_error_km)?`${Number(candidate.forward_error_km).toFixed(2)} km`:'—');
     html('candidatePositionType',candidate.release_position_interpolated?`INTERPOLATED · ${Number(candidate.interpolation_gap_hours||0).toFixed(1)} h gap`:'RECEIVED AIS FIX');
     html('candidateMatchTime',formatUtc(candidate.best_match_time_utc));
+    html('candidateMotionState',String(candidate.motion_state||'not available').replaceAll('_',' ').toUpperCase());
+    html('candidateTrackDirection',finite(candidate.track_bearing_deg)?`${Number(candidate.track_bearing_deg).toFixed(0)}° · CONTEXT ONLY`:'NOT RESOLVED');
     const gapCount=Number(candidate.significant_gaps||0);
     const silenceClass=String(candidate.silence_classification||'not_assessed').replaceAll('_',' ').toUpperCase();
     html('candidateSilence',gapCount?`${gapCount} GAP${gapCount===1?'':'S'} · ${silenceClass}`:silenceClass);
@@ -806,18 +1000,26 @@
     const candidates=Array.isArray(attribution.candidates)?attribution.candidates:[];
     const top=candidates[0];
     const complete=String(attribution.status||'').toUpperCase()==='COMPLETE'&&top;
-    if(!complete)return;
+    const gateIds=['gateCandidatePopulation','gateTopScore','gateScoreMargin','gateTrackQuality','gateForwardError'];
+    if(!complete){gateIds.forEach(id=>{const gate=byId(id);gate.dataset.state='waiting';gate.querySelector('em').textContent='WAITING';});return;}
     const score=Number(top.total_score||0),margin=Number(attribution.score_margin||0),quality=Number(top.data_quality||0),error=Number(top.forward_error_km??999);
-    setNominationGate('gateTopScore',score>=.4,`${(score*100).toFixed(1)}% comparative score`);
-    setNominationGate('gateScoreMargin',margin>=.05,`${(margin*100).toFixed(1)} point lead`);
-    setNominationGate('gateTrackQuality',quality>=.4,`${(quality*100).toFixed(1)}% data quality`);
-    setNominationGate('gateForwardError',error<=8,`${error.toFixed(2)} km replay error`);
+    const assessment=attribution.nomination_assessment||{};
+    const assessedGates=Array.isArray(assessment.gates)?new Map(assessment.gates.map(gate=>[String(gate.id),gate])):new Map();
+    const applyAssessment=(uiId,gateId,fallbackPassed,fallbackDescription)=>{
+      const gate=assessedGates.get(gateId);
+      setNominationGate(uiId,gate?Boolean(gate.passed):fallbackPassed,gate?`${gate.label}: ${gate.requirement}`:fallbackDescription);
+    };
+    applyAssessment('gateCandidatePopulation','candidate_population',candidates.length>=2,`${candidates.length} incident-relevant tracks`);
+    applyAssessment('gateTopScore','top_score',score>=.4,`${(score*100).toFixed(1)}% comparative score`);
+    applyAssessment('gateScoreMargin','score_margin',margin>=.05,`${(margin*100).toFixed(1)} point lead`);
+    applyAssessment('gateTrackQuality','track_quality',quality>=.4,`${(quality*100).toFixed(1)}% data quality`);
+    applyAssessment('gateForwardError','forward_error',error<=8,`${error.toFixed(2)} km replay error`);
     const decision=String(attribution.decision||'ABSTAIN_INSUFFICIENT_EVIDENCE');
     const abstain=decision.startsWith('ABSTAIN');
     const verdict=byId('gateVerdict');verdict.className=`gate-verdict ${abstain?'abstain':'shortlist'}`;
     verdict.querySelector('b').textContent=abstain?'ABSTAIN · INSUFFICIENT SEPARATION':'LIMITED SHORTLIST';
-    const tieCount=candidates.filter(candidate=>Math.abs(Number(candidate.total_score)-score)<1e-9).length;
-    verdict.querySelector('p').textContent=abstain?`${tieCount} displayed candidates share the highest score; a ${Number(margin*100).toFixed(1)}-point lead cannot support nomination.`:'All minimum gates passed. Human investigation and independent verification remain required.';
+    const tieCount=Number(assessment.near_tied_count??candidates.filter(candidate=>Math.abs(Number(candidate.total_score)-score)<.02).length);
+    verdict.querySelector('p').textContent=assessment.rationale||(abstain?`${tieCount} candidate(s) sit within the ambiguity band; a ${Number(margin*100).toFixed(1)}-point lead cannot support nomination.`:'All minimum gates passed. Human investigation and independent verification remain required.');
   }
 
   function renderCandidateWorkspace(snapshot) {
@@ -828,11 +1030,13 @@
     const abstain=decision.startsWith('ABSTAIN');
     const status=byId('attributionDecision');status.dataset.state=complete?(abstain?'abstain':'shortlist'):'waiting';status.querySelector('b').textContent=complete?(abstain?'ABSTAIN · INSUFFICIENT EVIDENCE':'LIMITED SHORTLIST'):'WAITING FOR RECONSTRUCTION';status.querySelector('small').textContent=complete?(abstain?'Evidence gates prevent vessel nomination':'Candidate separation passed minimum gates'):'No candidate result available';
     const top=candidates[0];
+    const assessment=attribution.nomination_assessment||{};
     html('candidatePopulation',compactNumber(attribution.candidate_count));
     html('highestCandidateScore',top&&finite(top.total_score)?`${(Number(top.total_score)*100).toFixed(1)}%`:'—');
     html('candidateScoreMargin',finite(attribution.score_margin)?`${(Number(attribution.score_margin)*100).toFixed(1)} pts`:'—');
     html('candidateSafeOutput',complete?(abstain?'NO NOMINATION':'LIMITED SHORTLIST'):'—');
-    html('candidateSafeReason',complete?(abstain?'Ambiguous evidence remains unresolved':'All minimum evidence gates passed'):'Evidence gate not evaluated');
+    const failed=Array.isArray(assessment.failed_gate_ids)?assessment.failed_gate_ids:[];
+    html('candidateSafeReason',complete?(abstain?(failed.length?`Failed: ${failed.map(value=>String(value).replaceAll('_',' ')).join(', ')}`:'Ambiguous evidence remains unresolved'):'All minimum evidence gates passed'):'Evidence gate not evaluated');
     html('candidateMapTime',`${formatUtc(attribution.release_time_utc)} → ${formatUtc(attribution.observation_time_utc)}`);
     if(!selectedCandidateMmsi&&top)selectedCandidateMmsi=String(top.mmsi);
     const selected=selectedCandidate(snapshot);
@@ -1749,12 +1953,16 @@
     html('snapshotTime', formatUtc(snapshotTime));
   }
 
-  function renderAis(source = {}) {
+  function renderAis(source = {}, ais = {}) {
     setCardState('ais', source);
-    html('aisPositions', compactNumber(source.cached_positions));
-    html('aisVessels', compactNumber(source.cached_vessels));
+    html('aisPositions', compactNumber(ais.vessel_count));
+    html('aisVessels', compactNumber(ais.underway_count));
     html('aisObservation', source.latest_observation_utc ? `${ageLabel(source.latest_observation_utc)} · ${formatUtc(source.latest_observation_utc)}` : 'No position received');
-    html('aisSuccess', source.last_success_utc ? `${ageLabel(source.last_success_utc)} · ${formatUtc(source.last_success_utc)}` : 'No successful connection');
+    html('aisSuccess', finite(ais.window_minutes) ? `${compactNumber(ais.window_minutes)} minutes · latest report per MMSI` : 'Window unavailable');
+    html('trafficCurrent', compactNumber(ais.vessel_count));
+    html('trafficUnderway', compactNumber(ais.underway_count));
+    html('trafficStationary', compactNumber(ais.stationary_count));
+    html('trafficWindow', finite(ais.window_minutes) ? `${compactNumber(ais.window_minutes)} min` : '—');
   }
 
   function renderSentinel(source = {}) {
@@ -1821,12 +2029,13 @@
   function render(snapshot) {
     lastSnapshot = snapshot;
     renderHeader(snapshot);
-    renderAis(snapshot.sources?.ais);
+    renderAis(snapshot.sources?.ais, snapshot.ais);
     renderSentinel(snapshot.sources?.sentinel);
     renderEnvironment(snapshot.sources?.environment);
     renderIntegrity(snapshot);
     renderDetectionWorkbench(snapshot);
     renderReverseDrift(snapshot);
+    renderAisFilter(snapshot);
     renderCandidateWorkspace(snapshot);
     renderResponseWorkspace(snapshot);
     renderCaseRegister(snapshot);
@@ -1908,6 +2117,7 @@
   byId('approveCandidateButton').addEventListener('click',()=>submitCandidateReview('APPROVE'));
   byId('rejectCandidateButton').addEventListener('click',()=>submitCandidateReview('REJECT'));
   document.querySelectorAll('[data-drift-view]').forEach(button=>button.addEventListener('click',()=>setDriftView(button.dataset.driftView)));
+  document.querySelectorAll('[data-ais-filter-view]').forEach(button=>button.addEventListener('click',()=>setAisFilterView(button.dataset.aisFilterView)));
   byId('buildAttributionButton').addEventListener('click',buildAttribution);
   byId('buildResponseButton').addEventListener('click',buildResponsePackage);
   byId('caseStageFilter').addEventListener('change', event => {

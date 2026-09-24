@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import numpy as np
 import pytest
 from shapely.geometry import Polygon
 
@@ -71,3 +72,15 @@ def test_slick_geojson_runs_backward_inference(tmp_path: Path) -> None:
     assert (tmp_path / "analysis" / "slick_reverse_analysis.png").exists()
     assert (tmp_path / "analysis" / "release_estimate.json").exists()
     assert (tmp_path / "analysis" / "forward_particles.npz").exists()
+    assert (tmp_path / "analysis" / "forward_replay_particles.npz").exists()
+    assert (tmp_path / "analysis" / "drift_validation.json").exists()
+    closure = result["forward_closure"]
+    assert closure["status"] == "COMPUTED"
+    assert closure["particles_retained"] == 120
+    assert closure["centroid_error_km"] >= 0
+    assert closure["cloud_shape_error_km"] >= 0
+    assert 0 <= closure["fraction_inside_observed_polygon"] <= 1
+    with np.load(tmp_path / "analysis" / "forward_particles.npz") as observed, np.load(
+        tmp_path / "analysis" / "forward_replay_particles.npz"
+    ) as replay:
+        assert not np.array_equal(observed["lon"], replay["lon"])

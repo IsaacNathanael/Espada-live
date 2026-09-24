@@ -3,11 +3,11 @@ param(
     [switch]$NoOpen,
     [switch]$Restart,
     [string]$PythonPath = "",
-    [string]$RegionName = "Mumbai Offshore Watch",
-    [double]$MinLongitude = 70.8,
-    [double]$MinLatitude = 17.8,
-    [double]$MaxLongitude = 73.0,
-    [double]$MaxLatitude = 20.0
+    [string]$RegionName = "East Singapore Offshore Watch",
+    [double]$MinLongitude = 104.02,
+    [double]$MinLatitude = 1.20,
+    [double]$MaxLongitude = 104.23,
+    [double]$MaxLatitude = 1.31
 )
 
 $ErrorActionPreference = "Stop"
@@ -34,7 +34,7 @@ $DefaultGpuPython = Join-Path $env:USERPROFILE "ml\Scripts\python.exe"
 if ((-not $env:ESPADA_GPU_PYTHON) -and (Test-Path -LiteralPath $DefaultGpuPython)) {
     $env:ESPADA_GPU_PYTHON = $DefaultGpuPython
 }
-$Url = "http://127.0.0.1:$Port/operator/live_operations/index.html"
+$Url = "http://127.0.0.1:$Port/operator/live_command/index.html"
 $HealthUrl = "http://127.0.0.1:$Port/api/live/health"
 $Ready = $false
 try {
@@ -84,6 +84,7 @@ if (-not $Ready) {
 Write-Host "ESPADA LIVE OPERATIONS READY" -ForegroundColor Green
 Write-Host $Url -ForegroundColor Yellow
 Write-Host "Only provider-supplied objects are rendered. Empty feeds remain empty." -ForegroundColor Cyan
+Write-Host "Live watch and incident evidence remain on separate timelines." -ForegroundColor Cyan
 if (-not $env:AISSTREAM_API_KEY) {
     Write-Host "AISSTREAM_API_KEY is not loaded; the vessel layer will correctly show NOT CONFIGURED." -ForegroundColor Yellow
 }

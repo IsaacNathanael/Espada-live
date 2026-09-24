@@ -5,7 +5,12 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 
-from espada.attribution import _interpolate_release_position, _symmetric_cloud_error_km, rank_candidates
+from espada.attribution import (
+    _interpolate_release_position,
+    _symmetric_cloud_error_km,
+    assess_nomination,
+    rank_candidates,
+)
 from espada.demo import run_demo
 from espada.synthetic_ais import generate_synthetic_ais
 from espada.verification import VerificationConfig, run_verification
@@ -25,6 +30,28 @@ def test_ranker_cannot_receive_truth_file() -> None:
     parameters = inspect.signature(rank_candidates).parameters
     assert "truth" not in parameters
     assert "truth_path" not in parameters
+
+
+def test_nomination_gate_refuses_an_ambiguous_tie() -> None:
+    candidates = [
+        {"mmsi": "111", "total_score": 0.82, "data_quality": 0.9, "forward_error_km": 2.0},
+        {"mmsi": "222", "total_score": 0.82, "data_quality": 0.9, "forward_error_km": 2.2},
+    ]
+    result = assess_nomination(candidates)
+    assert result["decision"] == "ABSTAIN_INSUFFICIENT_EVIDENCE"
+    assert "score_margin" in result["failed_gate_ids"]
+    assert result["near_tied_count"] == 2
+
+
+def test_nomination_gate_allows_only_a_limited_shortlist() -> None:
+    candidates = [
+        {"mmsi": "111", "total_score": 0.82, "data_quality": 0.9, "forward_error_km": 2.0},
+        {"mmsi": "222", "total_score": 0.65, "data_quality": 0.8, "forward_error_km": 3.0},
+    ]
+    result = assess_nomination(candidates)
+    assert result["decision"] == "LIMITED_SHORTLIST"
+    assert result["failed_gate_ids"] == []
+    assert "not proof" in result["claim_boundary"].lower()
 
 
 def test_shape_error_distinguishes_matching_and_displaced_clouds() -> None:

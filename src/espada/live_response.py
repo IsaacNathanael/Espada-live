@@ -120,6 +120,13 @@ def build_live_response_package(
     tied_at_top = sum(
         1 for candidate in candidates if abs(float(candidate.get("total_score") or 0.0) - top_score) < 1e-9
     )
+    nomination = dict(attribution.get("nomination_assessment") or {})
+    near_tied_count = int(nomination.get("near_tied_count") or tied_at_top)
+    score_margin = float(
+        nomination.get("score_margin")
+        if nomination.get("score_margin") is not None
+        else attribution.get("score_margin") or 0.0
+    )
     decision = str(attribution.get("decision") or "ABSTAIN_INSUFFICIENT_EVIDENCE")
     abstain = decision.startswith("ABSTAIN")
     integrity_status = "VERIFIED" if not missing_required else "INCOMPLETE"
@@ -131,9 +138,9 @@ def build_live_response_package(
         else "ANALYST_SHORTLIST_READY"
     )
     permitted_action = "PRESERVE AND SEEK MORE EVIDENCE" if abstain else "HUMAN REVIEW ONLY"
-    rationale = (
-        f"{tied_at_top} candidates share the highest comparative score and the lead is "
-        f"{float(attribution.get('score_margin') or 0.0) * 100:.1f} points. No vessel is nominated."
+    rationale = str(nomination.get("rationale") or "").strip() or (
+        f"{near_tied_count} candidates sit within the ambiguity band and the lead is "
+        f"{score_margin * 100:.1f} points. No vessel is nominated."
         if abstain
         else "The minimum shortlist gates passed. Independent corroboration remains mandatory."
     )
@@ -171,8 +178,10 @@ def build_live_response_package(
         "rationale": rationale,
         "candidate_count": int(attribution.get("candidate_count") or len(candidates)),
         "top_candidate": top or None,
-        "score_margin": float(attribution.get("score_margin") or 0.0),
+        "score_margin": score_margin,
         "tied_at_top": tied_at_top,
+        "near_tied_count": near_tied_count,
+        "nomination_assessment": nomination or None,
         "release_time_utc": attribution.get("release_time_utc"),
         "observation_time_utc": attribution.get("observation_time_utc"),
         "credible_radius_90_km": attribution.get("credible_radius_90_km"),
@@ -204,6 +213,7 @@ def build_live_response_package(
             "estimated_origin": attribution.get("estimated_origin"),
             "credible_radius_90_km": attribution.get("credible_radius_90_km"),
             "candidates": candidates,
+            "nomination_assessment": nomination or None,
         },
     }
 

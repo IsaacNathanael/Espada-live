@@ -15,12 +15,21 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from shapely.geometry import MultiPoint, MultiPolygon, Polygon
+from scipy.spatial import cKDTree
+from shapely.geometry import MultiPoint, MultiPolygon, Point, Polygon
 
 from .coast import load_coast_mask
 from .environment import load_cache
-from .geo import Polygonal, local_xy_m, polygon_from_geojson, sample_polygon, write_polygon_geojson
+from .geo import (
+    Polygonal,
+    haversine_km,
+    local_xy_m,
+    polygon_from_geojson,
+    sample_polygon,
+    write_polygon_geojson,
+)
 from .models import Forcing
+from .physics import advect_diffuse_spatial_timeseries, advect_diffuse_timeseries
 from .spatial_current import load_spatial_current_grid
 from .verification import infer_origins_spatial_timeseries, infer_origins_timeseries
 
@@ -124,6 +133,35 @@ def write_slick_from_particles(
     return path
 
 
+def _forward_cloud_error_km(
+    replay_lon: np.ndarray,
+    replay_lat: np.ndarray,
+    observed_lon: np.ndarray,
+    observed_lat: np.ndarray,
+    reference_lon: float,
+    reference_lat: float,
+) -> float:
+    replay_x, replay_y = local_xy_m(
+        replay_lon, replay_lat, reference_lon, reference_lat
+    )
+    observed_x, observed_y = local_xy_m(
+        observed_lon, observed_lat, reference_lon, reference_lat
+    )
+    replay_xy = np.column_stack((replay_x, replay_y)) / 1_000.0
+    observed_xy = np.column_stack((observed_x, observed_y)) / 1_000.0
+    replay_tree = cKDTree(replay_xy)
+    observed_tree = cKDTree(observed_xy)
+    replay_to_observed = observed_tree.query(replay_xy, k=1)[0]
+    observed_to_replay = replay_tree.query(observed_xy, k=1)[0]
+    return float(
+        0.5
+        * (
+            np.quantile(replay_to_observed, 0.75)
+            + np.quantile(observed_to_replay, 0.75)
+        )
+    )
+
+
 def analyze_slick(
     slick_path: Path,
     environment_cache: Path,
@@ -185,10 +223,83 @@ def analyze_slick(
     estimated_lat = float(np.mean(origin_lat))
     x, y = local_xy_m(origin_lon, origin_lat, estimated_lon, estimated_lat)
     radial_km = np.hypot(x, y) / 1_000.0
+    replay_count = min(int(particles), int(origin_lon.size))
+    replay_indices = np.linspace(0, origin_lon.size - 1, replay_count, dtype=int)
+    replay_origin_lon = origin_lon[replay_indices]
+    replay_origin_lat = origin_lat[replay_indices]
+    if grid:
+        replay_lon, replay_lat = advect_diffuse_spatial_timeseries(
+            replay_origin_lon,
+            replay_origin_lat,
+            history["time_utc"].tolist(),
+            history["wind_east_ms"].to_numpy(dtype=float),
+            history["wind_north_ms"].to_numpy(dtype=float),
+            step_seconds,
+            grid,
+            np.random.default_rng(seed + 2),
+            windage=0.02,
+            diffusivity_m2s=12.0,
+            coast_mask=coast,
+        )
+    else:
+        replay_lon, replay_lat = advect_diffuse_timeseries(
+            replay_origin_lon,
+            replay_origin_lat,
+            history["current_east_ms"].to_numpy(dtype=float),
+            history["current_north_ms"].to_numpy(dtype=float),
+            history["wind_east_ms"].to_numpy(dtype=float),
+            history["wind_north_ms"].to_numpy(dtype=float),
+            step_seconds,
+            np.random.default_rng(seed + 2),
+            windage=0.02,
+            diffusivity_m2s=12.0,
+        )
+    finite_replay = np.isfinite(replay_lon) & np.isfinite(replay_lat)
+    if not finite_replay.any():
+        raise ValueError("Forward replay produced no finite particle endpoints")
+    replay_lon = replay_lon[finite_replay]
+    replay_lat = replay_lat[finite_replay]
+    observed_centroid_lon = float(observation.polygon.centroid.x)
+    observed_centroid_lat = float(observation.polygon.centroid.y)
+    replay_centroid_lon = float(np.mean(replay_lon))
+    replay_centroid_lat = float(np.mean(replay_lat))
+    replay_centroid_error_km = haversine_km(
+        replay_centroid_lon,
+        replay_centroid_lat,
+        observed_centroid_lon,
+        observed_centroid_lat,
+    )
+    replay_shape_error_km = _forward_cloud_error_km(
+        replay_lon,
+        replay_lat,
+        observed_lon,
+        observed_lat,
+        observed_centroid_lon,
+        observed_centroid_lat,
+    )
+    replay_x, replay_y = local_xy_m(
+        replay_lon,
+        replay_lat,
+        observed_centroid_lon,
+        observed_centroid_lat,
+    )
+    replay_radius_90_km = float(np.quantile(np.hypot(replay_x, replay_y) / 1_000.0, 0.90))
+    replay_inside_fraction = float(
+        np.mean(
+            [
+                observation.polygon.covers(Point(float(lon), float(lat)))
+                for lon, lat in zip(replay_lon, replay_lat)
+            ]
+        )
+    )
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(output_dir / "observed_particles.npz", lon=observed_lon, lat=observed_lat)
+    # Kept for the attribution API: this is the observed slick cloud used as its target.
     np.savez_compressed(output_dir / "forward_particles.npz", lon=observed_lon, lat=observed_lat)
+    np.savez_compressed(
+        output_dir / "forward_replay_particles.npz", lon=replay_lon, lat=replay_lat
+    )
     np.savez_compressed(output_dir / "reverse_endpoints.npz", lon=origin_lon, lat=origin_lat)
     forcing_history = history.copy()
     forcing_history["time_utc"] = forcing_history["time_utc"].dt.strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -203,8 +314,8 @@ def analyze_slick(
         },
     )
 
-    fig, (slick_axis, origin_axis) = plt.subplots(
-        1, 2, figsize=(12, 5.4), constrained_layout=True
+    fig, (slick_axis, origin_axis, replay_axis) = plt.subplots(
+        1, 3, figsize=(16, 5.4), constrained_layout=True
     )
     polygon_parts = (
         observation.polygon.geoms
@@ -222,7 +333,35 @@ def analyze_slick(
         [estimated_lon], [estimated_lat], marker="*", s=190, color="white", edgecolor="black"
     )
     origin_axis.set_title("Probable release zone")
-    for axis in (slick_axis, origin_axis):
+    for part in polygon_parts:
+        exterior = np.asarray(part.exterior.coords)
+        replay_axis.fill(
+            exterior[:, 0],
+            exterior[:, 1],
+            color="#087F7B",
+            alpha=0.20,
+            label="Observed slick",
+        )
+    replay_axis.scatter(
+        replay_lon,
+        replay_lat,
+        s=3,
+        alpha=0.22,
+        color="#315D87",
+        label="Forward replay",
+    )
+    replay_axis.scatter(
+        [replay_centroid_lon],
+        [replay_centroid_lat],
+        marker="X",
+        s=95,
+        color="#D79229",
+        edgecolor="black",
+        label="Replay centroid",
+    )
+    replay_axis.set_title("Forward closure check")
+    replay_axis.legend(fontsize=8)
+    for axis in (slick_axis, origin_axis, replay_axis):
         axis.set_xlabel("Longitude")
         axis.set_ylabel("Latitude")
         axis.grid(alpha=0.16)
@@ -238,12 +377,32 @@ def analyze_slick(
     )
     radius_50 = float(np.quantile(radial_km, 0.50))
     radius_90 = float(np.quantile(radial_km, 0.90))
+    forward_closure = {
+        "status": "COMPUTED",
+        "method": "posterior reverse endpoints propagated forward through the recorded forcing",
+        "particles_seeded": replay_count,
+        "particles_retained": int(replay_lon.size),
+        "finite_fraction": float(replay_lon.size / max(replay_count, 1)),
+        "centroid": {
+            "longitude": replay_centroid_lon,
+            "latitude": replay_centroid_lat,
+        },
+        "centroid_error_km": replay_centroid_error_km,
+        "cloud_shape_error_km": replay_shape_error_km,
+        "radius_90_km_from_observed_centroid": replay_radius_90_km,
+        "fraction_inside_observed_polygon": replay_inside_fraction,
+        "interpretation": (
+            "Forward closure measures internal model consistency against the approved slick; "
+            "it is not external accuracy or proof of a discharge source."
+        ),
+    }
     release_estimate = {
         "release_time_utc": release_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "observation_time_utc": observation.observation_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "estimated_origin": {"longitude": estimated_lon, "latitude": estimated_lat},
         "credible_radius_50_km": radius_50,
         "credible_radius_90_km": radius_90,
+        "forward_closure": forward_closure,
         "assumed_age_hours": age_hours,
         "believed_forcing": believed_forcing.to_dict(),
         "forcing_provenance": {
@@ -260,6 +419,24 @@ def analyze_slick(
     }
     (output_dir / "release_estimate.json").write_text(
         json.dumps(release_estimate, indent=2), encoding="utf-8"
+    )
+    (output_dir / "drift_validation.json").write_text(
+        json.dumps(
+            {
+                "status": "PASS",
+                "observation_time_utc": release_estimate["observation_time_utc"],
+                "release_time_utc": release_estimate["release_time_utc"],
+                "reverse_uncertainty": {
+                    "credible_radius_50_km": radius_50,
+                    "credible_radius_90_km": radius_90,
+                    "ensemble_endpoints": int(origin_lon.size),
+                },
+                "forward_closure": forward_closure,
+                "claim_boundary": forward_closure["interpretation"],
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
     )
     result = {
         "status": "PASS",
@@ -283,6 +460,7 @@ def analyze_slick(
         "estimated_origin": {"longitude": estimated_lon, "latitude": estimated_lat},
         "credible_radius_50_km": radius_50,
         "credible_radius_90_km": radius_90,
+        "forward_closure": forward_closure,
         "particles": particles,
         "ensemble_members": ensemble_members,
         "interpretation": "Processing PASS means the input contract and inference completed; it is not an accuracy score.",
@@ -303,9 +481,11 @@ def analyze_slick(
             "slick_normalized.geojson",
             "observed_particles.npz",
             "forward_particles.npz",
+            "forward_replay_particles.npz",
             "reverse_endpoints.npz",
             "forcing_history.csv",
             "release_estimate.json",
+            "drift_validation.json",
             "slick_reverse_analysis.png",
             "slick_analysis.json",
         ],

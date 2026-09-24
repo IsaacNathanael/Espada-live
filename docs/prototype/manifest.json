@@ -1,12 +1,16 @@
 ﻿{
     "status":  "PASS",
-    "generated_at_utc":  "2026-09-20T09:17:48Z",
+    "generated_at_utc":  "2026-09-24T18:16:04Z",
     "entrypoint":  "index.html",
+    "working_prototype":  "investigate.html",
+    "evidence_page":  "evidence.html",
+    "controlled_stress_lab":  "lab.html",
+    "judge_mode":  "judge.html",
     "classic_dashboard":  "dashboard.html",
     "dossier":  "evidence_dossier.html",
     "validation_scorecard":  "validation_scorecard.html",
     "real_world_validation":  "real_world_validation.html",
-    "operation":  "portable saved-evidence replay",
+    "operation":  "multi-page public evidence demonstration with portable saved-evidence replay",
     "requirements":  "modern browser only",
     "limitation":  "The packaged Run button replays validated saved evidence; fresh ranking requires the local Python engine."
 }

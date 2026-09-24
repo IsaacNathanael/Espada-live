@@ -10,6 +10,18 @@ from urllib.parse import urlsplit
 from .live_operations import LiveOperationsEngine, LiveRegion
 
 
+# The operational default is deliberately a compact offshore traffic sector rather
+# than the port/anchorage-dense Singapore harbour. Operators can still override it
+# from start_live_operations.ps1 for a specific incident or exercise.
+DEFAULT_LIVE_REGION = LiveRegion(
+    "East Singapore Offshore Watch",
+    104.02,
+    1.20,
+    104.23,
+    1.31,
+)
+
+
 class LiveOperationsHandler(SimpleHTTPRequestHandler):
     engine: LiveOperationsEngine
 
@@ -191,8 +203,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="ESPADA live operations server")
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--port", type=int, default=4180)
-    parser.add_argument("--name", default="Mumbai Offshore Watch")
-    parser.add_argument("--bbox", nargs=4, type=float, default=[70.8, 17.8, 73.0, 20.0])
+    parser.add_argument("--name", default=DEFAULT_LIVE_REGION.name)
+    parser.add_argument("--bbox", nargs=4, type=float, default=list(DEFAULT_LIVE_REGION.bbox))
     parser.add_argument("--ais-window-seconds", type=float, default=55.0)
     args = parser.parse_args(argv)
     root = args.root.resolve()

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
   <title>ESPADA Live Command</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=20260924-4">
 </head>
 <body>
   <header class="masthead">
@@ -40,7 +40,7 @@
     <a class="workflow-step active" href="#overview" aria-current="step"><span>01</span><b>Watch</b><small>Sources & coverage</small></a>
     <a class="workflow-step available" href="#detection-workbench"><span>02</span><b>Detect</b><small>Satellite review</small></a>
     <a class="workflow-step available" href="#reverse-drift"><span>03</span><b>Reconstruct</b><small>Reverse drift</small></a>
-    <a class="workflow-step available" href="#candidate-attribution"><span>04</span><b>Attribute</b><small>Candidate ranking</small></a>
+    <a class="workflow-step available" href="#ais-filter"><span>04</span><b>Correlate</b><small>Filter + rank AIS</small></a>
     <a class="workflow-step available" href="#respond-workspace"><span>05</span><b>Respond</b><small>Evidence & impact</small></a>
     <a class="workflow-step available" href="#case-register"><span>06</span><b>Preserve</b><small>Case register</small></a>
     <a class="workflow-step available" href="#evidence-planner"><span>07</span><b>Resolve</b><small>Evidence retasking</small></a>
@@ -54,9 +54,48 @@
       <div>
         <p class="kicker">LIVE EVIDENCE DESK · COMPONENT 01</p>
         <h1>Know what the system can actually see.</h1>
-        <p class="lede">Every source is timestamped and labelled by evidence type before it reaches the map or attribution engine.</p>
+        <p class="lede">Live maritime evidence. Auditable attribution.</p>
       </div>
       <div class="briefing-actions">
+        <div class="info-actions" aria-label="Product information">
+          <details class="info-menu" name="espada-field-guide">
+            <summary class="info-button"><span aria-hidden="true">i</span> How it works</summary>
+            <div class="info-popover">
+              <p class="info-overline">ESPADA FIELD GUIDE</p>
+              <h2>From detection to defensible evidence</h2>
+              <div class="info-step"><span>01</span><div><b>Watch</b><p>Receive AIS positions, satellite acquisitions and environmental fields.</p></div></div>
+              <div class="info-step"><span>02</span><div><b>Inspect</b><p>Analyse real SAR pixels and retain only a physically plausible, human-reviewed slick candidate.</p></div></div>
+              <div class="info-step"><span>03</span><div><b>Reconstruct</b><p>Propagate the approved slick backward through date-matched currents, wind and uncertainty.</p></div></div>
+              <div class="info-step"><span>04</span><div><b>Attribute and preserve</b><p>Compare incident-time vessel tracks, forward-check candidates and seal the evidence package.</p></div></div>
+            </div>
+          </details>
+          <details class="info-menu" name="espada-field-guide">
+            <summary class="info-button"><span aria-hidden="true">i</span> Evidence guide</summary>
+            <div class="info-popover">
+              <p class="info-overline">EVIDENCE GUIDE</p>
+              <h2>What each label means</h2>
+              <dl class="info-definitions">
+                <div><dt>Observed</dt><dd>Provider-supplied AIS positions or downloaded SAR pixels.</dd></div>
+                <div><dt>Catalogue</dt><dd>Satellite acquisition and coverage records—not proof of a slick.</dd></div>
+                <div><dt>Modelled</dt><dd>Ocean-current and wind fields used as environmental forcing.</dd></div>
+                <div><dt>Inferred</dt><dd>Slick candidates, probable origin zones and comparative vessel rankings produced by ESPADA.</dd></div>
+              </dl>
+            </div>
+          </details>
+          <details class="info-menu" name="espada-field-guide">
+            <summary class="info-button"><span aria-hidden="true">i</span> Safety</summary>
+            <div class="info-popover">
+              <p class="info-overline">CLAIM BOUNDARY</p>
+              <h2>What ESPADA will not claim</h2>
+              <ul class="info-safety-list">
+                <li><b>A dark SAR feature is a slick candidate</b><span>It is not automatic confirmation that the material is oil.</span></li>
+                <li><b>A vessel score is comparative evidence</b><span>It is not a probability of guilt or proof of discharge.</span></li>
+                <li><b>Missing evidence remains missing</b><span>Live mode does not replace failed or empty providers with synthetic data.</span></li>
+                <li><b>Human authority controls consequences</b><span>ESPADA can shortlist or abstain; it cannot accuse or authorize enforcement.</span></li>
+              </ul>
+            </div>
+          </details>
+        </div>
         <button class="refresh-button" id="refreshButton" type="button">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M18.5 9A7 7 0 0 0 6.8 6.8L4 9m16 6-2.8 2.2A7 7 0 0 1 5.5 15"/></svg>
           Request provider refresh
@@ -93,7 +132,6 @@
         <div>
           <p class="kicker">LIVE SEA MAP · COMPONENT 02</p>
           <h2 id="mapTitle">One map. Two honest timelines.</h2>
-          <p>The display separates present vessel reception from incident-time evidence. Nothing is moved, replayed or invented beyond provider records.</p>
         </div>
         <div class="timeline-switch" role="group" aria-label="Map timeline">
           <button class="timeline-button active" id="liveModeButton" type="button" aria-pressed="true">
@@ -113,12 +151,20 @@
         </div>
         <fieldset class="layer-controls" id="layerControls">
           <legend>VISIBLE LAYERS</legend>
-          <label><input type="checkbox" data-layer="vessels" checked><span>Vessels</span></label>
+          <label><input type="checkbox" data-layer="vessels" checked><span>Underway</span></label>
+          <label><input type="checkbox" data-layer="stationary"><span>Stationary</span></label>
           <label><input type="checkbox" data-layer="satellite" checked><span>Satellite</span></label>
           <label><input type="checkbox" data-layer="slick" checked><span>Approved slick</span></label>
           <label><input type="checkbox" data-layer="origin" checked><span>Origin estimate</span></label>
           <label><input type="checkbox" data-layer="environment" checked><span>Wind / current</span></label>
         </fieldset>
+      </div>
+
+      <div class="traffic-snapshot" id="trafficSnapshot" aria-label="Current AIS traffic snapshot">
+        <div><span>CURRENT VESSELS</span><b id="trafficCurrent">—</b></div>
+        <div><span>UNDERWAY</span><b id="trafficUnderway">—</b></div>
+        <div><span>STATIONARY</span><b id="trafficStationary">—</b></div>
+        <div><span>SNAPSHOT WINDOW</span><b id="trafficWindow">10 min</b></div>
       </div>
 
       <div class="map-layout">
@@ -153,7 +199,8 @@
       </div>
 
       <footer class="map-legend" aria-label="Map legend">
-        <span><i class="legend-vessel"></i>Received AIS vessel</span>
+        <span><i class="legend-vessel"></i>Underway AIS vessel</span>
+        <span><i class="legend-stationary"></i>Stationary / anchored</span>
         <span><i class="legend-satellite"></i>Sentinel-1 footprint</span>
         <span><i class="legend-slick"></i>Analyst-approved slick</span>
         <span><i class="legend-origin"></i>Inferred 90% origin zone</span>
@@ -167,7 +214,6 @@
         <div>
           <p class="kicker">SAR DETECTION WORKBENCH · COMPONENT 03</p>
           <h2 id="detectionTitle">Inspect the pixels before trusting the polygon.</h2>
-          <p>Every candidate moves through model inference, a physical plausibility screen and a recorded human decision.</p>
         </div>
         <div class="detection-status" id="detectionStatus" data-state="waiting">
           <span>CURRENT GATE</span><b>WAITING FOR SNAPSHOT</b><small>No scene state received</small>
@@ -210,8 +256,10 @@
           <footer class="image-provenance">
             <div><span>SCENE</span><b id="sarSceneId">—</b></div>
             <div><span>ACQUIRED</span><b id="sarAcquired">—</b></div>
-            <div><span>POLARISATION</span><b id="sarPolarisation">—</b></div>
-            <div><span>FOOTPRINT</span><b id="sarFootprint">—</b></div>
+            <div><span>INPUT</span><b id="sarPolarisation">—</b></div>
+            <div><span>ORBIT / COVERAGE</span><b id="sarFootprint">—</b></div>
+            <div><span>MODEL / THRESHOLD</span><b id="sarModel">—</b></div>
+            <div><span>EVIDENCE INTEGRITY</span><b id="sarIntegrity">NOT PROCESSED</b></div>
           </footer>
         </div>
 
@@ -260,20 +308,34 @@
     <section class="drift-section" id="reverse-drift" aria-labelledby="driftTitle">
       <header class="drift-header">
         <div>
-          <p class="kicker">REVERSE-DRIFT RECONSTRUCTION · COMPONENT 04</p>
+          <p class="kicker">REVERSE + FORWARD DRIFT · COMPONENT 05</p>
           <h2 id="driftTitle">Trace uncertainty backward—not blame.</h2>
-          <p>The approved slick is propagated backward through date-matched currents and wind to estimate a release distribution, not a single certain point.</p>
         </div>
         <div class="drift-status" id="driftStatus" data-state="waiting" role="status" aria-live="polite">
           <span>RECONSTRUCTION</span><b>WAITING FOR APPROVAL</b><small>Human-reviewed slick required</small>
         </div>
       </header>
 
+      <section class="incident-contract" aria-labelledby="incidentContractTitle">
+        <div class="incident-contract-heading">
+          <div><span>INCIDENT HANDOFF · COMPONENT 04</span><h3 id="incidentContractTitle">Incident accepted for reconstruction</h3></div>
+          <div class="incident-seal" id="incidentSeal" data-state="waiting"><i></i><b>NOT SEALED</b></div>
+        </div>
+        <dl>
+          <div><dt>Satellite observation</dt><dd id="handoffObservation">—</dd></div>
+          <div><dt>Assumed slick age</dt><dd id="handoffAge">—</dd></div>
+          <div><dt>Estimated release</dt><dd id="handoffRelease">—</dd></div>
+          <div><dt>Slick geometry</dt><dd id="handoffGeometry">—</dd></div>
+        </dl>
+        <a id="handoffRecordLink" href="#" target="_blank" rel="noopener" hidden>Open sealed record ↗</a>
+      </section>
+
       <div class="drift-toolbar">
-        <div class="drift-modes" role="group" aria-label="Reverse-drift evidence view">
+        <div class="drift-modes" role="group" aria-label="Drift evidence view">
           <button type="button" data-drift-view="observed" aria-pressed="false"><span>01</span> Observed slick</button>
           <button type="button" data-drift-view="origin" aria-pressed="false"><span>02</span> Release ensemble</button>
-          <button type="button" data-drift-view="comparison" class="active" aria-pressed="true"><span>03</span> Comparison</button>
+          <button type="button" data-drift-view="forward" aria-pressed="false"><span>03</span> Forward replay</button>
+          <button type="button" data-drift-view="comparison" class="active" aria-pressed="true"><span>04</span> Comparison</button>
         </div>
         <button type="button" class="build-drift-button" id="buildAttributionButton" disabled>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 7v5h-5M5 17v-5h5M17.5 9A7 7 0 0 0 7 7l-2 2m14 6-2 2a7 7 0 0 1-10.5-2"/></svg>
@@ -285,7 +347,7 @@
         <div class="drift-map-frame">
           <svg id="driftMap" viewBox="0 0 1040 650" role="img" aria-labelledby="driftMapTitle driftMapDescription">
             <title id="driftMapTitle">Reverse-drift reconstruction map</title>
-            <desc id="driftMapDescription">Approved slick observation compared with a Monte Carlo distribution of probable release endpoints.</desc>
+            <desc id="driftMapDescription">Approved slick observation compared with probable release endpoints and a forward replay closure check.</desc>
           </svg>
           <div class="drift-map-empty" id="driftMapEmpty">
             <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M49 17 35 31M15 47l14-14M40 13h13v13M24 51H11V38M8 31c7-4 13-4 20 0s13 4 28 0"/></svg>
@@ -296,6 +358,7 @@
           <div class="drift-legend" aria-label="Reconstruction legend">
             <span><i class="drift-legend-slick"></i>Approved slick</span>
             <span><i class="drift-legend-particle"></i>Release endpoint</span>
+            <span><i class="drift-legend-forward"></i>Forward replay</span>
             <span><i class="drift-legend-zone"></i>90% origin zone</span>
             <span><i class="drift-legend-centroid"></i>Estimated origin</span>
           </div>
@@ -316,6 +379,8 @@
             <div><span>90% credible radius</span><b id="driftRadius">—</b><small>uncertainty, not accuracy</small></div>
             <div><span>Estimated origin</span><b id="driftOrigin">—</b><small>ensemble centre</small></div>
             <div><span>Centroid displacement</span><b id="driftDisplacement">—</b><small>not a travelled path</small></div>
+            <div><span>Forward centroid closure</span><b id="driftForwardCentroid">—</b><small>internal consistency</small></div>
+            <div><span>Forward cloud error</span><b id="driftForwardShape">—</b><small>shape consistency</small></div>
           </section>
 
           <section class="forcing-record">
@@ -332,7 +397,7 @@
             <span id="driftDetailType">INFERENCE READOUT</span>
             <h3 id="driftDetailTitle">Select evidence on the map</h3>
             <p id="driftDetailCopy">Inspect the observed slick, ensemble cloud or estimated origin without confusing inference with observation.</p>
-            <div class="drift-boundary"><b>CLAIM BOUNDARY</b>The dots are probable release endpoints. The dashed connector shows centroid displacement; it is not a particle trajectory.</div>
+            <div class="drift-boundary"><b>CLAIM BOUNDARY</b>The dashed connector is centroid displacement, not a particle trajectory. Forward closure tests internal consistency; it is not external accuracy or proof of a discharge source.</div>
           </section>
         </aside>
       </div>
@@ -343,12 +408,77 @@
       </footer>
     </section>
 
+    <section class="ais-filter-section" id="ais-filter" aria-labelledby="aisFilterTitle">
+      <header class="ais-filter-header">
+        <div>
+          <p class="kicker">HISTORICAL AIS FILTER · COMPONENT 06</p>
+          <h2 id="aisFilterTitle">Remove traffic that could not be involved.</h2>
+        </div>
+        <div class="ais-filter-status" id="aisFilterStatus" data-state="waiting" role="status" aria-live="polite">
+          <span>RELEVANCE FILTER</span><b>WAITING FOR RECONSTRUCTION</b><small>Release time and origin area are required</small>
+        </div>
+      </header>
+
+      <div class="ais-filter-summary" aria-label="AIS filtering summary">
+        <div><span>RAW IDENTITIES</span><b id="aisFilterRaw">—</b><small>received in the evidence file</small></div>
+        <div><span>RELEASE-WINDOW OVERLAP</span><b id="aisFilterTime">—</b><small id="aisFilterWindow">incident-time gate</small></div>
+        <div><span>ORIGIN-AREA PASSAGE</span><b id="aisFilterOrigin">—</b><small id="aisFilterRadius">space gate</small></div>
+        <div class="retained-cell"><span>RETAINED FOR RANKING</span><b id="aisFilterRetained">—</b><small>relevance, not suspicion</small></div>
+      </div>
+
+      <div class="ais-filter-funnel" aria-label="AIS relevance filter sequence">
+        <div data-stage="raw"><span>01</span><b>Received traffic</b><em id="aisFunnelRaw">—</em></div>
+        <i aria-hidden="true">→</i>
+        <div data-stage="time"><span>02</span><b>Time overlap</b><em id="aisFunnelTime">—</em></div>
+        <i aria-hidden="true">→</i>
+        <div data-stage="space"><span>03</span><b>Origin passage</b><em id="aisFunnelOrigin">—</em></div>
+        <i aria-hidden="true">→</i>
+        <div data-stage="retain"><span>04</span><b>Review candidates</b><em id="aisFunnelRetained">—</em></div>
+      </div>
+
+      <div class="ais-filter-layout">
+        <section class="ais-filter-ledger" aria-labelledby="aisFilterLedgerTitle">
+          <header>
+            <div><span>INCIDENT TRAFFIC LEDGER</span><h3 id="aisFilterLedgerTitle">Why each track stayed or left</h3></div>
+            <div class="ais-filter-tabs" role="group" aria-label="AIS filter result">
+              <button type="button" class="active" data-ais-filter-view="retained" aria-pressed="true">Retained <b id="aisRetainedTabCount">—</b></button>
+              <button type="button" data-ais-filter-view="excluded" aria-pressed="false">Excluded <b id="aisExcludedTabCount">—</b></button>
+            </div>
+          </header>
+          <div class="ais-filter-table-wrap">
+            <table>
+              <thead><tr><th>Vessel identity</th><th>Closest to origin</th><th>Release offset</th><th>Motion</th><th>Track</th><th>Result</th></tr></thead>
+              <tbody id="aisFilterRows"><tr><td colspan="6">Waiting for incident-matched AIS.</td></tr></tbody>
+            </table>
+          </div>
+        </section>
+
+        <aside class="ais-filter-inspector" aria-live="polite">
+          <div class="ais-filter-identity">
+            <span id="aisFilterSelectedState">NO TRACK SELECTED</span>
+            <h3 id="aisFilterSelectedName">Filtering has not run</h3>
+            <p id="aisFilterSelectedMmsi">MMSI —</p>
+          </div>
+          <dl>
+            <div><dt>Closest report</dt><dd id="aisFilterClosestTime">—</dd></div>
+            <div><dt>Distance to origin</dt><dd id="aisFilterDistance">—</dd></div>
+            <div><dt>Release-time offset</dt><dd id="aisFilterOffset">—</dd></div>
+            <div><dt>Motion state</dt><dd id="aisFilterMotion">—</dd></div>
+            <div><dt>Direction check</dt><dd id="aisFilterDirection">—</dd></div>
+            <div><dt>Track continuity</dt><dd id="aisFilterContinuity">—</dd></div>
+          </dl>
+          <div class="ais-filter-verdict" id="aisFilterVerdict" data-state="waiting"><span>FILTER RESULT</span><b>NOT EVALUATED</b><p>A track must overlap the release window and pass through the conservative origin search area.</p></div>
+          <div class="ais-filter-safety"><b>DIRECTION IS CONTEXT</b><span>Course, speed and AIS gaps help an analyst interpret a retained track. They do not create suspicion or increase its score.</span></div>
+          <a id="aisFilterReportLink" href="#" target="_blank" rel="noopener" hidden>Open complete filter record ↗</a>
+        </aside>
+      </div>
+    </section>
+
     <section class="attribution-section" id="candidate-attribution" aria-labelledby="attributionTitle">
       <header class="attribution-header">
         <div>
-          <p class="kicker">CANDIDATE ATTRIBUTION · COMPONENT 05</p>
+          <p class="kicker">CANDIDATE ATTRIBUTION · COMPONENT 07</p>
           <h2 id="attributionTitle">Rank the evidence. Respect the refusal.</h2>
-          <p>Historical AIS tracks are compared with the release distribution and forward-replayed toward the observed slick. The system nominates no vessel unless every evidence gate passes.</p>
         </div>
         <div class="attribution-decision" id="attributionDecision" data-state="waiting" role="status" aria-live="polite">
           <span>OPERATIONAL DECISION</span><b>WAITING FOR RECONSTRUCTION</b><small>No candidate result available</small>
@@ -356,11 +486,16 @@
       </header>
 
       <div class="attribution-summary" aria-label="Attribution result summary">
-        <div><span>TRACKS COMPARED</span><b id="candidatePopulation">—</b><small>temporally matched AIS identities</small></div>
+        <div><span>TRACKS COMPARED</span><b id="candidatePopulation">—</b><small>passed Component 06 relevance gates</small></div>
         <div><span>HIGHEST SCORE</span><b id="highestCandidateScore">—</b><small>comparative, not probability</small></div>
         <div><span>LEAD OVER RUNNER-UP</span><b id="candidateScoreMargin">—</b><small>minimum nomination gate: 5.0 pts</small></div>
         <div class="decision-summary"><span>SAFE OUTPUT</span><b id="candidateSafeOutput">—</b><small id="candidateSafeReason">Evidence gate not evaluated</small></div>
       </div>
+
+      <details class="attribution-method">
+        <summary>How the ranking is calculated</summary>
+        <p><b>55%</b> release-zone space/time match · <b>40%</b> forward slick replay · <b>5%</b> AIS data quality. Interpolated positions are penalized. Direction and AIS silence add <b>0%</b>; both remain analyst context only.</p>
+      </details>
 
       <div class="attribution-layout">
         <div class="candidate-map-panel">
@@ -397,9 +532,12 @@
           </section>
 
           <dl class="candidate-facts">
+            <div><dt>Identity status</dt><dd id="candidateIdentityStatus">—</dd></div>
             <div><dt>Forward slick error</dt><dd id="candidateForwardError">—</dd></div>
             <div><dt>Release-time position</dt><dd id="candidatePositionType">—</dd></div>
             <div><dt>Best match time</dt><dd id="candidateMatchTime">—</dd></div>
+            <div><dt>Motion state</dt><dd id="candidateMotionState">—</dd></div>
+            <div><dt>Track direction</dt><dd id="candidateTrackDirection">—</dd></div>
             <div><dt>AIS silence test</dt><dd id="candidateSilence">—</dd></div>
           </dl>
 
@@ -421,12 +559,13 @@
         <aside class="nomination-gate" aria-labelledby="nominationGateTitle">
           <div class="aside-heading"><span>SAFETY LOGIC</span><h3 id="nominationGateTitle">Nomination gate</h3></div>
           <ol>
-            <li id="gateTopScore" data-state="waiting"><span>01</span><div><b>Top score ≥ 40%</b><small>Minimum comparative evidence</small></div><em>WAITING</em></li>
-            <li id="gateScoreMargin" data-state="waiting"><span>02</span><div><b>Lead ≥ 5 points</b><small>Candidate must separate from peers</small></div><em>WAITING</em></li>
-            <li id="gateTrackQuality" data-state="waiting"><span>03</span><div><b>Track quality ≥ 40%</b><small>Enough received AIS evidence</small></div><em>WAITING</em></li>
-            <li id="gateForwardError" data-state="waiting"><span>04</span><div><b>Forward error ≤ 8 km</b><small>Track must replay toward the slick</small></div><em>WAITING</em></li>
+            <li id="gateCandidatePopulation" data-state="waiting"><span>01</span><div><b>At least 2 tracks</b><small>Result must be comparative</small></div><em>WAITING</em></li>
+            <li id="gateTopScore" data-state="waiting"><span>02</span><div><b>Top score ≥ 40%</b><small>Minimum comparative evidence</small></div><em>WAITING</em></li>
+            <li id="gateScoreMargin" data-state="waiting"><span>03</span><div><b>Lead ≥ 5 points</b><small>Candidate must separate from peers</small></div><em>WAITING</em></li>
+            <li id="gateTrackQuality" data-state="waiting"><span>04</span><div><b>Track quality ≥ 40%</b><small>Enough received AIS evidence</small></div><em>WAITING</em></li>
+            <li id="gateForwardError" data-state="waiting"><span>05</span><div><b>Forward error ≤ 8 km</b><small>Track must replay toward the slick</small></div><em>WAITING</em></li>
           </ol>
-          <div class="gate-verdict" id="gateVerdict"><span>FINAL OUTPUT</span><b>NOT EVALUATED</b><p>All four conditions must pass before a limited shortlist is allowed.</p></div>
+          <div class="gate-verdict" id="gateVerdict"><span>FINAL OUTPUT</span><b>NOT EVALUATED</b><p>All five conditions must pass before a limited shortlist is allowed.</p></div>
           <div class="attribution-links"><a id="rankingChartLink" href="#" target="_blank" rel="noopener" hidden>Ranking diagnostic ↗</a><a id="attributionMapLink" href="#" target="_blank" rel="noopener" hidden>Forward-verification map ↗</a></div>
         </aside>
       </div>
@@ -437,9 +576,8 @@
     <section class="response-section" id="respond-workspace" aria-labelledby="responseTitle">
       <header class="response-header">
         <div>
-          <p class="kicker">RESPONSE & EVIDENCE DOSSIER · COMPONENT 06</p>
+          <p class="kicker">RESPONSE & EVIDENCE DOSSIER · COMPONENT 08</p>
           <h2 id="responseTitle">Package the evidence. Control the consequence.</h2>
-          <p>The final stage preserves every source, model result and human decision—then permits only the response supported by the evidence.</p>
         </div>
         <div class="response-status" id="responseStatus" data-state="waiting" role="status" aria-live="polite">
           <span>CASE RESPONSE</span><b>WAITING FOR ATTRIBUTION</b><small>No package is available</small>
@@ -515,9 +653,8 @@
     <section class="case-register-section" id="case-register" aria-labelledby="caseRegisterTitle">
       <header class="case-register-header">
         <div>
-          <p class="kicker">OPERATIONAL CASE REGISTER · COMPONENT 07</p>
+          <p class="kicker">OPERATIONAL CASE REGISTER · AUDIT WORKSPACE</p>
           <h2 id="caseRegisterTitle">Every run remains inspectable.</h2>
-          <p>The register discovers completed and incomplete cases from disk, exposes provenance conflicts, and can recompute every evidence hash before a dossier is trusted.</p>
         </div>
         <div class="register-status" id="registerStatus" data-state="waiting" role="status" aria-live="polite">
           <span>REGISTER STATE</span><b>LOADING CASES</b><small>Reading durable case records</small>
@@ -595,9 +732,8 @@
     <section class="planner-section" id="evidence-planner" aria-labelledby="plannerTitle">
       <header class="planner-header">
         <div>
-          <p class="kicker">EVIDENCE RETASKING DESK · COMPONENT 08</p>
+          <p class="kicker">EVIDENCE RETASKING DESK · FOLLOW-UP WORKSPACE</p>
           <h2 id="plannerTitle">Turn abstention into a precise evidence request.</h2>
-          <p>The planner reads the actual failed decision gate, incident window, origin zone and tied candidates. It drafts the smallest useful acquisition package without contacting any provider.</p>
         </div>
         <div class="planner-control">
           <div class="planner-status" id="plannerStatus" data-state="waiting" role="status" aria-live="polite">
@@ -660,9 +796,8 @@
     <section class="intake-section" id="evidence-intake" aria-labelledby="intakeTitle">
       <header class="intake-header">
         <div>
-          <p class="kicker">EVIDENCE RETURN INTAKE · COMPONENT 09</p>
+          <p class="kicker">EVIDENCE RETURN INTAKE · FOLLOW-UP WORKSPACE</p>
           <h2 id="intakeTitle">Admit new evidence—never overwrite the old case.</h2>
-          <p>Returned AIS, identity, imagery or operational records are hashed, checked against the original request and held outside attribution until an analyst admits them.</p>
         </div>
         <div class="intake-status" id="intakeStatus" data-state="waiting" role="status" aria-live="polite">
           <span>INTAKE STATE</span><b>WAITING FOR PLAN</b><small>Build an evidence request package first</small>
@@ -740,9 +875,8 @@
     <section class="reanalysis-section" id="controlled-reanalysis" aria-labelledby="reanalysisTitle">
       <header class="reanalysis-header">
         <div>
-          <p class="kicker">CONTROLLED REANALYSIS · COMPONENT 10</p>
+          <p class="kicker">CONTROLLED REANALYSIS · FOLLOW-UP WORKSPACE</p>
           <h2 id="reanalysisTitle">Re-run the evidence—not history.</h2>
-          <p>Admitted provider evidence enters the same frozen ranker in a new case version. The original result, evidence hashes and safety decision remain untouched for comparison.</p>
         </div>
         <div class="reanalysis-status" id="reanalysisStatus" data-state="waiting" role="status" aria-live="polite">
           <span>REANALYSIS STATE</span><b>NOT READY</b><small>Admit evidence that resolves the blocking gate</small>
@@ -814,9 +948,8 @@
     <section class="closure-section" id="decision-closure" aria-labelledby="closureTitle">
       <header class="closure-header">
         <div>
-          <p class="kicker">DECISION COMPARISON &amp; CLOSURE · COMPONENT 11</p>
+          <p class="kicker">DECISION COMPARISON &amp; CLOSURE · DECISION WORKSPACE</p>
           <h2 id="closureTitle">Close the workflow. Preserve the uncertainty.</h2>
-          <p>Every attribution version remains visible. An accountable analyst may keep the case open, close it as inconclusive or refer the package for authorized review—without converting a score into guilt.</p>
         </div>
         <div class="closure-status" id="closureStatus" data-state="waiting" role="status" aria-live="polite">
           <span>CASE DISPOSITION</span><b>NOT READY</b><small>Complete attribution before recording a disposition</small>
@@ -905,15 +1038,15 @@
         </header>
         <p class="provider" id="aisProvider">AIS provider not connected</p>
         <div class="metric-row">
-          <div><span>Cached positions</span><b id="aisPositions">—</b></div>
-          <div><span>Vessels received</span><b id="aisVessels">—</b></div>
+          <div><span>Current vessels</span><b id="aisPositions">—</b></div>
+          <div><span>Underway now</span><b id="aisVessels">—</b></div>
         </div>
         <dl class="source-details">
           <div><dt>Latest received position</dt><dd id="aisObservation">—</dd></div>
-          <div><dt>Last provider success</dt><dd id="aisSuccess">—</dd></div>
+          <div><dt>Active snapshot window</dt><dd id="aisSuccess">—</dd></div>
         </dl>
         <p class="source-message" id="aisMessage">Waiting for the first server snapshot.</p>
-        <footer>Tracks appear only after the provider supplies a valid position.</footer>
+        <footer>Only each vessel's latest in-bounds report survives the rolling live window.</footer>
       </article>
 
       <article class="source-card" id="sentinelCard" data-state="waiting">
@@ -980,10 +1113,10 @@
   </main>
 
   <footer class="page-footer">
-    <span>ESPADA · Reverse Drift Attribution</span>
+    <span>ESPADA · Reverse Drift Attribution · Investigative support only</span>
     <span id="pollState">Live API has not responded</span>
   </footer>
   <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
-  <script src="app.js"></script>
+  <script src="app.js?v=20260924-5"></script>
 </body>
 </html>

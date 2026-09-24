@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -35,6 +36,109 @@ REQUIRED_AIS_COLUMNS = {
     "latitude",
     "is_interpolated",
 }
+
+
+@dataclass(frozen=True)
+class NominationGateConfig:
+    """Frozen minimum evidence gates for a limited investigative shortlist."""
+
+    minimum_candidate_population: int = 2
+    minimum_top_score: float = 0.40
+    minimum_score_margin: float = 0.05
+    minimum_data_quality: float = 0.40
+    maximum_forward_error_km: float = 8.0
+    ambiguity_band: float = 0.02
+
+
+def assess_nomination(
+    candidates: list[dict], config: NominationGateConfig = NominationGateConfig()
+) -> dict[str, object]:
+    """Apply one explicit safety decision to a ranked candidate list.
+
+    A passing result is still only a limited shortlist for accountable human review.
+    It is never an accusation, guilt probability or identity verification.
+    """
+
+    top = candidates[0] if candidates else None
+    runner_score = float(candidates[1].get("total_score", 0.0)) if len(candidates) > 1 else 0.0
+    top_score = float(top.get("total_score", 0.0)) if top else 0.0
+    score_margin = top_score - runner_score if top else 0.0
+    data_quality = float(top.get("data_quality", 0.0)) if top else 0.0
+    forward_error = float(top.get("forward_error_km", float("inf"))) if top else float("inf")
+    near_tied_count = (
+        sum(
+            abs(float(candidate.get("total_score", 0.0)) - top_score)
+            <= config.ambiguity_band
+            for candidate in candidates
+        )
+        if top
+        else 0
+    )
+
+    gates = [
+        {
+            "id": "candidate_population",
+            "label": "Comparative population",
+            "passed": len(candidates) >= config.minimum_candidate_population,
+            "observed": len(candidates),
+            "requirement": f">= {config.minimum_candidate_population} incident-relevant tracks",
+        },
+        {
+            "id": "top_score",
+            "label": "Minimum evidence score",
+            "passed": top_score >= config.minimum_top_score,
+            "observed": top_score,
+            "requirement": f">= {config.minimum_top_score:.2f}",
+        },
+        {
+            "id": "score_margin",
+            "label": "Candidate separation",
+            "passed": score_margin >= config.minimum_score_margin,
+            "observed": score_margin,
+            "requirement": f">= {config.minimum_score_margin:.2f}",
+        },
+        {
+            "id": "track_quality",
+            "label": "AIS track quality",
+            "passed": data_quality >= config.minimum_data_quality,
+            "observed": data_quality,
+            "requirement": f">= {config.minimum_data_quality:.2f}",
+        },
+        {
+            "id": "forward_error",
+            "label": "Forward replay error",
+            "passed": forward_error <= config.maximum_forward_error_km,
+            "observed": forward_error if np.isfinite(forward_error) else None,
+            "requirement": f"<= {config.maximum_forward_error_km:.1f} km",
+        },
+    ]
+    failed = [str(gate["id"]) for gate in gates if not gate["passed"]]
+    passed = bool(candidates) and not failed
+    decision = "LIMITED_SHORTLIST" if passed else "ABSTAIN_INSUFFICIENT_EVIDENCE"
+    if passed:
+        rationale = (
+            "Every frozen minimum gate passed. Preserve the result as a limited investigative "
+            "shortlist requiring independent identity and discharge corroboration."
+        )
+    elif not candidates:
+        rationale = "No incident-relevant AIS track was available for comparison."
+    else:
+        labels = [str(gate["label"]) for gate in gates if not gate["passed"]]
+        rationale = "The system refused nomination because these gates failed: " + ", ".join(labels) + "."
+    return {
+        "decision": decision,
+        "passed": passed,
+        "score_margin": score_margin,
+        "near_tied_count": near_tied_count,
+        "ambiguity_band": config.ambiguity_band,
+        "failed_gate_ids": failed,
+        "gates": gates,
+        "rationale": rationale,
+        "claim_boundary": (
+            "A limited shortlist prioritizes analyst review. It is not proof of identity, "
+            "discharge, intent, liability or guilt."
+        ),
+    }
 
 
 def _interpolate_release_position(
@@ -122,6 +226,72 @@ def _symmetric_cloud_error_km(
     )
 
 
+def _bearing_degrees(lon1: float, lat1: float, lon2: float, lat2: float) -> float:
+    phi1 = np.radians(lat1)
+    phi2 = np.radians(lat2)
+    delta_lon = np.radians(lon2 - lon1)
+    y = np.sin(delta_lon) * np.cos(phi2)
+    x = np.cos(phi1) * np.sin(phi2) - np.sin(phi1) * np.cos(phi2) * np.cos(delta_lon)
+    return float((np.degrees(np.arctan2(y, x)) + 360.0) % 360.0)
+
+
+def _track_context(track: pd.DataFrame) -> dict[str, object]:
+    """Describe trajectory evidence without turning direction into suspicion."""
+
+    ordered = track.sort_values("timestamp_utc")
+    first = ordered.iloc[0]
+    last = ordered.iloc[-1]
+    span_hours = float(
+        (
+            pd.to_datetime(last["timestamp_utc"], utc=True)
+            - pd.to_datetime(first["timestamp_utc"], utc=True)
+        ).total_seconds()
+        / 3600.0
+    )
+    span_km = haversine_km(
+        float(first["longitude"]),
+        float(first["latitude"]),
+        float(last["longitude"]),
+        float(last["latitude"]),
+    )
+    implied_speed_knots = span_km / span_hours / 1.852 if span_hours > 0 else 0.0
+    bearing = (
+        _bearing_degrees(
+            float(first["longitude"]),
+            float(first["latitude"]),
+            float(last["longitude"]),
+            float(last["latitude"]),
+        )
+        if span_km >= 0.05
+        else None
+    )
+    motion_state = (
+        "stationary_or_anchored"
+        if implied_speed_knots < 0.8
+        else "underway"
+        if implied_speed_knots >= 2.0
+        else "slow_or_manoeuvring"
+    )
+    vessel_name = str(ordered["vessel_name"].iloc[0] or "UNKNOWN").strip()
+    identity_status = (
+        "mmsi_only_unverified"
+        if not vessel_name or vessel_name.upper() == "UNKNOWN"
+        else "provider_name_unverified"
+    )
+    return {
+        "motion_state": motion_state,
+        "track_bearing_deg": bearing,
+        "track_span_km": span_km,
+        "track_span_hours": span_hours,
+        "implied_speed_knots": implied_speed_knots,
+        "identity_status": identity_status,
+        "direction_use": "analyst_context_only",
+        "direction_interpretation": (
+            "Track direction is available for visual consistency review; it does not add suspicion."
+            if bearing is not None
+            else "The received positions do not support a reliable movement direction."
+        ),
+    }
 def _score_track(
     track: pd.DataFrame,
     release_time: datetime,
@@ -140,6 +310,7 @@ def _score_track(
     coast_mask: CoastMask | None = None,
 ) -> dict:
     observed_track = track
+    trajectory = _track_context(observed_track)
     scoring_track, interpolation_used, interpolation_gap_hours = _interpolate_release_position(
         observed_track, release_time
     )
@@ -309,6 +480,22 @@ def _score_track(
         ],
         "silence_interpretation": silence_report["interpretation"],
         "best_match_time_utc": timestamps.iloc[best_index].strftime("%Y-%m-%dT%H:%M:%SZ"),
+        **trajectory,
+        "score_components": {
+            "space_time_presence": {
+                "weight": 0.55,
+                "value": presence_score,
+            },
+            "forward_replay_consistency": {
+                "weight": 0.40,
+                "value": float(forward_combined[best_index]),
+            },
+            "ais_data_quality": {
+                "weight": 0.05,
+                "value": data_quality,
+            },
+            "bounded_interpolation_penalty": interpolation_penalty,
+        },
         "evidence": [
             "Space-time proximity to the inferred release distribution.",
             "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
@@ -323,6 +510,7 @@ def _score_track(
                 else []
             ),
             "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+            "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
             (
                 "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
                 if interpolation_used
@@ -457,15 +645,20 @@ def _plot_attribution(
 
 def _plot_ranking(path: Path, candidates: list[dict]) -> None:
     top = list(reversed(candidates[:5]))
-    names = [item["vessel_name"] for item in top]
+    names = [
+        item["vessel_name"]
+        if str(item.get("vessel_name", "")).strip().upper() not in {"", "UNKNOWN"}
+        else f"MMSI {item['mmsi']}"
+        for item in top
+    ]
     values = [100.0 * item["total_score"] for item in top]
     colors = ["#F39C12" if item["rank"] == 1 else "#2E86AB" for item in top]
     fig, ax = plt.subplots(figsize=(9, 5.5), constrained_layout=True)
     bars = ax.barh(names, values, color=colors)
     ax.bar_label(bars, fmt="%.1f%%", padding=5)
     ax.set_xlim(0, 105)
-    ax.set_xlabel("Candidate score")
-    ax.set_title("Ranked vessel candidates")
+    ax.set_xlabel("Comparative evidence score (not a probability)")
+    ax.set_title("Incident-relevant vessel ranking")
     ax.grid(axis="x", alpha=0.2)
     fig.savefig(path, dpi=180)
     plt.close(fig)
@@ -486,12 +679,23 @@ def write_attribution_outputs(
         release_estimate_path,
         forward_particles_path,
     )
+    nomination_assessment = assess_nomination(candidates)
     synthetic = bool(ais["source"].astype(str).str.startswith("synthetic").all()) if "source" in ais else False
     result = {
         "status": "PASS",
         "candidate_count": len(candidates),
         "top_candidate": candidates[0],
         "candidates": candidates,
+        "nomination_assessment": nomination_assessment,
+        "decision": nomination_assessment["decision"],
+        "score_definition": {
+            "space_time_presence_weight": 0.55,
+            "forward_replay_consistency_weight": 0.40,
+            "ais_data_quality_weight": 0.05,
+            "bounded_interpolation_penalty": 0.015,
+            "direction_contribution": 0.0,
+            "ais_silence_contribution": 0.0,
+        },
         "silence_analysis": silence,
         "warning": (
             "Synthetic validation output; candidate ranking is not a finding of guilt."

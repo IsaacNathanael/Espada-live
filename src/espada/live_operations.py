@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import subprocess
@@ -17,7 +18,8 @@ import pandas as pd
 from shapely.geometry import MultiPoint, mapping
 
 from .ais import normalize_ais_csv
-from .attribution import write_attribution_outputs
+from .ais_filter import filter_ais_candidates
+from .attribution import assess_nomination, write_attribution_outputs
 from .coast_download import clip_land_archive
 from .copernicus import FORECAST_DATASET_ID, normalize_currents
 from .environment import load_environment, sync_historical_wind
@@ -57,6 +59,40 @@ def _parse_utc(value: object) -> datetime | None:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=UTC)
     return parsed.astimezone(UTC)
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _sha256_json(payload: object) -> str:
+    """Return a stable digest for a JSON-compatible evidence record."""
+    canonical = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        default=str,
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def _analysis_operator_message(error: Exception) -> str:
+    """Return a concise operator message while keeping technical detail on disk."""
+    detail = str(error).lower()
+    if "oauth" in detail or "cdse_client" in detail or "credential" in detail:
+        return "Copernicus Data Space credentials are unavailable or were rejected. Check the local .env and retry."
+    if "gpu python" in detail or "pytorch" in detail or "application control" in detail:
+        return "The calibrated SAR model runtime is unavailable on this computer. Check the approved ML environment and retry."
+    if "download" in detail or "http" in detail or "timed out" in detail or "network" in detail:
+        return "The calibrated Sentinel-1 crop could not be retrieved. The selected scene was preserved; retry when the provider is reachable."
+    if "identity mismatch" in detail or "provenance" in detail:
+        return "Scene identity verification failed. Processing stopped before the result could enter the evidence chain."
+    return "Satellite analysis stopped safely. Technical details were preserved in the run record."
 
 
 def freshness_label(
@@ -114,6 +150,13 @@ class LiveRegion:
         return {"name": self.name, "bbox": list(self.bbox), "center": list(self.center)}
 
 
+def _region_cache_tag(region: LiveRegion) -> str:
+    """Return a stable, filesystem-safe identity for a live watch boundary."""
+    return "_".join(
+        f"{value:.3f}".replace("-", "m").replace(".", "p") for value in region.bbox
+    )
+
+
 class LiveOperationsEngine:
     """Collect real provider data and expose a single auditable live snapshot.
 
@@ -129,16 +172,23 @@ class LiveOperationsEngine:
         environment_interval_seconds: float = 600.0,
         sentinel_interval_seconds: float = 900.0,
         ais_capture_seconds: float = 55.0,
+        ais_snapshot_minutes: float = 10.0,
     ) -> None:
         self.project_root = Path(project_root).resolve()
         self.region = region
         self.environment_interval_seconds = max(30.0, float(environment_interval_seconds))
         self.sentinel_interval_seconds = max(60.0, float(sentinel_interval_seconds))
         self.ais_capture_seconds = max(5.0, float(ais_capture_seconds))
+        self.ais_snapshot_minutes = max(2.0, float(ais_snapshot_minutes))
         self.output_root = self.project_root / "out" / "live_operations"
         self.output_root.mkdir(parents=True, exist_ok=True)
-        self.environment_cache = self.project_root / "data" / "cache" / "live_environment.json"
-        self.ais_cache = self.project_root / "data" / "cache" / "live_operations_ais.csv"
+        region_cache_tag = _region_cache_tag(region)
+        self.environment_cache = (
+            self.project_root / "data" / "cache" / f"live_environment_{region_cache_tag}.json"
+        )
+        self.ais_cache = (
+            self.project_root / "data" / "cache" / f"live_operations_ais_{region_cache_tag}.csv"
+        )
         self.state_path = self.output_root / "source_state.json"
         self.coast_path = self.output_root / "coast" / "land_mask.geojson"
         self._lock = threading.RLock()
@@ -260,6 +310,29 @@ class LiveOperationsEngine:
                 }
             self._state[section] = saved
 
+        restored_analysis = self._state.get("analysis", {})
+        restored_review = self._state.get("review", {})
+        if (
+            restored_analysis.get("status") == "REVIEW_REQUIRED"
+            and restored_review.get("status") == "NOT_REVIEWED"
+        ):
+            physics = restored_analysis.get("physics_screen") or {}
+            physics_passed = (
+                physics.get("status") == "PLAUSIBLE_DARK_SIGNATURE"
+                and physics.get("contrast_gate_passed") is True
+                and physics.get("wind_gate_passed") is True
+            )
+            restored_review["message"] = (
+                "Model and physics gates passed. Inspect the pixels, set the release-age assumption, then approve or reject the candidate."
+                if physics_passed
+                else "The candidate did not pass every physics gate. Approval is locked; reject it or preserve it for further evidence."
+            )
+        elif restored_analysis.get("status") == "NO_DETECTION":
+            self._state["review"] = {
+                "status": "NOT_REQUIRED",
+                "message": "No candidate exceeded the frozen threshold; no analyst decision is required.",
+            }
+
     def _recover_completed_case(self) -> None:
         """Recover the latest completed on-disk case when session state was reset.
 
@@ -285,8 +358,10 @@ class LiveOperationsEngine:
             approved_slick = run_root / "review" / "approved_slick.geojson"
             release_path = run_root / "attribution" / "drift" / "release_estimate.json"
             endpoints_path = run_root / "attribution" / "drift" / "reverse_endpoints.npz"
+            forward_replay_path = run_root / "attribution" / "drift" / "forward_replay_particles.npz"
             origin_zone = run_root / "attribution" / "origin_zone.geojson"
             tracks_path = run_root / "attribution" / "candidate_tracks.geojson"
+            filter_report_path = run_root / "attribution" / "ais" / "ais_filter_report.json"
             required = (
                 input_status_path,
                 result_path,
@@ -306,9 +381,19 @@ class LiveOperationsEngine:
                 if len(crop) != 4 or crop[2] < region[0] or crop[0] > region[2] or crop[3] < region[1] or crop[1] > region[3]:
                     continue
                 result = json.loads(result_path.read_text(encoding="utf-8"))
+                input_acquisition = str(input_status.get("acquisition_time_utc") or "")
+                result_acquisition = str(result.get("observation_time_utc") or "")
+                if not input_acquisition or input_acquisition != result_acquisition:
+                    # Never recover a legacy run whose folder/input/result identities disagree.
+                    continue
                 physics = json.loads(physics_path.read_text(encoding="utf-8"))
                 release = json.loads(release_path.read_text(encoding="utf-8"))
                 ranking = json.loads(ranking_path.read_text(encoding="utf-8"))
+                filter_report = (
+                    json.loads(filter_report_path.read_text(encoding="utf-8"))
+                    if filter_report_path.exists()
+                    else None
+                )
                 ranked = list(ranking.get("candidates", []))
                 if not ranked:
                     continue
@@ -321,19 +406,26 @@ class LiveOperationsEngine:
                 origin_particles = [
                     [float(longitude[index]), float(latitude[index])] for index in sample_indices
                 ]
+                forward_particles: list[list[float]] = []
+                if forward_replay_path.exists():
+                    with np.load(forward_replay_path) as replay:
+                        replay_lon = np.asarray(replay["lon"], dtype=float)
+                        replay_lat = np.asarray(replay["lat"], dtype=float)
+                    if replay_lon.size and replay_lon.shape == replay_lat.shape:
+                        replay_indices = np.linspace(
+                            0, replay_lon.size - 1, min(320, replay_lon.size), dtype=int
+                        )
+                        forward_particles = [
+                            [float(replay_lon[index]), float(replay_lat[index])]
+                            for index in replay_indices
+                        ]
                 slick = load_slick(approved_slick)
             except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
                 continue
             top = ranked[0]
-            runner_score = float(ranked[1]["total_score"]) if len(ranked) > 1 else 0.0
-            margin = float(top["total_score"]) - runner_score
-            limited = (
-                len(ranked) >= 2
-                and float(top["total_score"]) >= 0.40
-                and margin >= 0.05
-                and float(top.get("data_quality", 0.0)) >= 0.40
-                and float(top.get("forward_error_km", 999.0)) <= 8.0
-            )
+            nomination = ranking.get("nomination_assessment") or assess_nomination(ranked)
+            margin = float(nomination.get("score_margin", 0.0))
+            decision = str(nomination.get("decision", "ABSTAIN_INSUFFICIENT_EVIDENCE"))
             scene_id = str(input_status.get("scene_id") or run_root.name)
             acquisition = str(input_status.get("acquisition_time_utc") or release.get("observation_time_utc"))
             self._state["analysis"] = {
@@ -351,6 +443,16 @@ class LiveOperationsEngine:
                 "result_url": self._public_url(result_path),
                 "slick_geojson_url": self._public_url(run_root / "segmentation" / "slick_candidate.geojson"),
                 "physics_screen": physics,
+                "input_provenance": {
+                    "provider": input_status.get("provider"),
+                    "polarization": input_status.get("polarization"),
+                    "measurement": input_status.get("measurement"),
+                    "orthorectified": input_status.get("orthorectified"),
+                    "backscatter_coefficient": input_status.get("backscatter_coefficient"),
+                    "downloaded_at_utc": input_status.get("downloaded_at_utc"),
+                },
+                "model_provenance": result.get("segmentation", {}),
+                "provenance_verified": True,
                 "message": "Recovered a completed, analyst-reviewed SAR case from durable evidence artifacts.",
             }
             self._state["review"] = {
@@ -364,23 +466,65 @@ class LiveOperationsEngine:
             forcing = release.get("forcing_provenance", {})
             self._state["attribution"] = {
                 "status": "COMPLETE",
+                "drift_status": "COMPLETE",
                 "message": "Recovered the completed reconstruction and ranking from durable evidence artifacts.",
                 "observation_time_utc": acquisition,
                 "release_time_utc": release.get("release_time_utc"),
                 "assumed_age_hours": float(release.get("assumed_age_hours", 19.0)),
                 "origin_zone_url": self._public_url(origin_zone),
                 "origin_particles": origin_particles,
+                "forward_replay_particles": forward_particles,
                 "observed_centroid": [float(slick.polygon.centroid.x), float(slick.polygon.centroid.y)],
                 "estimated_origin": release.get("estimated_origin"),
                 "credible_radius_90_km": float(release.get("credible_radius_90_km", 0.0)),
+                "forward_closure": release.get("forward_closure", {}),
                 "reverse_analysis_url": self._public_url(run_root / "attribution" / "drift" / "slick_reverse_analysis.png"),
+                "drift_validation_url": (
+                    self._public_url(run_root / "attribution" / "drift" / "drift_validation.json")
+                    if (run_root / "attribution" / "drift" / "drift_validation.json").exists()
+                    else None
+                ),
                 "forcing_source": forcing.get("source", "Recorded date-matched forcing"),
                 "ais_source": "Global Fishing Watch delayed AIS vessel presence",
-                "decision": "LIMITED_SHORTLIST" if limited else "ABSTAIN_INSUFFICIENT_EVIDENCE",
+                "ais_filter": (
+                    {
+                        **{
+                            key: filter_report.get(key)
+                            for key in (
+                                "status",
+                                "method",
+                                "release_time_utc",
+                                "observation_time_utc",
+                                "search_radius_km",
+                                "release_window_hours",
+                                "raw_vessels",
+                                "raw_positions",
+                                "release_window_vessels",
+                                "origin_zone_vessels",
+                                "retained_vessels",
+                                "retained_positions",
+                                "excluded_vessels",
+                                "hard_gates",
+                                "context_only",
+                                "claim_boundary",
+                            )
+                        },
+                        "retained": list(filter_report.get("retained", []))[:50],
+                        "excluded": sorted(
+                            list(filter_report.get("excluded", [])),
+                            key=lambda item: float(item.get("closest_release_distance_km", 1e9)),
+                        )[:80],
+                        "report_url": self._public_url(filter_report_path),
+                    }
+                    if filter_report
+                    else None
+                ),
+                "decision": decision,
                 "candidate_count": len(ranked),
                 "candidates": ranked[:12],
                 "top_candidate": top,
                 "score_margin": margin,
+                "nomination_assessment": nomination,
                 "candidate_tracks_url": self._public_url(tracks_path),
                 "ranking_chart_url": self._public_url(run_root / "attribution" / "ranking" / "candidate_ranking.png"),
                 "attribution_map_url": self._public_url(run_root / "attribution" / "ranking" / "attribution_map.png"),
@@ -678,11 +822,33 @@ class LiveOperationsEngine:
                 if requested_scene is None:
                     raise RuntimeError("The selected Sentinel-1 scene is not in the current catalogue.")
             selected = requested_scene or catalog_payload.get("recommended_scene") or {}
+            if not selected or not selected.get("id"):
+                raise RuntimeError("The current Sentinel-1 catalogue contains no usable scene.")
+            selected_scene = {
+                key: selected.get(key)
+                for key in (
+                    "id",
+                    "acquisition_time_utc",
+                    "platform",
+                    "product_type",
+                    "instrument_mode",
+                    "orbit_state",
+                    "relative_orbit",
+                    "polarizations",
+                    "has_vv",
+                    "aoi_overlap_fraction",
+                    "target_point_covered",
+                )
+            }
             self._state["analysis"] = {
                 "status": "QUEUED",
                 "message": "Selected Sentinel-1 scene queued for calibrated download and V6 inference.",
                 "queued_at_utc": _format_utc(_utc_now()),
                 "requested_scene_id": selected.get("id"),
+                "scene_id": selected.get("id"),
+                "acquisition_time_utc": selected.get("acquisition_time_utc"),
+                "selected_scene": selected_scene,
+                "catalog_sha256": _sha256_file(catalog),
             }
             self._state["review"] = {
                 "status": "NOT_REVIEWED",
@@ -738,6 +904,96 @@ class LiveOperationsEngine:
             self._state[section] = payload
         self._write_state()
 
+    @staticmethod
+    def _handoff_artifact_paths(run_root: Path) -> dict[str, Path]:
+        return {
+            "scene_manifest": run_root / "input" / "selected_scene_manifest.json",
+            "satellite_input_record": run_root / "input" / "sentinel1_subset_status.json",
+            "model_result": run_root / "segmentation" / "sar_result.json",
+            "physics_screen": run_root / "segmentation" / "physics_screen.json",
+            "approved_slick": run_root / "review" / "approved_slick.geojson",
+        }
+
+    def _seal_incident_handoff(
+        self,
+        *,
+        run_root: Path,
+        scene_id: str,
+        acquisition_time_utc: str,
+        reviewed_at_utc: str,
+        assumed_age_hours: float,
+    ) -> dict[str, object]:
+        observation = _parse_utc(acquisition_time_utc)
+        if observation is None:
+            raise RuntimeError("The verified satellite acquisition time is missing or invalid.")
+        release_time = observation - timedelta(hours=float(assumed_age_hours))
+        artifacts: dict[str, dict[str, str]] = {}
+        for name, path in self._handoff_artifact_paths(run_root).items():
+            if not path.exists():
+                raise FileNotFoundError(
+                    f"Incident handoff cannot be sealed because {name.replace('_', ' ')} is missing."
+                )
+            artifacts[name] = {
+                "relative_path": path.resolve().relative_to(self.project_root).as_posix(),
+                "sha256": _sha256_file(path),
+            }
+        record: dict[str, object] = {
+            "status": "SEALED",
+            "schema": "espada.incident-handoff.v1",
+            "case_id": run_root.name,
+            "scene_id": scene_id,
+            "watch_region": self.region.to_dict(),
+            "observation_time_utc": _format_utc(observation),
+            "assumed_age_hours": float(assumed_age_hours),
+            "estimated_release_time_utc": _format_utc(release_time),
+            "analyst_reviewed_at_utc": reviewed_at_utc,
+            "sealed_at_utc": _format_utc(_utc_now()),
+            "artifacts": artifacts,
+            "claim_boundary": (
+                "The analyst accepted an oil-like SAR candidate for reconstruction. "
+                "This is not proof of pollutant identity, vessel responsibility, or guilt."
+            ),
+        }
+        record["record_digest_sha256"] = _sha256_json(record)
+        handoff_path = run_root / "review" / "incident_handoff.json"
+        temporary = handoff_path.with_suffix(".json.tmp")
+        temporary.write_text(json.dumps(record, indent=2), encoding="utf-8")
+        temporary.replace(handoff_path)
+        return record
+
+    def _verify_incident_handoff(self, run_root: Path) -> dict[str, object]:
+        handoff_path = run_root / "review" / "incident_handoff.json"
+        if not handoff_path.exists():
+            raise RuntimeError(
+                "The incident input contract is missing. Review and seal the slick before reconstruction."
+            )
+        try:
+            record = json.loads(handoff_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            raise RuntimeError("The incident input contract cannot be verified.") from error
+        recorded_digest = str(record.get("record_digest_sha256") or "")
+        digest_payload = dict(record)
+        digest_payload.pop("record_digest_sha256", None)
+        if not recorded_digest or _sha256_json(digest_payload) != recorded_digest:
+            raise RuntimeError("Incident handoff integrity failed: the sealed record changed.")
+        if str(record.get("status")) != "SEALED":
+            raise RuntimeError("The incident input contract is not sealed.")
+        recorded_artifacts = record.get("artifacts")
+        if not isinstance(recorded_artifacts, dict):
+            raise RuntimeError("Incident handoff integrity failed: artifact manifest is missing.")
+        for name, expected_path in self._handoff_artifact_paths(run_root).items():
+            entry = recorded_artifacts.get(name)
+            expected_relative = expected_path.resolve().relative_to(self.project_root).as_posix()
+            if not isinstance(entry, dict) or entry.get("relative_path") != expected_relative:
+                raise RuntimeError(
+                    f"Incident handoff integrity failed: {name.replace('_', ' ')} path changed."
+                )
+            if not expected_path.exists() or entry.get("sha256") != _sha256_file(expected_path):
+                raise RuntimeError(
+                    f"Incident handoff integrity failed: {name.replace('_', ' ')} changed."
+                )
+        return record
+
     def review_candidate(self, decision: str, *, age_hours: float = 19.0) -> dict[str, object]:
         decision = decision.strip().upper()
         if decision not in {"APPROVE", "REJECT"}:
@@ -758,6 +1014,8 @@ class LiveOperationsEngine:
                 "status": "REJECTED",
                 "scene_id": scene_id,
                 "reviewed_at_utc": _format_utc(_utc_now()),
+                "handoff_status": "NOT_CREATED",
+                "handoff_verified": False,
                 "message": "Analyst rejected the dark feature; attribution is blocked.",
             }
             self._state["attribution"] = {
@@ -793,12 +1051,30 @@ class LiveOperationsEngine:
             return result
 
         physics = analysis.get("physics_screen") or {}
-        if str(physics.get("status", "")).startswith("REJECT"):
-            raise RuntimeError("The physics screen rejected this feature as an implausible oil signature.")
+        physics_passed = (
+            str(physics.get("status", "")) == "PLAUSIBLE_DARK_SIGNATURE"
+            and physics.get("contrast_gate_passed") is True
+            and physics.get("wind_gate_passed") is True
+        )
+        if not physics_passed:
+            raise RuntimeError(
+                "Approval is locked because the physics screen did not return a complete plausible result."
+            )
+        if analysis.get("provenance_verified") is not True:
+            raise RuntimeError(
+                "Approval is locked because the satellite input and model provenance were not verified."
+            )
+        acquisition_time = str(analysis.get("acquisition_time_utc") or "")
+        if _parse_utc(acquisition_time) is None:
+            raise RuntimeError(
+                "Approval is locked because the verified satellite acquisition time is unavailable."
+            )
         source_path = run_root / "segmentation" / "slick_candidate.geojson"
         if not source_path.exists():
             raise FileNotFoundError("The georeferenced slick candidate is missing.")
         payload = json.loads(source_path.read_text(encoding="utf-8"))
+
+        reviewed_at = _format_utc(_utc_now())
 
         def approve_feature(value: object) -> None:
             if not isinstance(value, dict):
@@ -806,7 +1082,7 @@ class LiveOperationsEngine:
             if value.get("type") == "Feature":
                 properties = dict(value.get("properties") or {})
                 properties["review_status"] = "analyst_approved"
-                properties["reviewed_at_utc"] = _format_utc(_utc_now())
+                properties["reviewed_at_utc"] = reviewed_at
                 properties["assumed_age_hours"] = float(age_hours)
                 value["properties"] = properties
             for feature in value.get("features", []):
@@ -816,19 +1092,36 @@ class LiveOperationsEngine:
         review_dir = run_root / "review"
         review_dir.mkdir(parents=True, exist_ok=True)
         approved_path = review_dir / "approved_slick.geojson"
-        approved_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        approved_temporary = approved_path.with_suffix(".geojson.tmp")
+        approved_temporary.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        approved_temporary.replace(approved_path)
+        handoff = self._seal_incident_handoff(
+            run_root=run_root,
+            scene_id=scene_id,
+            acquisition_time_utc=acquisition_time,
+            reviewed_at_utc=reviewed_at,
+            assumed_age_hours=float(age_hours),
+        )
+        handoff_path = review_dir / "incident_handoff.json"
+        slick_digest = str(handoff["artifacts"]["approved_slick"]["sha256"])
         result = {
             "status": "APPROVED",
             "scene_id": scene_id,
-            "reviewed_at_utc": _format_utc(_utc_now()),
+            "reviewed_at_utc": reviewed_at,
             "assumed_age_hours": float(age_hours),
+            "estimated_release_time_utc": handoff["estimated_release_time_utc"],
             "approved_slick_url": self._public_url(approved_path),
-            "message": "Analyst approved the candidate for physics and AIS correlation.",
+            "slick_geometry_sha256": slick_digest,
+            "handoff_status": "SEALED",
+            "handoff_verified": True,
+            "handoff_digest_sha256": handoff["record_digest_sha256"],
+            "handoff_url": self._public_url(handoff_path),
+            "message": "Analyst approved and sealed the incident input for reconstruction.",
         }
         self._state["review"] = result
         self._state["attribution"] = {
             "status": "READY",
-            "message": "Ready to build date-matched forcing and vessel evidence.",
+            "message": "Sealed input verified; ready to build date-matched forcing and vessel evidence.",
             "candidates": [],
         }
         self._state["response"] = {
@@ -864,10 +1157,23 @@ class LiveOperationsEngine:
             review = dict(self._state.get("review", {}))
             if review.get("status") != "APPROVED":
                 raise RuntimeError("Approve the SAR candidate before starting reverse drift.")
+            scene_id = str(review.get("scene_id") or "").strip()
+            if not scene_id:
+                raise RuntimeError("The approved incident has no scene identifier.")
+            safe_scene_id = "".join(
+                char if char.isalnum() or char in "-_" else "_" for char in scene_id
+            )
+            run_root = self.output_root / "analysis" / safe_scene_id
+            handoff = self._verify_incident_handoff(run_root)
+            if handoff.get("scene_id") != scene_id:
+                raise RuntimeError("Incident handoff integrity failed: scene identity changed.")
+            if handoff.get("record_digest_sha256") != review.get("handoff_digest_sha256"):
+                raise RuntimeError("Incident handoff integrity failed: review and seal do not match.")
             self._state["attribution"] = {
                 "status": "QUEUED",
-                "message": "Date-matched forcing and AIS evidence are queued.",
+                "message": "Sealed incident verified; date-matched forcing and AIS evidence are queued.",
                 "queued_at_utc": _format_utc(_utc_now()),
+                "handoff_digest_sha256": handoff["record_digest_sha256"],
                 "candidates": [],
             }
             self._state["response"] = {
@@ -1259,6 +1565,9 @@ class LiveOperationsEngine:
                 char if char.isalnum() or char in "-_" else "_" for char in scene_id
             )
             run_root = self.output_root / "analysis" / safe_scene_id
+            handoff = self._verify_incident_handoff(run_root)
+            if handoff.get("record_digest_sha256") != review.get("handoff_digest_sha256"):
+                raise RuntimeError("Incident handoff integrity failed before drift execution.")
             evidence_root = run_root / "attribution"
             environment_dir = evidence_root / "environment"
             drift_dir = evidence_root / "drift"
@@ -1360,6 +1669,9 @@ class LiveOperationsEngine:
             with np.load(drift_dir / "reverse_endpoints.npz") as endpoints:
                 origin_lon = np.asarray(endpoints["lon"], dtype=float)
                 origin_lat = np.asarray(endpoints["lat"], dtype=float)
+            with np.load(drift_dir / "forward_replay_particles.npz") as replay:
+                replay_lon = np.asarray(replay["lon"], dtype=float)
+                replay_lat = np.asarray(replay["lat"], dtype=float)
             origin_zone = evidence_root / "origin_zone.geojson"
             self._write_origin_zone(
                 origin_zone,
@@ -1379,16 +1691,27 @@ class LiveOperationsEngine:
                 [float(origin_lon[index]), float(origin_lat[index])]
                 for index in sample_indices
             ]
+            replay_indices = np.linspace(
+                0, len(replay_lon) - 1, min(320, len(replay_lon)), dtype=int
+            )
+            forward_particles = [
+                [float(replay_lon[index]), float(replay_lat[index])]
+                for index in replay_indices
+            ]
             base_result = {
+                "drift_status": "COMPLETE",
                 "origin_zone_url": self._public_url(origin_zone),
                 "origin_particles": origin_particles,
+                "forward_replay_particles": forward_particles,
                 "observed_centroid": [
                     float(slick_observation.polygon.centroid.x),
                     float(slick_observation.polygon.centroid.y),
                 ],
                 "estimated_origin": drift["estimated_origin"],
                 "credible_radius_90_km": drift["credible_radius_90_km"],
+                "forward_closure": drift["forward_closure"],
                 "reverse_analysis_url": self._public_url(drift_dir / "slick_reverse_analysis.png"),
+                "drift_validation_url": self._public_url(drift_dir / "drift_validation.json"),
                 "forcing_source": drift["environment"]["source"],
             }
             self._section_update(
@@ -1460,9 +1783,71 @@ class LiveOperationsEngine:
                 return
             self._section_update(
                 "attribution",
-                status="RANKING",
-                message="Forward-verifying every temporally matched AIS candidate.",
+                status="FILTERING_AIS",
+                message="Removing traffic that cannot overlap the release time and origin search area.",
                 ais_source=ais_source,
+                **base_result,
+            )
+            filter_report = filter_ais_candidates(
+                ais_path,
+                drift_dir / "release_estimate.json",
+                ais_dir,
+            )
+            filter_state = {
+                **{
+                    key: filter_report.get(key)
+                    for key in (
+                        "status",
+                        "method",
+                        "release_time_utc",
+                        "observation_time_utc",
+                        "search_radius_km",
+                        "release_window_hours",
+                        "raw_vessels",
+                        "raw_positions",
+                        "release_window_vessels",
+                        "origin_zone_vessels",
+                        "retained_vessels",
+                        "retained_positions",
+                        "excluded_vessels",
+                        "hard_gates",
+                        "context_only",
+                        "claim_boundary",
+                    )
+                },
+                "retained": list(filter_report.get("retained", []))[:50],
+                "excluded": sorted(
+                    list(filter_report.get("excluded", [])),
+                    key=lambda item: float(item.get("closest_release_distance_km", 1e9)),
+                )[:80],
+                "report_url": self._public_url(ais_dir / "ais_filter_report.json"),
+            }
+            retained_count = int(filter_report.get("retained_vessels", 0))
+            if retained_count == 0:
+                self._section_update(
+                    "attribution",
+                    status="ABSTAIN_NO_RELEVANT_AIS",
+                    decision="ABSTAIN_INSUFFICIENT_EVIDENCE",
+                    message=(
+                        "AIS was available, but no track passed both the incident-time and "
+                        "origin-area relevance gates. The system refuses to force a suspect list."
+                    ),
+                    ais_source=ais_source,
+                    ais_filter=filter_state,
+                    candidate_count=0,
+                    candidates=[],
+                    completed_at_utc=_format_utc(_utc_now()),
+                    **base_result,
+                )
+                return
+            ais_path = Path(str(filter_report["filtered_file"]))
+            self._section_update(
+                "attribution",
+                status="RANKING",
+                message=f"Forward-verifying {retained_count} incident-relevant AIS candidate(s).",
+                ais_source=ais_source,
+                ais_filter=filter_state,
+                **base_result,
             )
             ranking = write_attribution_outputs(
                 ranking_dir,
@@ -1473,16 +1858,9 @@ class LiveOperationsEngine:
             )
             candidates = list(ranking.get("candidates", []))
             top = candidates[0]
-            runner_score = float(candidates[1]["total_score"]) if len(candidates) > 1 else 0.0
-            margin = float(top["total_score"]) - runner_score
-            limited = (
-                len(candidates) >= 2
-                and float(top["total_score"]) >= 0.40
-                and margin >= 0.05
-                and float(top.get("data_quality", 0.0)) >= 0.40
-                and float(top.get("forward_error_km", 999.0)) <= 8.0
-            )
-            decision = "LIMITED_SHORTLIST" if limited else "ABSTAIN_INSUFFICIENT_EVIDENCE"
+            nomination = ranking.get("nomination_assessment") or assess_nomination(candidates)
+            margin = float(nomination.get("score_margin", 0.0))
+            decision = str(nomination.get("decision", "ABSTAIN_INSUFFICIENT_EVIDENCE"))
             tracks_path = evidence_root / "candidate_tracks.geojson"
             self._write_candidate_tracks(tracks_path, ais_path, candidates)
             self._section_update(
@@ -1491,14 +1869,16 @@ class LiveOperationsEngine:
                 decision=decision,
                 message=(
                     "A comparative shortlist is ready for analyst investigation."
-                    if limited
+                    if decision == "LIMITED_SHORTLIST"
                     else "Evidence gates rejected nomination; retain the origin estimate and collect stronger tracks."
                 ),
                 candidate_count=len(candidates),
                 candidates=candidates[:12],
                 top_candidate=top,
                 score_margin=margin,
+                nomination_assessment=nomination,
                 ais_source=ais_source,
+                ais_filter=filter_state,
                 candidate_tracks_url=self._public_url(tracks_path),
                 ranking_chart_url=self._public_url(ranking_dir / "candidate_ranking.png"),
                 attribution_map_url=self._public_url(ranking_dir / "attribution_map.png"),
@@ -1520,24 +1900,35 @@ class LiveOperationsEngine:
             )
 
     def _analysis_worker(self) -> None:
-        catalog_path = self.output_root / "sentinel" / "sentinel1_catalog.json"
+        run_root: Path | None = None
         try:
-            catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
             with self._lock:
-                requested_scene_id = self._state.get("analysis", {}).get("requested_scene_id")
-            scene = next(
-                (
-                    item
-                    for item in catalog.get("scenes", [])
-                    if str(item.get("id")) == str(requested_scene_id)
-                ),
-                None,
-            ) or catalog.get("recommended_scene") or {}
+                queued_analysis = dict(self._state.get("analysis", {}))
+            requested_scene_id = queued_analysis.get("requested_scene_id")
+            scene = dict(queued_analysis.get("selected_scene") or {})
+            if not scene or str(scene.get("id")) != str(requested_scene_id):
+                raise RuntimeError("Queued Sentinel-1 scene provenance is incomplete or inconsistent.")
             scene_id = str(scene.get("id") or "unknown-scene")
             safe_scene_id = "".join(char if char.isalnum() or char in "-_" else "_" for char in scene_id)
             run_root = self.output_root / "analysis" / safe_scene_id
             input_dir = run_root / "input"
             segmentation_dir = run_root / "segmentation"
+            input_dir.mkdir(parents=True, exist_ok=True)
+            frozen_catalog_path = input_dir / "selected_scene_manifest.json"
+            frozen_catalog_path.write_text(
+                json.dumps(
+                    {
+                        "status": "FROZEN_FOR_ANALYSIS",
+                        "provider": "Copernicus Data Space Ecosystem STAC",
+                        "queued_at_utc": queued_analysis.get("queued_at_utc"),
+                        "source_catalog_sha256": queued_analysis.get("catalog_sha256"),
+                        "recommended_scene": scene,
+                        "scenes": [scene],
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
             longitude, latitude = self.region.center
             crop_bbox = (
                 max(self.region.min_longitude, longitude - 0.22),
@@ -1553,7 +1944,7 @@ class LiveOperationsEngine:
                 message="Downloading calibrated Sentinel-1 VV pixels for the newest usable watch-point scene.",
             )
             downloaded = download_sentinel1_subset(
-                catalog_path,
+                frozen_catalog_path,
                 input_dir,
                 bbox=crop_bbox,
                 scene_id=scene_id,
@@ -1563,6 +1954,10 @@ class LiveOperationsEngine:
             if str(downloaded.get("scene_id")) != scene_id:
                 raise RuntimeError(
                     "Sentinel-1 download identity mismatch; attribution was stopped before inference."
+                )
+            if str(downloaded.get("acquisition_time_utc")) != str(scene.get("acquisition_time_utc")):
+                raise RuntimeError(
+                    "Sentinel-1 acquisition-time provenance mismatch; processing was stopped."
                 )
             checkpoint = self.project_root / "out" / "ml_training_v6" / "sar_segmentation_best.pt"
             calibration = self.project_root / "out" / "ml_calibration_v6" / "threshold_calibration.json"
@@ -1654,13 +2049,18 @@ class LiveOperationsEngine:
                 raise RuntimeError(f"SAR interpretation failed: {detail.strip()}")
             result_path = segmentation_dir / "sar_result.json"
             result = json.loads(result_path.read_text(encoding="utf-8"))
+            if str(result.get("observation_time_utc")) != str(downloaded.get("acquisition_time_utc")):
+                raise RuntimeError(
+                    "SAR result provenance does not match the downloaded acquisition time."
+                )
             physics_screen = None
             if result.get("status") == "REVIEW_REQUIRED":
                 physics_screen = self._build_physics_screen(
                     run_root, str(downloaded["acquisition_time_utc"])
                 )
+            final_status = str(result.get("status", "COMPLETE"))
             self._analysis_update(
-                status=str(result.get("status", "COMPLETE")),
+                status=final_status,
                 completed_at_utc=_format_utc(_utc_now()),
                 scene_id=scene_id,
                 acquisition_time_utc=downloaded["acquisition_time_utc"],
@@ -1679,6 +2079,28 @@ class LiveOperationsEngine:
                     else None
                 ),
                 physics_screen=physics_screen,
+                input_provenance={
+                    "provider": downloaded.get("provider"),
+                    "polarization": downloaded.get("polarization"),
+                    "measurement": downloaded.get("measurement"),
+                    "orthorectified": downloaded.get("orthorectified"),
+                    "backscatter_coefficient": downloaded.get("backscatter_coefficient"),
+                    "downloaded_at_utc": downloaded.get("downloaded_at_utc"),
+                    "width": downloaded.get("width"),
+                    "height": downloaded.get("height"),
+                },
+                model_provenance={
+                    "model_generation": result.get("segmentation", {}).get("model_generation"),
+                    "architecture": result.get("segmentation", {}).get("architecture"),
+                    "checkpoint_epoch": result.get("segmentation", {}).get("checkpoint_epoch"),
+                    "checkpoint_sha256": result.get("segmentation", {}).get("checkpoint_sha256"),
+                    "threshold": result.get("segmentation", {}).get("threshold"),
+                    "threshold_source": result.get("segmentation", {}).get("threshold_source"),
+                    "test_time_augmentation": result.get("segmentation", {}).get("test_time_augmentation"),
+                    "device": result.get("segmentation", {}).get("device"),
+                    "gpu": result.get("segmentation", {}).get("gpu"),
+                },
+                provenance_verified=True,
                 message=(
                     "A candidate requires human review before reverse-drift attribution."
                     if result.get("status") == "REVIEW_REQUIRED"
@@ -1687,11 +2109,58 @@ class LiveOperationsEngine:
                     else "SAR processing completed."
                 ),
             )
+            if final_status == "REVIEW_REQUIRED":
+                physics_passed = bool(
+                    physics_screen
+                    and physics_screen.get("status") == "PLAUSIBLE_DARK_SIGNATURE"
+                    and physics_screen.get("contrast_gate_passed") is True
+                    and physics_screen.get("wind_gate_passed") is True
+                )
+                self._section_update(
+                    "review",
+                    status="NOT_REVIEWED",
+                    message=(
+                        "Model and physics gates passed. Inspect the pixels, set the release-age assumption, then approve or reject the candidate."
+                        if physics_passed
+                        else "The candidate did not pass every physics gate. Approval is locked; reject it or preserve it for further evidence."
+                    ),
+                )
+            elif final_status == "NO_DETECTION":
+                self._section_update(
+                    "review",
+                    status="NOT_REQUIRED",
+                    message="No candidate exceeded the frozen threshold; no analyst decision is required.",
+                )
         except Exception as error:
+            error_url = None
+            if run_root is not None:
+                error_path = run_root / "analysis_error.json"
+                error_path.parent.mkdir(parents=True, exist_ok=True)
+                error_path.write_text(
+                    json.dumps(
+                        {
+                            "status": "ERROR",
+                            "recorded_at_utc": _format_utc(_utc_now()),
+                            "error_type": type(error).__name__,
+                            "technical_detail": str(error),
+                        },
+                        indent=2,
+                    ),
+                    encoding="utf-8",
+                )
+                error_url = self._public_url(error_path)
             self._analysis_update(
                 status="ERROR",
                 completed_at_utc=_format_utc(_utc_now()),
-                message=f"{type(error).__name__}: {error}",
+                error_code=type(error).__name__,
+                error_record_url=error_url,
+                technical_error_recorded=bool(error_url),
+                message=_analysis_operator_message(error),
+            )
+            self._section_update(
+                "review",
+                status="BLOCKED_BY_ANALYSIS",
+                message="Analyst review is unavailable because satellite analysis did not complete.",
             )
 
     def _public_url(self, path: Path) -> str:
@@ -1765,8 +2234,19 @@ class LiveOperationsEngine:
         bounding_box = AISBoundingBox(*self.region.bbox)
         while not self._stop.is_set():
             attempted = _format_utc(_utc_now())
+            with self._lock:
+                has_verified_capture = bool(
+                    self._state.get("sources", {}).get("ais", {}).get("last_success_utc")
+                )
             self._update_source(
-                "ais", status="CONNECTING", last_attempt_utc=attempted, message="Opening AIS stream."
+                "ais",
+                status="PASS" if has_verified_capture else "CONNECTING",
+                last_attempt_utc=attempted,
+                message=(
+                    "Live stream active; collecting the next provider window."
+                    if has_verified_capture
+                    else "Opening AIS stream."
+                ),
             )
             try:
                 status = asyncio.run(
@@ -1775,7 +2255,7 @@ class LiveOperationsEngine:
                         self.output_root / "ais",
                         self.ais_cache,
                         duration_seconds=self.ais_capture_seconds,
-                        window_hours=24.0,
+                        window_hours=self.ais_snapshot_minutes / 60.0,
                     )
                 )
                 succeeded = _format_utc(_utc_now())
@@ -1928,7 +2408,16 @@ class LiveOperationsEngine:
             self._record_source_failure("sentinel", error, attempted=attempted)
 
     def _ais_payload(self) -> dict[str, object]:
-        empty = {"positions": [], "tracks": {}, "position_count": 0, "vessel_count": 0}
+        empty = {
+            "positions": [],
+            "tracks": {},
+            "position_count": 0,
+            "vessel_count": 0,
+            "underway_count": 0,
+            "stationary_count": 0,
+            "unknown_motion_count": 0,
+            "window_minutes": self.ais_snapshot_minutes,
+        }
         if not self.ais_cache.exists() or self.ais_cache.stat().st_size < 10:
             return empty
         try:
@@ -1943,13 +2432,20 @@ class LiveOperationsEngine:
             if column in frame:
                 frame[column] = pd.to_numeric(frame[column], errors="coerce")
         frame = frame.dropna(subset=["timestamp_utc", "mmsi", "longitude", "latitude"])
-        cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=6)
+        cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(minutes=self.ais_snapshot_minutes)
         frame = frame.loc[frame["timestamp_utc"] >= cutoff].sort_values("timestamp_utc")
+        min_longitude, min_latitude, max_longitude, max_latitude = self.region.bbox
+        frame = frame.loc[
+            frame["longitude"].between(min_longitude, max_longitude, inclusive="both")
+            & frame["latitude"].between(min_latitude, max_latitude, inclusive="both")
+        ]
         if frame.empty:
             return empty
         latest = frame.groupby("mmsi", as_index=False).tail(1).tail(500)
         positions = []
         for _, row in latest.iterrows():
+            speed = None if pd.isna(row.get("sog")) else float(row.get("sog"))
+            motion_state = "unknown" if speed is None else "underway" if speed > 1.0 else "stationary"
             positions.append(
                 {
                     "timestamp_utc": row["timestamp_utc"].strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -1957,8 +2453,9 @@ class LiveOperationsEngine:
                     "vessel_name": str(row.get("vessel_name") or "UNKNOWN").strip(),
                     "longitude": float(row["longitude"]),
                     "latitude": float(row["latitude"]),
-                    "sog": None if pd.isna(row.get("sog")) else float(row.get("sog")),
+                    "sog": speed,
                     "cog": None if pd.isna(row.get("cog")) else float(row.get("cog")),
+                    "motion_state": motion_state,
                     "source": str(row.get("source") or "AISStream live"),
                 }
             )
@@ -1978,6 +2475,10 @@ class LiveOperationsEngine:
             "tracks": tracks,
             "position_count": len(frame),
             "vessel_count": len(positions),
+            "underway_count": sum(item["motion_state"] == "underway" for item in positions),
+            "stationary_count": sum(item["motion_state"] == "stationary" for item in positions),
+            "unknown_motion_count": sum(item["motion_state"] == "unknown" for item in positions),
+            "window_minutes": self.ais_snapshot_minutes,
         }
 
     def snapshot(self) -> dict[str, object]:
@@ -2066,6 +2567,10 @@ class LiveOperationsEngine:
         }
         analysis_complete = analysis_status in {"PASS", "REVIEW_REQUIRED", "NO_DETECTION"}
         review_status = str(state.get("review", {}).get("status", "NOT_REVIEWED"))
+        handoff_ready = (
+            state.get("review", {}).get("handoff_status") == "SEALED"
+            and state.get("review", {}).get("handoff_verified") is True
+        )
         attribution_status = str(state.get("attribution", {}).get("status", "NOT_RUN"))
         response_status = str(state.get("response", {}).get("status", "NOT_BUILT"))
         retasking_status = str(state.get("retasking", {}).get("status", "NOT_BUILT"))
@@ -2112,8 +2617,10 @@ class LiveOperationsEngine:
             stage = "EVIDENCE_SAFE_ABSTENTION"
         elif review_status == "REJECTED":
             stage = "ANALYST_REJECTED_SLICK"
+        elif review_status == "APPROVED" and handoff_ready:
+            stage = "INCIDENT_INPUT_SEALED"
         elif review_status == "APPROVED":
-            stage = "SLICK_APPROVED_FOR_ATTRIBUTION"
+            stage = "INCIDENT_HANDOFF_REQUIRED"
         elif analysis_running:
             stage = f"SAR_{analysis_status}"
         elif analysis_status == "REVIEW_REQUIRED":
@@ -2135,6 +2642,7 @@ class LiveOperationsEngine:
             "live_ais_ready": vessels_ready,
             "slick_detection_ready": analysis_complete,
             "analyst_review_ready": review_status == "APPROVED",
+            "incident_handoff_ready": handoff_ready,
             "attribution_ready": attribution_status in {"COMPLETE", "ABSTAIN_NO_MATCHED_AIS"},
             "response_ready": response_status == "READY",
             "retasking_ready": retasking_status == "READY",
