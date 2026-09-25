@@ -241,7 +241,11 @@ def test_live_command_map_separates_live_and_incident_evidence() -> None:
     page = (root / "operator/live_command/index.html").read_text(encoding="utf-8")
     script = (root / "operator/live_command/app.js").read_text(encoding="utf-8")
     assert 'id="evidenceMap"' in page
-    assert "One map. Two honest timelines." in page
+    assert "One map. Two scales. Honest timelines." in page
+    assert 'id="overviewModeButton"' in page
+    assert "Singapore Strait overview" in script
+    assert "ais-observed-interpolation" in script
+    assert ".duration(12000)" in script
     assert "No AIS positions received" in page
     assert "snapshot.coastline_url" in script
     assert "snapshot.sources?.sentinel?.footprints_url" in script
@@ -252,6 +256,17 @@ def test_live_command_map_separates_live_and_incident_evidence() -> None:
     assert 'data-layer="stationary"' in page
     assert "CURRENT VESSELS" in page
     assert "rolling live window" in script
+
+
+def test_singapore_watch_exposes_wider_context_without_widening_filter(tmp_path: Path) -> None:
+    engine = LiveOperationsEngine(
+        tmp_path,
+        LiveRegion("East Singapore Offshore Watch", 104.02, 1.20, 104.23, 1.31),
+    )
+    snapshot = engine.snapshot()
+    assert snapshot["region"]["bbox"] == [104.02, 1.20, 104.23, 1.31]
+    assert snapshot["map_context"]["bbox"] == [103.55, 0.98, 104.32, 1.52]
+    assert snapshot["map_context"]["name"] == "Singapore Strait overview"
 
 
 def test_live_command_detection_workbench_preserves_evidence_gates() -> None:
@@ -589,11 +604,12 @@ def test_coastline_cache_is_regenerated_when_region_changes(tmp_path: Path, monk
     archive = tmp_path / "data" / "cache" / "natural_earth" / "ne_10m_land.zip"
     archive.parent.mkdir(parents=True)
     archive.write_bytes(b"cached")
-    seen: dict[str, object] = {}
+    seen: dict[str, object] = {"bboxes": []}
 
     def fake_clip(source, destination, bbox, *, padding_degrees):
-        seen["bbox"] = tuple(bbox)
+        seen["bboxes"].append(tuple(bbox))
 
     monkeypatch.setattr("espada.live_operations.clip_land_archive", fake_clip)
     engine._prepare_coastline()
-    assert seen["bbox"] == engine.region.bbox
+    assert engine.region.bbox in seen["bboxes"]
+    assert engine.map_context_bbox in seen["bboxes"]

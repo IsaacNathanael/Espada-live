@@ -157,6 +157,21 @@ def _region_cache_tag(region: LiveRegion) -> str:
     )
 
 
+def _map_context_bbox(region: LiveRegion) -> tuple[float, float, float, float]:
+    """Return a wider orientation view without widening the operational filter."""
+    longitude, latitude = region.center
+    if 103.4 <= longitude <= 104.5 and 0.8 <= latitude <= 1.7:
+        return (103.55, 0.98, 104.32, 1.52)
+    width = region.max_longitude - region.min_longitude
+    height = region.max_latitude - region.min_latitude
+    return (
+        max(-180.0, region.min_longitude - width),
+        max(-90.0, region.min_latitude - height),
+        min(180.0, region.max_longitude + width),
+        min(90.0, region.max_latitude + height),
+    )
+
+
 class LiveOperationsEngine:
     """Collect real provider data and expose a single auditable live snapshot.
 
@@ -182,6 +197,7 @@ class LiveOperationsEngine:
         self.ais_snapshot_minutes = max(2.0, float(ais_snapshot_minutes))
         self.output_root = self.project_root / "out" / "live_operations"
         self.output_root.mkdir(parents=True, exist_ok=True)
+        self.map_context_bbox = _map_context_bbox(region)
         region_cache_tag = _region_cache_tag(region)
         self.environment_cache = (
             self.project_root / "data" / "cache" / f"live_environment_{region_cache_tag}.json"
@@ -191,6 +207,7 @@ class LiveOperationsEngine:
         )
         self.state_path = self.output_root / "source_state.json"
         self.coast_path = self.output_root / "coast" / "land_mask.geojson"
+        self.context_coast_path = self.output_root / "coast" / "context_land_mask.geojson"
         self._lock = threading.RLock()
         self._stop = threading.Event()
         self._refresh = threading.Event()
@@ -701,22 +718,28 @@ class LiveOperationsEngine:
         return any(thread.is_alive() for thread in self._threads)
 
     def _prepare_coastline(self) -> None:
-        if self.coast_path.exists():
+        def matches(path: Path, bbox: tuple[float, float, float, float]) -> bool:
+            if not path.exists():
+                return False
             try:
-                cached = json.loads(self.coast_path.read_text(encoding="utf-8"))
+                cached = json.loads(path.read_text(encoding="utf-8"))
                 cached_bbox = cached.get("properties", {}).get("requested_bbox")
-                if (
+                return bool(
                     isinstance(cached_bbox, list)
                     and len(cached_bbox) == 4
-                    and np.allclose(np.asarray(cached_bbox, dtype=float), self.region.bbox)
-                ):
-                    return
+                    and np.allclose(np.asarray(cached_bbox, dtype=float), bbox)
+                )
             except (OSError, ValueError, TypeError, json.JSONDecodeError):
-                pass
+                return False
+
+        targets = (
+            (self.coast_path, self.region.bbox),
+            (self.context_coast_path, self.map_context_bbox),
+        )
+        if all(matches(path, bbox) for path, bbox in targets):
+            return
         archive = self.project_root / "data" / "cache" / "natural_earth" / "ne_10m_land.zip"
-        if not archive.exists():
-            if os.environ.get("ESPADA_AUTO_COASTLINE") != "1":
-                return
+        if not archive.exists() and os.environ.get("ESPADA_AUTO_COASTLINE") == "1":
             try:
                 sync_land_mask(
                     self.coast_path,
@@ -725,14 +748,17 @@ class LiveOperationsEngine:
                     padding_degrees=0.15,
                 )
             except Exception:
-                # Coastline is context only; provider collection must still start.
                 return
+        if not archive.exists():
             return
-        try:
-            clip_land_archive(archive, self.coast_path, self.region.bbox, padding_degrees=0.15)
-        except Exception:
-            # Coastline is a contextual layer; source collection must continue without it.
-            return
+        for path, bbox in targets:
+            if matches(path, bbox):
+                continue
+            try:
+                clip_land_archive(archive, path, bbox, padding_degrees=0.15)
+            except Exception:
+                # Coastline is context only; provider collection must still start.
+                continue
 
     def _write_state(self) -> None:
         with self._lock:
@@ -2527,6 +2553,17 @@ class LiveOperationsEngine:
             "coastline_url": (
                 "/out/live_operations/coast/land_mask.geojson" if self.coast_path.exists() else None
             ),
+            "map_context": {
+                "name": "Singapore Strait overview"
+                if "singapore" in self.region.name.lower()
+                else f"{self.region.name} context",
+                "bbox": list(self.map_context_bbox),
+                "coastline_url": (
+                    "/out/live_operations/coast/context_land_mask.geojson"
+                    if self.context_coast_path.exists()
+                    else None
+                ),
+            },
             "pipeline": pipeline,
             "analysis": state.get("analysis", {"status": "NOT_RUN"}),
             "review": state.get("review", {"status": "NOT_REVIEWED"}),

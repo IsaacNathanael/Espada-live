@@ -17,9 +17,11 @@
   const byId = id => document.getElementById(id);
   let lastSnapshot = null;
   let mapMode = 'live';
-  let mapGeometry = {coast: null, footprints: null, slick: null, origin: null, candidateTracks: null};
+  let mapGeometry = {coast: null, contextCoast: null, footprints: null, slick: null, origin: null, candidateTracks: null};
   const geometryCache = new Map();
   let geometryLoadKey = '';
+  let previousVesselPositions = new Map();
+  let lastRenderFingerprint = '';
   let sarView = 'overview';
   let selectedSceneId = null;
   let driftView = 'comparison';
@@ -145,6 +147,7 @@
   async function syncMapGeometry(snapshot) {
     const urls = {
       coast: snapshot.coastline_url,
+      contextCoast: snapshot.map_context?.coastline_url,
       footprints: snapshot.sources?.sentinel?.footprints_url,
       slick: snapshot.review?.status === 'APPROVED' ? snapshot.review?.approved_slick_url : null,
       origin: snapshot.attribution?.origin_zone_url,
@@ -207,10 +210,13 @@
     const d3 = window.d3;
     const svg = d3.select(svgElement);
     svg.selectAll('*').remove();
-    const bbox = snapshot.region?.bbox;
-    if (!Array.isArray(bbox) || bbox.length !== 4) return;
+    const operationalBbox = snapshot.region?.bbox;
+    const overview = mapMode === 'overview';
+    const bbox = overview ? snapshot.map_context?.bbox : operationalBbox;
+    if (!Array.isArray(bbox) || bbox.length !== 4 || !Array.isArray(operationalBbox)) return;
     const width = 1100, height = 650;
     const boundsFeature = bboxPolygon(bbox.map(Number));
+    const operationalFeature = bboxPolygon(operationalBbox.map(Number));
     const projection = d3.geoMercator().fitExtent([[30,30],[width-30,height-30]], boundsFeature);
     const path = d3.geoPath(projection);
     const defs = svg.append('defs');
@@ -222,14 +228,15 @@
     const graticule = d3.geoGraticule().extent([[bbox[0],bbox[1]],[bbox[2],bbox[3]]]).step([0.1,0.1]);
     svg.append('path').datum(graticule()).attr('class','map-grid').attr('d',path);
 
-    if (mapGeometry.coast) {
-      svg.append('path').datum(mapGeometry.coast).attr('class','coast-halo').attr('d',path);
-      svg.append('path').datum(mapGeometry.coast).attr('class','land-shape').attr('d',path);
+    const coastline = overview ? mapGeometry.contextCoast || mapGeometry.coast : mapGeometry.coast;
+    if (coastline) {
+      svg.append('path').datum(coastline).attr('class','coast-halo').attr('d',path);
+      svg.append('path').datum(coastline).attr('class','land-shape').attr('d',path);
     }
-    svg.append('path').datum(boundsFeature).attr('class','region-border').attr('d',path);
+    svg.append('path').datum(operationalFeature).attr('class','region-border').attr('d',path);
 
     if (layerVisible('satellite')) {
-      if (mapMode === 'live' && mapGeometry.footprints) {
+      if (mapMode !== 'incident' && mapGeometry.footprints) {
         const features = mapGeometry.footprints.type === 'FeatureCollection' ? mapGeometry.footprints.features : [mapGeometry.footprints];
         svg.append('g').selectAll('path').data(features).join('path').attr('class','satellite-footprint').attr('tabindex',0).attr('d',path)
           .each(function(feature){ appendMapTitle(d3.select(this), `Sentinel-1 acquisition · ${formatUtc(feature.properties?.acquisition_time_utc)}`); })
@@ -305,7 +312,7 @@
       (vessel.motion_state === 'underway' && showUnderway)
       || (vessel.motion_state === 'stationary' && showStationary)
     );
-    if (mapMode === 'live' && (showUnderway || showStationary)) {
+    if (mapMode !== 'incident' && (showUnderway || showStationary)) {
       const tracks = snapshot.ais?.tracks || {};
       const stateByMmsi = Object.fromEntries(positions.map(vessel => [String(vessel.mmsi), vessel.motion_state]));
       const trackFeatures = Object.entries(tracks)
@@ -316,19 +323,37 @@
         .map(([mmsi,points]) => ({type:'Feature',properties:{mmsi,motion_state:stateByMmsi[mmsi]},geometry:{type:'LineString',coordinates:points.map(point=>[Number(point[0]),Number(point[1])])}}));
       svg.append('g').selectAll('path').data(trackFeatures).join('path').attr('class',feature=>`ais-track ${feature.properties.motion_state}`).attr('d',path);
       const vesselGroup = svg.append('g');
+      const nextVesselPositions = new Map();
       visiblePositions.forEach(vessel => {
         if (!finite(vessel.longitude) || !finite(vessel.latitude)) return;
         const point = projection([Number(vessel.longitude),Number(vessel.latitude)]);
         if (!point) return;
+        const key = String(vessel.mmsi);
+        const previous = previousVesselPositions.get(key);
+        const hasNewObservation = previous && previous.timestamp_utc !== vessel.timestamp_utc;
+        const startPoint = hasNewObservation
+          ? projection([Number(previous.longitude),Number(previous.latitude)])
+          : point;
+        const rotation = finite(vessel.cog) ? Number(vessel.cog) : 0;
         const mark = vesselGroup.append('path').attr('class',`vessel-mark ${vessel.motion_state}`).attr('tabindex',0).attr('aria-label',`AIS vessel ${vessel.vessel_name || vessel.mmsi}`)
           .attr('d','M0,-10 C4,-7 5,3 3,8 L0,11 L-3,8 C-5,3 -4,-7 0,-10 Z M-3,2 L3,2')
-          .attr('transform',`translate(${point[0]},${point[1]}) rotate(${finite(vessel.cog) ? Number(vessel.cog) : 0})`);
+          .attr('transform',`translate(${startPoint[0]},${startPoint[1]}) rotate(${rotation})`);
+        if (hasNewObservation) {
+          mark.transition('ais-observed-interpolation').duration(12000).ease(d3.easeLinear)
+            .attr('transform',`translate(${point[0]},${point[1]}) rotate(${rotation})`);
+        }
         appendMapTitle(mark, `${vessel.vessel_name || 'UNKNOWN'} · MMSI ${vessel.mmsi}`)
           .on('click keydown',event=>{if(event.type==='keydown'&&!['Enter',' '].includes(event.key))return;detailForVessel(vessel,tracks[vessel.mmsi]?.length);});
+        nextVesselPositions.set(key, {
+          longitude: Number(vessel.longitude),
+          latitude: Number(vessel.latitude),
+          timestamp_utc: vessel.timestamp_utc
+        });
       });
+      previousVesselPositions = nextVesselPositions;
     }
 
-    if (mapMode === 'live' && layerVisible('environment')) {
+    if (mapMode !== 'incident' && layerVisible('environment')) {
       const values = snapshot.sources?.environment?.current || {};
       const centre = snapshot.region?.center;
       if (Array.isArray(centre) && finite(values.current_east_ms) && finite(values.current_north_ms)) {
@@ -346,7 +371,7 @@
     }
 
     const [labelX,labelY] = projection([bbox[0]+(bbox[2]-bbox[0])*.025,bbox[3]-(bbox[3]-bbox[1])*.035]);
-    svg.append('text').attr('class','place-label').attr('x',labelX).attr('y',labelY).text(String(snapshot.region?.name || 'WATCH REGION').toUpperCase());
+    svg.append('text').attr('class','place-label').attr('x',labelX).attr('y',labelY).text(String(overview ? snapshot.map_context?.name : snapshot.region?.name || 'WATCH REGION').toUpperCase());
     const centreLat = Number(snapshot.region?.center?.[1] ?? (bbox[1]+bbox[3])/2);
     const tenKmDegrees = 10/(111.32*Math.cos(centreLat*Math.PI/180));
     const p0=projection([bbox[0],centreLat]),p1=projection([bbox[0]+tenKmDegrees,centreLat]);
@@ -354,10 +379,10 @@
     byId('mapScale').style.width=`${scalePixels}px`;
     byId('mapScale').dataset.label='10 km';
 
-    const empty = mapMode === 'live' && (showUnderway || showStationary) && visiblePositions.length === 0;
+    const empty = mapMode !== 'incident' && (showUnderway || showStationary) && visiblePositions.length === 0;
     byId('mapEmpty').hidden = !empty;
     const visibleLabels=[];
-    if(mapMode==='live'){
+    if(mapMode!=='incident'){
       if(showUnderway)visibleLabels.push(`${snapshot.ais?.underway_count || 0} underway`);
       if(showStationary)visibleLabels.push(`${snapshot.ais?.stationary_count || 0} stationary`);
       if(snapshot.ais?.unknown_motion_count)visibleLabels.push(`${snapshot.ais.unknown_motion_count} unknown-motion withheld`);
@@ -374,19 +399,23 @@
   function updateMapMode(mode) {
     mapMode = mode;
     const incident = mode === 'incident';
-    byId('liveModeButton').classList.toggle('active',!incident);
+    const overview = mode === 'overview';
+    byId('overviewModeButton').classList.toggle('active',overview);
+    byId('liveModeButton').classList.toggle('active',mode === 'live');
     byId('incidentModeButton').classList.toggle('active',incident);
-    byId('liveModeButton').setAttribute('aria-pressed',String(!incident));
+    byId('overviewModeButton').setAttribute('aria-pressed',String(overview));
+    byId('liveModeButton').setAttribute('aria-pressed',String(mode === 'live'));
     byId('incidentModeButton').setAttribute('aria-pressed',String(incident));
     byId('mapModeChip').classList.toggle('incident',incident);
-    html('mapModeChip',incident?'INCIDENT EVIDENCE':'LIVE WATCH');
+    byId('mapModeChip').classList.toggle('overview',overview);
+    html('mapModeChip',incident?'INCIDENT EVIDENCE':overview?'STRAIT OVERVIEW':'LIVE WATCH');
     html('mapEvidenceTime',lastSnapshot ? formatUtc(evidenceTime(lastSnapshot)) : 'Waiting for evidence time');
-    html('mapTimeRule',incident?'Only evidence tied to the selected SAR investigation is shown.':'Only recent provider AIS and current source state are shown.');
+    html('mapTimeRule',incident?'Only evidence tied to the selected SAR investigation is shown.':overview?'Wider geographic context; vessel evidence remains limited to the compact watch box.':'Only recent provider AIS and current source state are shown.');
     for (const name of ['slick','origin']) byId('layerControls').querySelector(`[data-layer="${name}"]`).disabled=!incident;
     for (const name of ['vessels','stationary']) byId('layerControls').querySelector(`[data-layer="${name}"]`).disabled=incident;
     byId('layerControls').querySelector('[data-layer="environment"]').disabled=incident;
     byId('trafficSnapshot').hidden=incident;
-    setDetail(incident?{type:'INCIDENT TIMELINE',title:'Historical evidence isolated',summary:'Approved slick, reconstructed origin and temporally matched candidate tracks share the selected investigation timeline.',fields:[['SAR observation',formatUtc(lastSnapshot?.analysis?.acquisition_time_utc)],['Estimated release',formatUtc(lastSnapshot?.attribution?.top_candidate?.best_match_time_utc)],['Candidate population',compactNumber(lastSnapshot?.attribution?.candidate_count || lastSnapshot?.attribution?.candidates_compared)],['Decision',String(lastSnapshot?.attribution?.decision || 'Not available').replaceAll('_',' ')]],noteTitle:'NO LIVE OVERLAY',note:'Present-day AIS is intentionally hidden here.'}:{type:'LIVE WATCH',title:'Current maritime picture',summary:'One latest in-bounds report per MMSI; stale reports leave the map automatically.',fields:[['Latest AIS',formatUtc(lastSnapshot?.sources?.ais?.latest_observation_utc)],['Current vessels',compactNumber(lastSnapshot?.ais?.vessel_count)],['Underway / stationary',`${compactNumber(lastSnapshot?.ais?.underway_count)} / ${compactNumber(lastSnapshot?.ais?.stationary_count)}`],['Rolling window',`${compactNumber(lastSnapshot?.ais?.window_minutes)} minutes`]],noteTitle:'NO SYNTHETIC FALLBACK',note:'If the live provider returns nothing, the map remains empty.'});
+    setDetail(incident?{type:'INCIDENT TIMELINE',title:'Historical evidence isolated',summary:'Approved slick, reconstructed origin and temporally matched candidate tracks share the selected investigation timeline.',fields:[['SAR observation',formatUtc(lastSnapshot?.analysis?.acquisition_time_utc)],['Estimated release',formatUtc(lastSnapshot?.attribution?.top_candidate?.best_match_time_utc)],['Candidate population',compactNumber(lastSnapshot?.attribution?.candidate_count || lastSnapshot?.attribution?.candidates_compared)],['Decision',String(lastSnapshot?.attribution?.decision || 'Not available').replaceAll('_',' ')]],noteTitle:'NO LIVE OVERLAY',note:'Present-day AIS is intentionally hidden here.'}:overview?{type:'GEOGRAPHIC CONTEXT',title:'Singapore Strait overview',summary:'The wider coastline provides orientation while the outlined East Singapore box remains the only live evidence filter.',fields:[['Operational watch',lastSnapshot?.region?.name || 'East Singapore Offshore Watch'],['Current vessels',compactNumber(lastSnapshot?.ais?.vessel_count)],['AIS scope','Compact outlined box only'],['Map role','Context, not navigation']],noteTitle:'SAME EVIDENCE BOUNDARY',note:'Changing scale does not add ships or widen the operational query.'}:{type:'LIVE WATCH',title:'Current maritime picture',summary:'One latest in-bounds report per MMSI; stale reports leave the map automatically.',fields:[['Latest AIS',formatUtc(lastSnapshot?.sources?.ais?.latest_observation_utc)],['Current vessels',compactNumber(lastSnapshot?.ais?.vessel_count)],['Underway / stationary',`${compactNumber(lastSnapshot?.ais?.underway_count)} / ${compactNumber(lastSnapshot?.ais?.stationary_count)}`],['Rolling window',`${compactNumber(lastSnapshot?.ais?.window_minutes)} minutes`]],noteTitle:'NO SYNTHETIC FALLBACK',note:'If the live provider returns nothing, the map remains empty.'});
     if(lastSnapshot) renderMap(lastSnapshot);
   }
 
@@ -1989,19 +2018,21 @@
 
   function renderIntegrity(snapshot) {
     const sources = snapshot.sources || {};
-    const entries = ['ais','sentinel','environment'].map(name => sources[name] || {});
-    const states = entries.map(source => normalizeState(source.status));
+    const sourceNames = {ais:'AIS stream',sentinel:'Sentinel catalogue',environment:'Ocean / weather'};
+    const entries = ['ais','sentinel','environment'].map(name => ({name,source:sources[name] || {}}));
+    const states = entries.map(entry => normalizeState(entry.source.status));
     const current = states.filter(state => state === 'pass').length;
     const errors = states.filter(state => state === 'error').length;
     const stale = states.filter(state => state === 'stale').length;
     const missing = states.filter(state => state === 'missing').length;
     const active = states.filter(state => state === 'active').length;
     html('sourceCount', `${current} / 3 current`);
-    const notes = [];
-    if (errors) notes.push(`${errors} error${errors === 1 ? '' : 's'}`);
-    if (stale) notes.push(`${stale} stale`);
-    if (missing) notes.push(`${missing} without data`);
-    if (active) notes.push(`${active} updating`);
+    const notes = entries.flatMap(entry => {
+      const state = normalizeState(entry.source.status);
+      if (state === 'pass') return [];
+      const label = state === 'error' ? 'error' : state === 'stale' ? 'stale' : state === 'active' ? 'updating' : 'no data';
+      return [`${sourceNames[entry.name]}: ${label}`];
+    });
     html('sourceSummary', notes.length ? notes.join(' · ') : 'All provider evidence is current');
 
     const connection = byId('connectionState');
@@ -2026,9 +2057,35 @@
     }
   }
 
+  function meaningfulFingerprint(snapshot) {
+    const source = snapshot.sources || {};
+    return JSON.stringify({
+      region:snapshot.region,
+      map_context:snapshot.map_context,
+      sources:Object.fromEntries(Object.entries(source).map(([name,value]) => [name,{...value,freshness:undefined,last_attempt_utc:undefined}])),
+      ais:snapshot.ais,
+      analysis:snapshot.analysis,
+      review:snapshot.review,
+      attribution:snapshot.attribution,
+      response:snapshot.response,
+      retasking:snapshot.retasking,
+      evidence_intake:snapshot.evidence_intake,
+      reanalysis:snapshot.reanalysis,
+      closure:snapshot.closure,
+      case_register:snapshot.case_register
+    });
+  }
+
   function render(snapshot) {
     lastSnapshot = snapshot;
     renderHeader(snapshot);
+    const fingerprint = meaningfulFingerprint(snapshot);
+    if (fingerprint === lastRenderFingerprint) {
+      html('mapEvidenceTime', formatUtc(evidenceTime(snapshot)));
+      html('pollState', `Last API response ${new Date().toISOString().replace('T',' ').slice(0,19)} UTC`);
+      return;
+    }
+    lastRenderFingerprint = fingerprint;
     renderAis(snapshot.sources?.ais, snapshot.ais);
     renderSentinel(snapshot.sources?.sentinel);
     renderEnvironment(snapshot.sources?.environment);
@@ -2044,7 +2101,7 @@
     renderReanalysis(snapshot);
     renderClosure(snapshot);
     html('mapEvidenceTime', formatUtc(evidenceTime(snapshot)));
-    updateMapMode(mapMode);
+    renderMap(snapshot);
     syncMapGeometry(snapshot).catch(error => {
       byId('mapLoading').hidden = false;
       html('mapLoading', 'Published map geometry could not be loaded.');
@@ -2098,6 +2155,7 @@
   }
 
   byId('refreshButton').addEventListener('click', requestRefresh);
+  byId('overviewModeButton').addEventListener('click', () => updateMapMode('overview'));
   byId('liveModeButton').addEventListener('click', () => updateMapMode('live'));
   byId('incidentModeButton').addEventListener('click', () => updateMapMode('incident'));
   byId('layerControls').addEventListener('change', () => { if (lastSnapshot) renderMap(lastSnapshot); });

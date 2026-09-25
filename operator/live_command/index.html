@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
   <title>ESPADA Live Command</title>
-  <link rel="stylesheet" href="styles.css?v=20260924-4">
+  <link rel="stylesheet" href="styles.css?v=20260925-1">
 </head>
 <body>
   <header class="masthead">
@@ -131,9 +131,12 @@
       <header class="map-header">
         <div>
           <p class="kicker">LIVE SEA MAP · COMPONENT 02</p>
-          <h2 id="mapTitle">One map. Two honest timelines.</h2>
+          <h2 id="mapTitle">One map. Two scales. Honest timelines.</h2>
         </div>
         <div class="timeline-switch" role="group" aria-label="Map timeline">
+          <button class="timeline-button" id="overviewModeButton" type="button" aria-pressed="false">
+            <span>STRAIT OVERVIEW</span><small>Singapore context</small>
+          </button>
           <button class="timeline-button active" id="liveModeButton" type="button" aria-pressed="true">
             <span>LIVE WATCH</span><small>Current provider window</small>
           </button>
@@ -1117,6 +1120,6 @@
     <span id="pollState">Live API has not responded</span>
   </footer>
   <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
-  <script src="app.js?v=20260924-5"></script>
+  <script src="app.js?v=20260925-1"></script>
 </body>
 </html>

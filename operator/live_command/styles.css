@@ -117,7 +117,7 @@ h1{max-width:760px;margin-bottom:10px;font:700 clamp(32px,4.1vw,58px)/.98 Georgi
 .map-header h2{margin:0;font:700 30px/1.05 Georgia,serif;color:var(--navy)}
 .map-header p:not(.kicker){max-width:700px;margin:9px 0 0;color:var(--slate);font-size:12px;line-height:1.5}
 .timeline-switch{display:flex;flex:0 0 auto;border:1px solid var(--navy);background:#fff}
-.timeline-button{min-width:158px;padding:10px 13px;border:0;border-right:1px solid var(--navy);background:#fff;color:var(--navy);text-align:left}
+.timeline-button{min-width:142px;padding:10px 13px;border:0;border-right:1px solid var(--navy);background:#fff;color:var(--navy);text-align:left}
 .timeline-button:last-child{border-right:0}
 .timeline-button span{display:block;font:700 10px/1.2 Consolas,monospace;letter-spacing:.08em}
 .timeline-button small{display:block;margin-top:4px;color:var(--slate);font-size:9px}
@@ -131,6 +131,7 @@ h1{max-width:760px;margin-bottom:10px;font:700 clamp(32px,4.1vw,58px)/.98 Georgi
 .map-time small{grid-column:2;color:var(--slate);font-size:9px;margin-top:2px}
 .map-mode-chip{padding:6px 8px;background:var(--navy);color:#fff;font:700 9px/1 Consolas,monospace;letter-spacing:.07em}
 .map-mode-chip.incident{background:#745686}
+.map-mode-chip.overview{background:#17687c}
 .layer-controls{display:flex;align-items:center;gap:6px;margin:0;padding:0;border:0}
 .layer-controls legend{float:left;margin-right:5px;color:#697478;font:700 9px/1 Consolas,monospace;letter-spacing:.08em}
 .layer-controls label{position:relative}
