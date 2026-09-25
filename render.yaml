@@ -14,6 +14,12 @@ services:
         value: "1"
       - key: MPLCONFIGDIR
         value: /tmp/espada-matplotlib
+      - key: ESPADA_AIS_SESSION_SECONDS
+        value: "900"
+      - key: ESPADA_ENVIRONMENT_INTERVAL_SECONDS
+        value: "3600"
+      - key: OPEN_METEO_API_KEY
+        sync: false
       - key: AISSTREAM_API_KEY
         sync: false
       - key: GFW_API_ACCESS_TOKEN

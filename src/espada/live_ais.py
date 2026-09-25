@@ -255,6 +255,7 @@ async def capture_aisstream(
     endpoint: str = AISSTREAM_ENDPOINT,
     save_raw: bool = False,
     connect_factory: Callable[..., Awaitable[Any]] | None = None,
+    progress_callback: Callable[[dict[str, object]], None] | None = None,
 ) -> dict[str, object]:
     """Capture live positions with bounded reconnects and a rolling on-disk cache."""
     if duration_seconds <= 0:
@@ -325,8 +326,26 @@ async def capture_aisstream(
                     if save_raw:
                         with raw_path.open("a", encoding="utf-8") as handle:
                             handle.write(raw_text + "\n")
-                    if accepted % 50 == 0:
-                        cache.flush()
+                    if accepted == 1 or accepted % 25 == 0:
+                        progress = cache.flush()
+                        if progress_callback is not None:
+                            try:
+                                progress_callback(
+                                    {
+                                        "positions_accepted": accepted,
+                                        "cached_positions": len(progress),
+                                        "cached_vessels": int(progress["mmsi"].nunique())
+                                        if not progress.empty
+                                        else 0,
+                                    }
+                                )
+                            except Exception as callback_error:
+                                warning = (
+                                    "progress callback failed: "
+                                    f"{type(callback_error).__name__}: {callback_error}"
+                                )
+                                if warning not in warnings:
+                                    warnings.append(warning)
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # Network failures are reported and retried until the deadline.

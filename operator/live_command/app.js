@@ -2,6 +2,8 @@
   'use strict';
 
   const POLL_MS = 15000;
+  const CLIENT_ENVIRONMENT_TTL_MS = 30 * 60 * 1000;
+  const CLIENT_ENVIRONMENT_RETRY_MS = 10 * 60 * 1000;
   const SNAPSHOT_ENDPOINT = '/api/live/snapshot';
   const REFRESH_ENDPOINT = '/api/live/refresh';
   const ANALYZE_ENDPOINT = '/api/live/analyze-latest-sar';
@@ -36,6 +38,9 @@
   let selectedIntakeRequestId = null;
   let selectedIntakeReceiptId = null;
   let selectedClosureVersion = null;
+  let clientEnvironmentCache = null;
+  let clientEnvironmentRetryAfter = 0;
+  let clientEnvironmentPromise = null;
 
   const html = (id, value) => { byId(id).textContent = value; };
   const parseTime = value => {
@@ -97,6 +102,146 @@
         : rawMessage;
     html(`${prefix}Message`, displayMessage);
   };
+
+  const vectorComponents = (speed, degrees, fromDirection = false) => {
+    const magnitude = Number(speed);
+    const radians = Number(degrees) * Math.PI / 180;
+    const sign = fromDirection ? -1 : 1;
+    return [sign * magnitude * Math.sin(radians), sign * magnitude * Math.cos(radians)];
+  };
+
+  const velocityToMs = (value, unit) => {
+    const speed = Number(value);
+    const normalized = String(unit || '').toLowerCase().replaceAll(' ', '');
+    if (normalized.includes('km/h')) return speed / 3.6;
+    if (normalized === 'kn' || normalized.includes('knot')) return speed * 0.514444;
+    return speed;
+  };
+
+  const nearestValidIndex = (times, ...series) => {
+    let selected = -1;
+    let distance = Infinity;
+    (times || []).forEach((value, index) => {
+      if (!series.every(values => Number.isFinite(Number(values?.[index])))) return;
+      const rawTime = String(value);
+      const parsed = Date.parse(/(?:Z|[+-]\d{2}:?\d{2})$/i.test(rawTime) ? rawTime : `${rawTime}Z`);
+      if (!Number.isFinite(parsed)) return;
+      const candidate = Math.abs(Date.now() - parsed);
+      if (candidate < distance) { selected = index; distance = candidate; }
+    });
+    return selected;
+  };
+
+  async function fetchClientEnvironment(region = {}) {
+    const center = Array.isArray(region.center) ? region.center.map(Number) : [];
+    if (center.length !== 2 || !center.every(Number.isFinite)) throw new Error('Watch centre is unavailable');
+    const [longitude, latitude] = center;
+    const common = `latitude=${encodeURIComponent(latitude)}&longitude=${encodeURIComponent(longitude)}&timezone=GMT&forecast_days=2`;
+    const marineUrl = `https://marine-api.open-meteo.com/v1/marine?${common}&hourly=ocean_current_velocity,ocean_current_direction&cell_selection=sea`;
+    const weatherUrl = `https://api.open-meteo.com/v1/forecast?${common}&hourly=wind_speed_10m,wind_direction_10m&wind_speed_unit=ms`;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 12000);
+    try {
+      const [marineResponse, weatherResponse] = await Promise.all([
+        fetch(marineUrl, {cache:'no-store', signal:controller.signal}),
+        fetch(weatherUrl, {cache:'no-store', signal:controller.signal})
+      ]);
+      if (!marineResponse.ok || !weatherResponse.ok) {
+        throw new Error(`provider HTTP ${marineResponse.status}/${weatherResponse.status}`);
+      }
+      const [marine, weather] = await Promise.all([marineResponse.json(), weatherResponse.json()]);
+      const marineHourly = marine.hourly || {};
+      const weatherHourly = weather.hourly || {};
+      const marineIndex = nearestValidIndex(
+        marineHourly.time,
+        marineHourly.ocean_current_velocity,
+        marineHourly.ocean_current_direction
+      );
+      const weatherIndex = nearestValidIndex(
+        weatherHourly.time,
+        weatherHourly.wind_speed_10m,
+        weatherHourly.wind_direction_10m
+      );
+      if (marineIndex < 0 || weatherIndex < 0) throw new Error('provider arrays are incomplete');
+      const currentSpeed = velocityToMs(
+        marineHourly.ocean_current_velocity[marineIndex],
+        marine.hourly_units?.ocean_current_velocity
+      );
+      const windSpeed = velocityToMs(
+        weatherHourly.wind_speed_10m[weatherIndex],
+        weather.hourly_units?.wind_speed_10m
+      );
+      const [currentEast, currentNorth] = vectorComponents(
+        currentSpeed,
+        marineHourly.ocean_current_direction[marineIndex]
+      );
+      const [windEast, windNorth] = vectorComponents(
+        windSpeed,
+        weatherHourly.wind_direction_10m[weatherIndex],
+        true
+      );
+      const currentTime = new Date(`${marineHourly.time[marineIndex]}Z`).toISOString();
+      const windTime = new Date(`${weatherHourly.time[weatherIndex]}Z`).toISOString();
+      const now = new Date().toISOString();
+      return {
+        status:'PASS',
+        provider:'Open-Meteo direct operator feed',
+        source:'Open-Meteo marine current + forecast wind',
+        evidence_type:'MODEL FORECAST · DISPLAY FEED',
+        client_side:true,
+        last_attempt_utc:now,
+        last_success_utc:now,
+        latest_observation_utc:currentTime,
+        temporal_resolution:'hourly',
+        location:{longitude,latitude},
+        current:{
+          time_utc:currentTime,
+          wind_time_utc:windTime,
+          current_east_ms:currentEast,
+          current_north_ms:currentNorth,
+          current_speed_ms:currentSpeed,
+          wind_east_ms:windEast,
+          wind_north_ms:windNorth,
+          wind_speed_ms:windSpeed
+        },
+        message:'Fresh model fields were fetched directly by this operator browser because the shared server address was rate-limited. Display only; server-side evidence remains independently gated.'
+      };
+    } finally {
+      window.clearTimeout(timer);
+    }
+  }
+
+  async function applyClientEnvironmentFallback(snapshot) {
+    const serverEnvironment = snapshot?.sources?.environment || {};
+    const serverState = normalizeState(serverEnvironment.status);
+    if (serverState === 'pass' || serverState === 'stale') return snapshot;
+    const rateLimited = /429|too many requests|rate.?limit/i.test(
+      `${serverEnvironment.message || ''} ${serverEnvironment.last_error || ''}`
+    );
+    if (!rateLimited) return snapshot;
+    const now = Date.now();
+    if (clientEnvironmentCache && clientEnvironmentCache.expires > now) {
+      snapshot.sources.environment = clientEnvironmentCache.source;
+      return snapshot;
+    }
+    if (now < clientEnvironmentRetryAfter) return snapshot;
+    if (!clientEnvironmentPromise) {
+      clientEnvironmentPromise = fetchClientEnvironment(snapshot.region)
+        .then(source => {
+          clientEnvironmentCache = {source, expires:Date.now() + CLIENT_ENVIRONMENT_TTL_MS};
+          clientEnvironmentRetryAfter = 0;
+          return source;
+        })
+        .catch(() => {
+          clientEnvironmentRetryAfter = Date.now() + CLIENT_ENVIRONMENT_RETRY_MS;
+          return null;
+        })
+        .finally(() => { clientEnvironmentPromise = null; });
+    }
+    const source = await clientEnvironmentPromise;
+    if (source) snapshot.sources.environment = source;
+    return snapshot;
+  }
 
   const escapeText = value => String(value ?? '—');
   const escapeMarkup = value => escapeText(value).replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]));
@@ -2196,7 +2341,7 @@
     try {
       const response = await fetch(`${SNAPSHOT_ENDPOINT}?t=${Date.now()}`, {cache: 'no-store'});
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      render(await response.json());
+      render(await applyClientEnvironmentFallback(await response.json()));
     } catch (error) {
       renderOffline(error);
     }

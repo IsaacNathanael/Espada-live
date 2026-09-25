@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -186,7 +187,7 @@ class LiveOperationsEngine:
         *,
         environment_interval_seconds: float = 600.0,
         sentinel_interval_seconds: float = 900.0,
-        ais_capture_seconds: float = 55.0,
+        ais_capture_seconds: float = 900.0,
         ais_snapshot_minutes: float = 10.0,
     ) -> None:
         self.project_root = Path(project_root).resolve()
@@ -202,6 +203,12 @@ class LiveOperationsEngine:
         self.environment_cache = (
             self.project_root / "data" / "cache" / f"live_environment_{region_cache_tag}.json"
         )
+        self.environment_bootstrap = (
+            self.project_root / "data" / "bootstrap" / f"live_environment_{region_cache_tag}.json"
+        )
+        if not self.environment_cache.exists() and self.environment_bootstrap.exists():
+            self.environment_cache.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(self.environment_bootstrap, self.environment_cache)
         self.ais_cache = (
             self.project_root / "data" / "cache" / f"live_operations_ais_{region_cache_tag}.csv"
         )
@@ -2270,6 +2277,22 @@ class LiveOperationsEngine:
             )
             return
         bounding_box = AISBoundingBox(*self.region.bbox)
+
+        def report_progress(progress: dict[str, object]) -> None:
+            succeeded = _format_utc(_utc_now())
+            self._update_source(
+                "ais",
+                status="PASS",
+                last_success_utc=succeeded,
+                latest_observation_utc=self._latest_ais_time(),
+                positions_accepted=int(progress.get("positions_accepted", 0)),
+                cached_positions=int(progress.get("cached_positions", 0)),
+                cached_vessels=int(progress.get("cached_vessels", 0)),
+                error_kind=None,
+                message="One continuous AISStream session is receiving live positions.",
+                warnings=[],
+            )
+
         while not self._stop.is_set():
             attempted = _format_utc(_utc_now())
             with self._lock:
@@ -2294,6 +2317,7 @@ class LiveOperationsEngine:
                         self.ais_cache,
                         duration_seconds=self.ais_capture_seconds,
                         window_hours=self.ais_snapshot_minutes / 60.0,
+                        progress_callback=report_progress,
                     )
                 )
                 succeeded = _format_utc(_utc_now())
@@ -2332,7 +2356,7 @@ class LiveOperationsEngine:
                         ),
                         warnings=warnings,
                     )
-                    self._stop.wait(180.0 if rate_limited else 30.0)
+                    self._stop.wait(900.0 if rate_limited else 30.0)
                 else:
                     self._update_source(
                         "ais",
@@ -2353,6 +2377,10 @@ class LiveOperationsEngine:
                     last_attempt_utc=attempted,
                 )
                 self._stop.wait(15.0)
+            else:
+                # Give the provider time to retire the completed socket before a
+                # new long-lived capture session begins.
+                self._stop.wait(5.0)
 
     def _latest_ais_time(self) -> str | None:
         if not self.ais_cache.exists() or self.ais_cache.stat().st_size < 10:
@@ -2363,6 +2391,39 @@ class LiveOperationsEngine:
             return times.max().strftime("%Y-%m-%dT%H:%M:%SZ") if not times.empty else None
         except (OSError, ValueError, pd.errors.ParserError):
             return None
+
+    @staticmethod
+    def _environment_values(bundle: object) -> tuple[dict[str, object], list[dict[str, object]]]:
+        frame = bundle.frame.copy()
+        frame["time_utc"] = pd.to_datetime(frame["time_utc"], utc=True)
+        now = pd.Timestamp.now(tz="UTC")
+        current_index = (frame["time_utc"] - now).abs().idxmin()
+        current = frame.loc[current_index]
+        samples = []
+        for _, row in frame.iloc[: min(48, len(frame))].iterrows():
+            samples.append(
+                {
+                    "time_utc": row["time_utc"].strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "current_east_ms": round(float(row["current_east_ms"]), 5),
+                    "current_north_ms": round(float(row["current_north_ms"]), 5),
+                    "wind_east_ms": round(float(row["wind_east_ms"]), 5),
+                    "wind_north_ms": round(float(row["wind_north_ms"]), 5),
+                }
+            )
+        current_vector = {
+            "time_utc": current["time_utc"].strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "current_east_ms": round(float(current["current_east_ms"]), 5),
+            "current_north_ms": round(float(current["current_north_ms"]), 5),
+            "current_speed_ms": round(
+                float(np.hypot(current["current_east_ms"], current["current_north_ms"])), 5
+            ),
+            "wind_east_ms": round(float(current["wind_east_ms"]), 5),
+            "wind_north_ms": round(float(current["wind_north_ms"]), 5),
+            "wind_speed_ms": round(
+                float(np.hypot(current["wind_east_ms"], current["wind_north_ms"])), 5
+            ),
+        }
+        return current_vector, samples
 
     def refresh_environment(self) -> None:
         attempted = _format_utc(_utc_now())
@@ -2377,35 +2438,7 @@ class LiveOperationsEngine:
             bundle = load_environment(
                 "live", self.environment_cache, latitude=latitude, longitude=longitude
             )
-            frame = bundle.frame.copy()
-            frame["time_utc"] = pd.to_datetime(frame["time_utc"], utc=True)
-            now = pd.Timestamp.now(tz="UTC")
-            current_index = (frame["time_utc"] - now).abs().idxmin()
-            current = frame.loc[current_index]
-            samples = []
-            for _, row in frame.iloc[: min(48, len(frame))].iterrows():
-                samples.append(
-                    {
-                        "time_utc": row["time_utc"].strftime("%Y-%m-%dT%H:%M:%SZ"),
-                        "current_east_ms": round(float(row["current_east_ms"]), 5),
-                        "current_north_ms": round(float(row["current_north_ms"]), 5),
-                        "wind_east_ms": round(float(row["wind_east_ms"]), 5),
-                        "wind_north_ms": round(float(row["wind_north_ms"]), 5),
-                    }
-                )
-            current_vector = {
-                "time_utc": current["time_utc"].strftime("%Y-%m-%dT%H:%M:%SZ"),
-                "current_east_ms": round(float(current["current_east_ms"]), 5),
-                "current_north_ms": round(float(current["current_north_ms"]), 5),
-                "current_speed_ms": round(
-                    float(np.hypot(current["current_east_ms"], current["current_north_ms"])), 5
-                ),
-                "wind_east_ms": round(float(current["wind_east_ms"]), 5),
-                "wind_north_ms": round(float(current["wind_north_ms"]), 5),
-                "wind_speed_ms": round(
-                    float(np.hypot(current["wind_east_ms"], current["wind_north_ms"])), 5
-                ),
-            }
+            current_vector, samples = self._environment_values(bundle)
             succeeded = _format_utc(_utc_now())
             self._update_source(
                 "environment",
@@ -2420,7 +2453,29 @@ class LiveOperationsEngine:
                 message="Fresh provider response received; vectors are model fields, not observations.",
             )
         except Exception as error:
-            self._record_source_failure("environment", error, attempted=attempted)
+            try:
+                cached = load_environment("cache", self.environment_cache)
+                current_vector, samples = self._environment_values(cached)
+                payload = json.loads(self.environment_cache.read_text(encoding="utf-8"))
+                self._update_source(
+                    "environment",
+                    status="STALE",
+                    last_attempt_utc=attempted,
+                    last_success_utc=payload.get("fetched_at_utc"),
+                    latest_observation_utc=current_vector["time_utc"],
+                    source=cached.source,
+                    temporal_resolution=cached.temporal_resolution,
+                    location={"longitude": longitude, "latitude": latitude},
+                    current=current_vector,
+                    samples=samples,
+                    message=(
+                        "Live refresh is temporarily unavailable; displaying the last verified "
+                        f"provider cache. {type(error).__name__}: {error}"
+                    ),
+                    last_error=f"{type(error).__name__}: {error}",
+                )
+            except Exception:
+                self._record_source_failure("environment", error, attempted=attempted)
 
     def refresh_sentinel(self) -> None:
         attempted_at = _utc_now()

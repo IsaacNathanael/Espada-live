@@ -1,0 +1,494 @@
+{
+  "schema_version": "1.0",
+  "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind",
+  "fetched_at_utc": "2026-09-25T09:49:50Z",
+  "attribution": "Open-Meteo; ocean currents from MeteoFrance SMOC.",
+  "wind_source": "Open-Meteo forecast wind",
+  "temporal_resolution": "hourly",
+  "limitations": [
+    "Model output, not an observation or navigational product.",
+    "Approximately 0.08 degree resolution; coastal accuracy is limited."
+  ],
+  "samples": [
+    {
+      "time_utc": "2026-09-25T00:00:00Z",
+      "current_east_ms": -0.9116450707542506,
+      "current_north_ms": -0.0958177579953489,
+      "wind_east_ms": -0.8980256121069154,
+      "wind_north_ms": 0.8980256121069153,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-25T01:00:00Z",
+      "current_east_ms": -0.8546925194689163,
+      "current_north_ms": -0.10494304570998784,
+      "wind_east_ms": -0.9422255305759972,
+      "wind_north_ms": 1.4509000825455833,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-25T02:00:00Z",
+      "current_east_ms": -0.7481730376948681,
+      "current_north_ms": -0.052317355308094185,
+      "wind_east_ms": -1.016938719416585,
+      "wind_north_ms": 1.995854614181944,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-25T03:00:00Z",
+      "current_east_ms": -0.6087856488338446,
+      "current_north_ms": -0.0532618427902356,
+      "wind_east_ms": -1.3493997562643425,
+      "wind_north_ms": 2.2457783278395342,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-25T04:00:00Z",
+      "current_east_ms": -0.4420097312747882,
+      "current_north_ms": -0.046457094785623716,
+      "wind_east_ms": -2.080935786600725,
+      "wind_north_ms": 2.66347634719072,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-25T05:00:00Z",
+      "current_east_ms": -0.3611111111111111,
+      "current_north_ms": -6.633503495381496e-17,
+      "wind_east_ms": -2.640186862845206,
+      "wind_north_ms": 2.462014079825619,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-25T06:00:00Z",
+      "current_east_ms": -0.3611111111111111,
+      "current_north_ms": -6.633503495381496e-17,
+      "wind_east_ms": -2.682752819973393,
+      "wind_north_ms": 2.415561488955478,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-25T07:00:00Z",
+      "current_east_ms": -0.4420097312747882,
+      "current_north_ms": 0.04645709478562355,
+      "wind_east_ms": -2.604554345092314,
+      "wind_north_ms": 2.996197033484405,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-25T08:00:00Z",
+      "current_east_ms": -0.6087856488338446,
+      "current_north_ms": 0.05326184279023538,
+      "wind_east_ms": -3.1003545394595857,
+      "wind_north_ms": 2.9939775766782786,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-25T09:00:00Z",
+      "current_east_ms": -0.8035932627093029,
+      "current_north_ms": 0.05619271496054531,
+      "wind_east_ms": -3.3830979429135355,
+      "wind_north_ms": 2.3688706821298204,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-25T10:00:00Z",
+      "current_east_ms": -1.0,
+      "current_north_ms": -1.8369701987210297e-16,
+      "wind_east_ms": -2.8512208774027776,
+      "wind_north_ms": 1.4527695991665497,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-25T11:00:00Z",
+      "current_east_ms": -1.1388888888888888,
+      "current_north_ms": -2.0921049485433948e-16,
+      "wind_east_ms": -2.948444657522384,
+      "wind_north_ms": 1.1912489670626005,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-25T12:00:00Z",
+      "current_east_ms": -1.1381951085495257,
+      "current_north_ms": -0.03974664902229253,
+      "wind_east_ms": -2.810077083756577,
+      "wind_north_ms": 1.0786875281313537,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-25T13:00:00Z",
+      "current_east_ms": -0.9431501161570975,
+      "current_north_ms": -0.04942840311833629,
+      "wind_east_ms": -2.6418489294085035,
+      "wind_north_ms": 1.121398338764216,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-25T14:00:00Z",
+      "current_east_ms": -0.6373325876659988,
+      "current_north_ms": -0.04456663600319134,
+      "wind_east_ms": -2.797271535180508,
+      "wind_north_ms": 0.8021047054274673,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-25T15:00:00Z",
+      "current_east_ms": -0.30179365962629207,
+      "current_north_ms": -0.04779941987340393,
+      "wind_east_ms": -3.5849488377492547,
+      "wind_north_ms": 1.376132926253953,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-25T16:00:00Z",
+      "current_east_ms": 0.05892556509887896,
+      "current_north_ms": -0.05892556509887895,
+      "wind_east_ms": -2.2552097543979563,
+      "wind_north_ms": 0.3976543268572704,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-25T17:00:00Z",
+      "current_east_ms": 0.245406795861916,
+      "current_north_ms": -0.0477022488441362,
+      "wind_east_ms": 1.3025173609436653,
+      "wind_north_ms": 0.946334256190882,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-25T18:00:00Z",
+      "current_east_ms": 0.35759680260112264,
+      "current_north_ms": -0.05025695312446805,
+      "wind_east_ms": -0.9579526825623373,
+      "wind_north_ms": 2.948275200514976,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-25T19:00:00Z",
+      "current_east_ms": 0.3055555555555556,
+      "current_north_ms": 1.870988165364012e-17,
+      "wind_east_ms": 2.665834662054043,
+      "wind_north_ms": 2.2369008817091576,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-25T20:00:00Z",
+      "current_east_ms": 0.1585094193825256,
+      "current_north_ms": -0.05150283239582455,
+      "wind_east_ms": -0.41328266284729404,
+      "wind_north_ms": 2.343842452169055,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-25T21:00:00Z",
+      "current_east_ms": -0.09900072490981865,
+      "current_north_ms": -0.05044338885994966,
+      "wind_east_ms": -1.1579369470161722,
+      "wind_north_ms": 1.5937634789186463,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-25T22:00:00Z",
+      "current_east_ms": -0.4042898859483318,
+      "current_north_ms": -0.1008007898331949,
+      "wind_east_ms": 0.2880883189873356,
+      "wind_north_ms": 2.04985490229505,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-25T23:00:00Z",
+      "current_east_ms": -0.6876861588483126,
+      "current_north_ms": -0.09664798677782349,
+      "wind_east_ms": 0.41374426472734144,
+      "wind_north_ms": 1.9465137254602731,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-26T00:00:00Z",
+      "current_east_ms": -0.9116450707542506,
+      "current_north_ms": -0.0958177579953489,
+      "wind_east_ms": 0.14021051222569178,
+      "wind_north_ms": 2.0051037410222463,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-26T01:00:00Z",
+      "current_east_ms": -0.8876706975596212,
+      "current_north_ms": -0.046520849993728276,
+      "wind_east_ms": 0.09417123955456913,
+      "wind_north_ms": 1.3467114678507628,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-26T02:00:00Z",
+      "current_east_ms": -0.7481730376948681,
+      "current_north_ms": -0.052317355308094185,
+      "wind_east_ms": -0.9512653885322977,
+      "wind_north_ms": 1.9503830804691924,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-26T03:00:00Z",
+      "current_east_ms": -0.5534414989398586,
+      "current_north_ms": -0.048419857082032364,
+      "wind_east_ms": -1.5466646095007637,
+      "wind_north_ms": 2.0524932608215427,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-26T04:00:00Z",
+      "current_east_ms": -0.3611111111111111,
+      "current_north_ms": -6.633503495381496e-17,
+      "wind_east_ms": -1.2099999999999997,
+      "wind_north_ms": 2.0957814771583414,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-26T05:00:00Z",
+      "current_east_ms": -0.1388888888888889,
+      "current_north_ms": -2.5513474982236523e-17,
+      "wind_east_ms": -0.9847005498558299,
+      "wind_north_ms": 2.1116971437953946,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-26T06:00:00Z",
+      "current_east_ms": -0.09900072490981868,
+      "current_north_ms": 0.05044338885994963,
+      "wind_east_ms": -1.445705175410313,
+      "wind_north_ms": 3.4058679577740296,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-26T07:00:00Z",
+      "current_east_ms": -0.1585094193825256,
+      "current_north_ms": 0.05150283239582454,
+      "wind_east_ms": -1.88689255017746,
+      "wind_north_ms": 1.7595557689612458,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-26T08:00:00Z",
+      "current_east_ms": -0.3017936596262921,
+      "current_north_ms": 0.047799419873403824,
+      "wind_east_ms": 0.24725290632563185,
+      "wind_north_ms": 0.4460560506410919,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-26T09:00:00Z",
+      "current_east_ms": -0.4972609476841367,
+      "current_north_ms": 0.05226423163382649,
+      "wind_east_ms": 0.2527476584857634,
+      "wind_north_ms": 0.3478773075812274,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-26T10:00:00Z",
+      "current_east_ms": -0.75,
+      "current_north_ms": -1.3777276490407724e-16,
+      "wind_east_ms": 1.2569373835729536,
+      "wind_north_ms": -0.29018686010358574,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-26T11:00:00Z",
+      "current_east_ms": -0.9986295347545738,
+      "current_north_ms": -0.052335956242944306,
+      "wind_east_ms": 0.797938081273123,
+      "wind_north_ms": 0.8556838308944296,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-26T12:00:00Z",
+      "current_east_ms": -1.1095883719495265,
+      "current_north_ms": -0.058151062492160344,
+      "wind_east_ms": 0.8446624428524888,
+      "wind_north_ms": 1.4057543731514641,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-26T13:00:00Z",
+      "current_east_ms": -1.0541089533520502,
+      "current_north_ms": -0.055243509367552325,
+      "wind_east_ms": 0.6149438188061451,
+      "wind_north_ms": 1.8926024674273558,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-26T14:00:00Z",
+      "current_east_ms": -0.8599309882608831,
+      "current_north_ms": -0.045067073431424264,
+      "wind_east_ms": -1.7757378587636622e-16,
+      "wind_north_ms": 1.45,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-26T15:00:00Z",
+      "current_east_ms": -0.4972609476841367,
+      "current_north_ms": -0.05226423163382668,
+      "wind_east_ms": -0.2031683678703084,
+      "wind_north_ms": 1.1522250710242834,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-26T16:00:00Z",
+      "current_east_ms": -0.18866861344255484,
+      "current_north_ms": -0.04704036858882429,
+      "wind_east_ms": 0.5501315561749642,
+      "wind_north_ms": 0.3996939715588818,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-26T17:00:00Z",
+      "current_east_ms": 0.09900072490981866,
+      "current_north_ms": -0.050443388859949645,
+      "wind_east_ms": 1.0958141679009201,
+      "wind_north_ms": 0.09587131702242409,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-26T18:00:00Z",
+      "current_east_ms": 0.245406795861916,
+      "current_north_ms": -0.0477022488441362,
+      "wind_east_ms": 1.3980530789538756,
+      "wind_north_ms": 0.4542549817311729,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-26T19:00:00Z",
+      "current_east_ms": 0.245406795861916,
+      "current_north_ms": -0.0477022488441362,
+      "wind_east_ms": 0.8530091462014444,
+      "wind_north_ms": 0.34463806594263935,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-26T20:00:00Z",
+      "current_east_ms": 0.1585094193825256,
+      "current_north_ms": -0.05150283239582455,
+      "wind_east_ms": 0.8046501305682442,
+      "wind_north_ms": 0.4460248506266299,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-26T21:00:00Z",
+      "current_east_ms": -0.05892556509887895,
+      "current_north_ms": -0.058925565098878974,
+      "wind_east_ms": 0.7935433625226214,
+      "wind_north_ms": 0.3046127571135056,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-26T22:00:00Z",
+      "current_east_ms": -0.3575968026011226,
+      "current_north_ms": -0.050256953124468214,
+      "wind_east_ms": 1.1983312105318935,
+      "wind_north_ms": 0.3893614129124339,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    },
+    {
+      "time_utc": "2026-09-26T23:00:00Z",
+      "current_east_ms": -0.6035873192525841,
+      "current_north_ms": -0.09559883974680786,
+      "wind_east_ms": 0.15435676991144587,
+      "wind_north_ms": 0.3029422182240451,
+      "latitude": 1.2916641,
+      "longitude": 104.125015,
+      "source": "Open-Meteo / MeteoFrance SMOC currents + forecast wind"
+    }
+  ]
+}

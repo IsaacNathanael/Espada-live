@@ -79,6 +79,14 @@ def test_urls_request_required_variables() -> None:
     assert "wind_direction_10m" in weather
 
 
+def test_customer_open_meteo_key_uses_dedicated_endpoints() -> None:
+    marine, weather = build_open_meteo_urls(1.255, 104.125, api_key="private-key")
+    assert marine.startswith("https://customer-marine-api.open-meteo.com/")
+    assert weather.startswith("https://customer-api.open-meteo.com/")
+    assert "apikey=private-key" in marine
+    assert "apikey=private-key" in weather
+
+
 def test_historical_wind_uses_archive_host_and_exact_dates(tmp_path: Path) -> None:
     times = [f"2026-08-29T{hour:02d}:00" for hour in range(24)] + [
         f"2026-08-30T{hour:02d}:00" for hour in range(24)

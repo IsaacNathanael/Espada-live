@@ -295,11 +295,25 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "4180")))
     parser.add_argument("--name", default=DEFAULT_LIVE_REGION.name)
     parser.add_argument("--bbox", nargs=4, type=float, default=list(DEFAULT_LIVE_REGION.bbox))
-    parser.add_argument("--ais-window-seconds", type=float, default=55.0)
+    parser.add_argument(
+        "--ais-window-seconds",
+        type=float,
+        default=float(os.environ.get("ESPADA_AIS_SESSION_SECONDS", "900")),
+    )
+    parser.add_argument(
+        "--environment-interval-seconds",
+        type=float,
+        default=float(os.environ.get("ESPADA_ENVIRONMENT_INTERVAL_SECONDS", "3600")),
+    )
     args = parser.parse_args(argv)
     root = args.root.resolve()
     region = LiveRegion(args.name, *args.bbox)
-    engine = LiveOperationsEngine(root, region, ais_capture_seconds=args.ais_window_seconds)
+    engine = LiveOperationsEngine(
+        root,
+        region,
+        ais_capture_seconds=args.ais_window_seconds,
+        environment_interval_seconds=args.environment_interval_seconds,
+    )
     handler = lambda *handler_args, **kwargs: LiveOperationsHandler(  # noqa: E731
         *handler_args, directory=str(root), **kwargs
     )

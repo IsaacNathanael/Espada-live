@@ -232,6 +232,8 @@ def test_live_command_truth_panel_uses_provider_state_without_demo_data() -> Non
     assert "Missing data stays missing" in page
     assert "/api/live/snapshot" in script
     assert "/api/live/refresh" in script
+    assert "applyClientEnvironmentFallback" in script
+    assert "Open-Meteo direct operator feed" in script
     assert "demoVessels" not in script
     assert "fallbackPositions" not in script
 
@@ -548,6 +550,28 @@ def test_refresh_failure_preserves_last_verified_provider_payload(tmp_path: Path
     assert snapshot["sources"]["sentinel"]["scenes"][0]["id"] == "S1-VERIFIED"
     assert snapshot["pipeline"]["environment_ready"] is True
     assert snapshot["pipeline"]["sentinel_catalog_ready"] is True
+
+
+def test_live_server_defaults_to_long_lived_ais_sessions() -> None:
+    server_source = (
+        Path(__file__).parents[1] / "src" / "espada" / "live_operations_server.py"
+    ).read_text(encoding="utf-8")
+    assert 'ESPADA_AIS_SESSION_SECONDS", "900"' in server_source
+    assert 'ESPADA_ENVIRONMENT_INTERVAL_SECONDS", "3600"' in server_source
+
+
+def test_environment_bootstrap_is_copied_into_empty_runtime(tmp_path: Path) -> None:
+    region = LiveRegion("East Singapore Offshore Watch", 104.02, 1.20, 104.23, 1.31)
+    bootstrap = (
+        tmp_path
+        / "data"
+        / "bootstrap"
+        / "live_environment_104p020_1p200_104p230_1p310.json"
+    )
+    bootstrap.parent.mkdir(parents=True)
+    bootstrap.write_text('{"samples": []}', encoding="utf-8")
+    engine = LiveOperationsEngine(tmp_path, region)
+    assert engine.environment_cache.read_text(encoding="utf-8") == '{"samples": []}'
 
 
 def test_analyst_approval_is_required_and_persisted(tmp_path: Path) -> None:

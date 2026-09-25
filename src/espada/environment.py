@@ -3,12 +3,15 @@ from __future__ import annotations
 import json
 import math
 import os
+import random
 import tempfile
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Callable
 from urllib.parse import urlencode
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 os.environ.setdefault(
@@ -28,6 +31,8 @@ from .models import Forcing, format_utc
 
 MARINE_ENDPOINT = "https://marine-api.open-meteo.com/v1/marine"
 WEATHER_ENDPOINT = "https://api.open-meteo.com/v1/forecast"
+CUSTOMER_MARINE_ENDPOINT = "https://customer-marine-api.open-meteo.com/v1/marine"
+CUSTOMER_WEATHER_ENDPOINT = "https://customer-api.open-meteo.com/v1/forecast"
 HISTORICAL_WEATHER_ENDPOINT = "https://historical-forecast-api.open-meteo.com/v1/forecast"
 HISTORICAL_REANALYSIS_ENDPOINT = "https://archive-api.open-meteo.com/v1/archive"
 HISTORICAL_FORECAST_START = pd.Timestamp("2021-03-23T00:00:00Z")
@@ -74,15 +79,26 @@ def _utc_timestamp(value: str | datetime, label: str) -> pd.Timestamp:
     return parsed.tz_convert("UTC")
 
 
-def build_open_meteo_urls(latitude: float, longitude: float, forecast_days: int = 2) -> tuple[str, str]:
+def build_open_meteo_urls(
+    latitude: float,
+    longitude: float,
+    forecast_days: int = 2,
+    *,
+    api_key: str | None = None,
+) -> tuple[str, str]:
+    api_key = (api_key if api_key is not None else os.environ.get("OPEN_METEO_API_KEY", "")).strip()
+    marine_endpoint = CUSTOMER_MARINE_ENDPOINT if api_key else MARINE_ENDPOINT
+    weather_endpoint = CUSTOMER_WEATHER_ENDPOINT if api_key else WEATHER_ENDPOINT
     common = {
         "latitude": latitude,
         "longitude": longitude,
         "timezone": "GMT",
         "forecast_days": forecast_days,
     }
+    if api_key:
+        common["apikey"] = api_key
     marine = _api_url(
-        MARINE_ENDPOINT,
+        marine_endpoint,
         {
             **common,
             "hourly": "ocean_current_velocity,ocean_current_direction",
@@ -90,7 +106,7 @@ def build_open_meteo_urls(latitude: float, longitude: float, forecast_days: int 
         },
     )
     weather = _api_url(
-        WEATHER_ENDPOINT,
+        weather_endpoint,
         {
             **common,
             "hourly": "wind_speed_10m,wind_direction_10m",
@@ -130,10 +146,32 @@ def build_historical_wind_url(
     )
 
 
-def _read_json(url: str, timeout_seconds: int = 25) -> dict:
-    request = Request(url, headers={"User-Agent": "Espada-SIH26143/0.1"})
-    with urlopen(request, timeout=timeout_seconds) as response:
-        return json.loads(response.read().decode("utf-8"))
+def _read_json(url: str, timeout_seconds: int = 25, attempts: int = 3) -> dict:
+    """Read a provider response with bounded, provider-aware retries.
+
+    Free public APIs can briefly return 429/5xx responses. Retrying those
+    responses with jitter is safe; authentication and request errors are not.
+    """
+    request = Request(url, headers={"User-Agent": "Espada-SIH26143/1.0"})
+    for attempt in range(max(1, attempts)):
+        try:
+            with urlopen(request, timeout=timeout_seconds) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except HTTPError as error:
+            retryable = error.code == 429 or 500 <= error.code < 600
+            if not retryable or attempt + 1 >= attempts:
+                raise
+            retry_after = error.headers.get("Retry-After") if error.headers else None
+            try:
+                delay = float(retry_after) if retry_after else 2.0**attempt
+            except ValueError:
+                delay = 2.0**attempt
+            time.sleep(min(30.0, max(1.0, delay) + random.uniform(0.0, 0.5)))
+        except URLError:
+            if attempt + 1 >= attempts:
+                raise
+            time.sleep(min(10.0, 2.0**attempt + random.uniform(0.0, 0.5)))
+    raise RuntimeError("Environmental provider retry loop exited unexpectedly")
 
 
 def _speed_to_ms(values: np.ndarray, unit: str) -> np.ndarray:
