@@ -246,6 +246,9 @@ def test_live_command_map_separates_live_and_incident_evidence() -> None:
     assert "Singapore Strait overview" in script
     assert "ais-observed-interpolation" in script
     assert ".duration(12000)" in script
+    assert "initializeLazyComponents" in script
+    assert "IntersectionObserver" in script
+    assert 'href="demo.html"' in page
     assert "No AIS positions received" in page
     assert "snapshot.coastline_url" in script
     assert "snapshot.sources?.sentinel?.footprints_url" in script
@@ -256,6 +259,23 @@ def test_live_command_map_separates_live_and_incident_evidence() -> None:
     assert 'data-layer="stationary"' in page
     assert "CURRENT VESSELS" in page
     assert "rolling live window" in script
+
+
+def test_controlled_judges_demo_is_integrated_and_explicitly_synthetic() -> None:
+    root = Path(__file__).resolve().parents[1]
+    page = (root / "operator/live_command/demo.html").read_text(encoding="utf-8")
+    script = (root / "operator/live_command/demo.js").read_text(encoding="utf-8")
+    assert "CONTROLLED EXERCISE" in page
+    assert "Synthetic truth is known and disclosed" in page
+    assert "NOT LIVE EVIDENCE" in page
+    assert "GROUND TRUTH SEALED" in page
+    assert "MERIDIAN-7" in page
+    assert "KNOWN SOURCE RECOVERED" in page
+    assert "BEGIN CONTROLLED RUN" in page
+    assert "startDemo" in script
+    assert "previousStage" in script
+    assert "nextStage" in script
+    assert "restartDemo" in script
 
 
 def test_singapore_watch_exposes_wider_context_without_widening_filter(tmp_path: Path) -> None:

@@ -85,6 +85,9 @@ h1{max-width:760px;margin-bottom:10px;font:700 clamp(32px,4.1vw,58px)/.98 Georgi
 .lede{max-width:760px;margin:0;color:var(--slate);font-size:16px;line-height:1.55}
 .briefing-actions{min-width:390px;text-align:right}
 .info-actions{position:relative;display:flex;justify-content:flex-end;gap:6px;margin-bottom:9px}
+.demo-launch{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:6px 10px;border:1px solid var(--amber);background:var(--amber);color:#fff;font:700 10px/1 "Segoe UI",sans-serif;text-decoration:none;text-transform:uppercase;letter-spacing:.04em}
+.demo-launch:hover{border-color:#8e570e;background:#9f620f}
+.demo-launch span{font-size:8px}
 .info-menu{display:inline-block}
 .info-menu>summary{list-style:none;cursor:pointer}
 .info-menu>summary::-webkit-details-marker{display:none}
@@ -132,6 +135,15 @@ h1{max-width:760px;margin-bottom:10px;font:700 clamp(32px,4.1vw,58px)/.98 Georgi
 .map-mode-chip{padding:6px 8px;background:var(--navy);color:#fff;font:700 9px/1 Consolas,monospace;letter-spacing:.07em}
 .map-mode-chip.incident{background:#745686}
 .map-mode-chip.overview{background:#17687c}
+
+/* Keep the operational watch immediately responsive. Deep investigation desks
+   are laid out and painted only as the operator approaches them. */
+.detection-section,.drift-section,.ais-filter-section,.attribution-section,
+.response-section,.case-register-section,.planner-section,.intake-section,
+.reanalysis-section,.closure-section{
+  content-visibility:auto;
+  contain-intrinsic-size:auto 960px;
+}
 .layer-controls{display:flex;align-items:center;gap:6px;margin:0;padding:0;border:0}
 .layer-controls legend{float:left;margin-right:5px;color:#697478;font:700 9px/1 Consolas,monospace;letter-spacing:.08em}
 .layer-controls label{position:relative}

@@ -333,6 +333,11 @@ async def capture_aisstream(
             warning = f"connection {connections} ended: {type(exc).__name__}: {exc}"
             if warning not in warnings:
                 warnings.append(warning)
+            # A provider rate limit is a deliberate refusal, not a transient empty
+            # sea. Reconnecting several times inside the same capture window only
+            # extends the block and can hide the real fault behind a NO_DATA state.
+            if "HTTP 429" in warning or "status code 429" in warning.lower():
+                break
             remaining = deadline - loop.time()
             if remaining <= 0:
                 break
@@ -342,8 +347,11 @@ async def capture_aisstream(
 
     frame = cache.flush()
     finished = datetime.now(UTC)
+    rate_limited = any("HTTP 429" in warning for warning in warnings)
+    connection_failed = bool(warnings and accepted == 0 and confirmations == 0 and received == 0)
     status = {
-        "status": "PASS" if accepted > 0 else "NO_DATA",
+        "status": "PASS" if accepted > 0 else "ERROR" if connection_failed else "NO_DATA",
+        "error_kind": "RATE_LIMITED" if rate_limited else "CONNECTION_FAILED" if connection_failed else None,
         "provider": "AISStream",
         "endpoint": endpoint,
         "bounding_box": bounding_box.to_dict(),
@@ -368,4 +376,3 @@ async def capture_aisstream(
     }
     _write_status(status_path, status)
     return status
-

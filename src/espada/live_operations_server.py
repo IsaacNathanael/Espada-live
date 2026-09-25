@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import gzip
 import json
+import mimetypes
 import os
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -81,6 +83,42 @@ class LiveOperationsHandler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _serve_static(self, *, include_body: bool = True) -> None:
+        """Serve the public allowlist with compression and explicit cache policy."""
+        root = Path(self.directory or os.getcwd()).resolve()
+        relative = unquote(urlsplit(self.path).path).replace("\\", "/").lstrip("/")
+        target = (root / relative).resolve()
+        try:
+            target.relative_to(root)
+        except ValueError:
+            self._json(404, {"status": "FAIL", "error": "Not found"})
+            return
+        if target.is_dir():
+            target = target / "index.html"
+        if not target.is_file():
+            self._json(404, {"status": "FAIL", "error": "Not found"})
+            return
+        body = target.read_bytes()
+        content_type = mimetypes.guess_type(str(target))[0] or "application/octet-stream"
+        compressible = target.suffix.lower() in {".html", ".css", ".js", ".json", ".geojson", ".csv", ".svg"}
+        compressed = compressible and "gzip" in self.headers.get("Accept-Encoding", "").lower() and len(body) > 1024
+        if compressed:
+            body = gzip.compress(body, compresslevel=5)
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Vary", "Accept-Encoding")
+        if compressed:
+            self.send_header("Content-Encoding", "gzip")
+        if relative.startswith("operator/live_command/") and target.suffix.lower() in {".css", ".js"}:
+            self.send_header("Cache-Control", "public, max-age=3600")
+        else:
+            self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        if include_body:
+            self.wfile.write(body)
+
     def do_GET(self) -> None:  # noqa: N802 - stdlib server API
         path = urlsplit(self.path).path
         if path == "/":
@@ -105,7 +143,7 @@ class LiveOperationsHandler(SimpleHTTPRequestHandler):
             self._json(200, self.engine.case_register())
             return
         if self._static_route_allowed(self.path):
-            super().do_GET()
+            self._serve_static()
             return
         self._json(404, {"status": "FAIL", "error": "Not found"})
 
@@ -115,7 +153,7 @@ class LiveOperationsHandler(SimpleHTTPRequestHandler):
             self._redirect("/operator/live_command/index.html")
             return
         if self._static_route_allowed(self.path):
-            super().do_HEAD()
+            self._serve_static(include_body=False)
             return
         self._json(404, {"status": "FAIL", "error": "Not found"})
 

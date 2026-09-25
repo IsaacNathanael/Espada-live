@@ -2311,6 +2311,28 @@ class LiveOperationsEngine:
                         message=f"Accepted {accepted} live positions in the latest capture window.",
                         warnings=status.get("warnings", []),
                     )
+                elif status.get("status") == "ERROR":
+                    error_kind = str(status.get("error_kind") or "CONNECTION_FAILED")
+                    warnings = list(status.get("warnings", []))
+                    rate_limited = error_kind == "RATE_LIMITED"
+                    self._update_source(
+                        "ais",
+                        status="STALE" if has_verified_capture else "ERROR",
+                        last_attempt_utc=attempted,
+                        latest_observation_utc=self._latest_ais_time(),
+                        positions_accepted=0,
+                        cached_positions=int(status.get("cached_positions", 0)),
+                        cached_vessels=int(status.get("cached_vessels", 0)),
+                        error_kind=error_kind,
+                        message=(
+                            "AISStream rate-limited this connection. Use one running ESPADA service per API key; "
+                            "the system will retry with a safe backoff."
+                            if rate_limited
+                            else "AISStream could not establish a verified provider connection."
+                        ),
+                        warnings=warnings,
+                    )
+                    self._stop.wait(180.0 if rate_limited else 30.0)
                 else:
                     self._update_source(
                         "ais",

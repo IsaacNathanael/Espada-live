@@ -122,3 +122,28 @@ def test_capture_writes_sanitized_status_and_cache(tmp_path: Path, monkeypatch: 
     assert (tmp_path / "cache.csv").exists()
     status_text = (tmp_path / "out" / "live_ais_status.json").read_text(encoding="utf-8")
     assert "top-secret" not in status_text
+
+
+def test_capture_reports_provider_rate_limit_as_error_without_reconnect_storm(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class RateLimitedSocket:
+        async def __aenter__(self):
+            raise RuntimeError("server rejected WebSocket connection: HTTP 429")
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return False
+
+    monkeypatch.setenv("AISSTREAM_API_KEY", "top-secret")
+    result = asyncio.run(
+        capture_aisstream(
+            AISBoundingBox(104.02, 1.20, 104.23, 1.31),
+            tmp_path / "out",
+            tmp_path / "cache.csv",
+            duration_seconds=5,
+            connect_factory=lambda *args, **kwargs: RateLimitedSocket(),
+        )
+    )
+    assert result["status"] == "ERROR"
+    assert result["error_kind"] == "RATE_LIMITED"
+    assert result["connections"] == 1

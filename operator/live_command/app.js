@@ -22,6 +22,8 @@
   let geometryLoadKey = '';
   let previousVesselPositions = new Map();
   let lastRenderFingerprint = '';
+  const activeComponentIds = new Set();
+  const componentRenderFingerprints = new Map();
   let sarView = 'overview';
   let selectedSceneId = null;
   let driftView = 'comparison';
@@ -169,8 +171,8 @@
     byId('mapLoading').hidden = true;
     if (failures.length) html('mapLayerStatus', `Unavailable geometry: ${failures.join(', ')}`);
     renderMap(snapshot);
-    renderDriftMap(snapshot);
-    renderCandidateMap(snapshot);
+    if (activeComponentIds.has('reverse-drift')) renderDriftMap(snapshot);
+    if (activeComponentIds.has('candidate-attribution')) renderCandidateMap(snapshot);
   }
 
   function appendMapTitle(selection, value) {
@@ -2076,6 +2078,85 @@
     });
   }
 
+  const componentSpecs = {
+    'detection-workbench': {
+      select: snapshot => ({sentinel:snapshot.sources?.sentinel,analysis:snapshot.analysis,review:snapshot.review}),
+      render: renderDetectionWorkbench
+    },
+    'reverse-drift': {
+      select: snapshot => ({analysis:snapshot.analysis,review:snapshot.review,attribution:snapshot.attribution,environment:snapshot.sources?.environment}),
+      render: renderReverseDrift
+    },
+    'ais-filter': {select: snapshot => snapshot.attribution, render: renderAisFilter},
+    'candidate-attribution': {select: snapshot => snapshot.attribution, render: renderCandidateWorkspace},
+    'respond-workspace': {
+      select: snapshot => ({analysis:snapshot.analysis,review:snapshot.review,attribution:snapshot.attribution,response:snapshot.response}),
+      render: renderResponseWorkspace
+    },
+    'case-register': {select: snapshot => snapshot.case_register, render: renderCaseRegister},
+    'evidence-planner': {
+      select: snapshot => ({attribution:snapshot.attribution,response:snapshot.response,retasking:snapshot.retasking}),
+      render: renderRetasking
+    },
+    'evidence-intake': {
+      select: snapshot => ({retasking:snapshot.retasking,evidence_intake:snapshot.evidence_intake,attribution:snapshot.attribution}),
+      render: renderEvidenceIntake
+    },
+    'controlled-reanalysis': {
+      select: snapshot => ({attribution:snapshot.attribution,evidence_intake:snapshot.evidence_intake,reanalysis:snapshot.reanalysis}),
+      render: renderReanalysis
+    },
+    'decision-closure': {
+      select: snapshot => ({attribution:snapshot.attribution,reanalysis:snapshot.reanalysis,closure:snapshot.closure}),
+      render: renderClosure
+    }
+  };
+
+  function renderComponent(id, snapshot=lastSnapshot, force=false) {
+    const spec = componentSpecs[id];
+    if (!spec || !snapshot) return;
+    const fingerprint = JSON.stringify(spec.select(snapshot));
+    if (!force && componentRenderFingerprints.get(id) === fingerprint) return;
+    componentRenderFingerprints.set(id, fingerprint);
+    spec.render(snapshot);
+  }
+
+  function renderActiveComponents(snapshot) {
+    activeComponentIds.forEach(id => renderComponent(id, snapshot));
+  }
+
+  function initializeLazyComponents() {
+    const ids = Object.keys(componentSpecs);
+    if (!('IntersectionObserver' in window)) {
+      ids.forEach(id => activeComponentIds.add(id));
+      return;
+    }
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        const id = entry.target.id;
+        if (entry.isIntersecting) {
+          activeComponentIds.add(id);
+          renderComponent(id, lastSnapshot, true);
+        } else {
+          activeComponentIds.delete(id);
+        }
+      });
+    }, {rootMargin:'700px 0px 700px 0px'});
+    ids.forEach(id => {
+      const element = byId(id);
+      if (element) observer.observe(element);
+    });
+    const activateHash = () => {
+      const id = window.location.hash.slice(1);
+      if (componentSpecs[id]) {
+        activeComponentIds.add(id);
+        renderComponent(id, lastSnapshot, true);
+      }
+    };
+    window.addEventListener('hashchange', activateHash);
+    activateHash();
+  }
+
   function render(snapshot) {
     lastSnapshot = snapshot;
     renderHeader(snapshot);
@@ -2090,16 +2171,7 @@
     renderSentinel(snapshot.sources?.sentinel);
     renderEnvironment(snapshot.sources?.environment);
     renderIntegrity(snapshot);
-    renderDetectionWorkbench(snapshot);
-    renderReverseDrift(snapshot);
-    renderAisFilter(snapshot);
-    renderCandidateWorkspace(snapshot);
-    renderResponseWorkspace(snapshot);
-    renderCaseRegister(snapshot);
-    renderRetasking(snapshot);
-    renderEvidenceIntake(snapshot);
-    renderReanalysis(snapshot);
-    renderClosure(snapshot);
+    renderActiveComponents(snapshot);
     html('mapEvidenceTime', formatUtc(evidenceTime(snapshot)));
     renderMap(snapshot);
     syncMapGeometry(snapshot).catch(error => {
@@ -2207,6 +2279,7 @@
   byId('closureRationale').addEventListener('input', updateClosureButton);
   byId('closureAcknowledge').addEventListener('change', updateClosureButton);
   updateMapMode('live');
+  initializeLazyComponents();
   tickClock();
   poll();
   window.setInterval(tickClock, 1000);
