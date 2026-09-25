@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: espada-live-operations
+    runtime: python
+    plan: free
+    autoDeploy: true
+    buildCommand: pip install -r requirements-live.txt && pip install --no-deps -e .
+    startCommand: python -m espada.live_operations_server --root .
+    healthCheckPath: /api/live/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: ESPADA_AUTO_COASTLINE
+        value: "1"
+      - key: MPLCONFIGDIR
+        value: /tmp/espada-matplotlib
+      - key: AISSTREAM_API_KEY
+        sync: false
+      - key: GFW_API_ACCESS_TOKEN
+        sync: false
+      - key: CDSE_CLIENT_ID
+        sync: false
+      - key: CDSE_CLIENT_SECRET
+        sync: false

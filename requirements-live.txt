@@ -1,0 +1,14 @@
+# Lean public-operations runtime. OpenDrift and PyTorch remain optional local
+# analysis runtimes; the live watch, catalogue, AIS, evidence and API layers do
+# not need them merely to start and serve verified provider data.
+numpy>=2.0
+scipy>=1.14
+matplotlib>=3.9
+Pillow>=11.0
+requests>=2.32
+pandas>=2.2
+xarray>=2024.7
+netCDF4>=1.7
+shapely>=2.0
+pyshp>=2.3
+websockets>=14,<16

@@ -5,7 +5,7 @@ import json
 import os
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 from .live_operations import LiveOperationsEngine, LiveRegion
 
@@ -24,6 +24,38 @@ DEFAULT_LIVE_REGION = LiveRegion(
 
 class LiveOperationsHandler(SimpleHTTPRequestHandler):
     engine: LiveOperationsEngine
+
+    _PUBLIC_PREFIXES = (
+        "/operator/live_command/",
+        "/out/live_operations/",
+    )
+
+    @classmethod
+    def _static_route_allowed(cls, raw_path: str) -> bool:
+        """Allow only the operator client and generated live evidence artifacts.
+
+        The server's filesystem root contains source code, credentials and working
+        data, so the default SimpleHTTPRequestHandler behaviour is unsafe on a
+        public host. Resolve URL traversal before applying the explicit allowlist.
+        """
+        path = unquote(urlsplit(raw_path).path).replace("\\", "/")
+        parts = [part for part in path.split("/") if part]
+        if any(part in {".", ".."} for part in parts):
+            return False
+        normalized = "/" + "/".join(parts)
+        if path.endswith("/") and normalized != "/":
+            normalized += "/"
+        return normalized == "/operator/live_command" or normalized.startswith(
+            cls._PUBLIC_PREFIXES
+        )
+
+    def _redirect(self, location: str) -> None:
+        self.send_response(302)
+        self.send_header("Location", location)
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def _request_json(self) -> dict[str, object]:
         try:
@@ -51,11 +83,8 @@ class LiveOperationsHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802 - stdlib server API
         path = urlsplit(self.path).path
-        lowered = path.lower()
-        if lowered in {"/.env", "/.env.example"} or lowered.startswith(
-            ("/.git/", "/work/", "/data/")
-        ):
-            self._json(404, {"status": "FAIL", "error": "Not found"})
+        if path == "/":
+            self._redirect("/operator/live_command/index.html")
             return
         if path == "/api/live/health":
             self._json(
@@ -75,7 +104,20 @@ class LiveOperationsHandler(SimpleHTTPRequestHandler):
         if path == "/api/live/cases":
             self._json(200, self.engine.case_register())
             return
-        super().do_GET()
+        if self._static_route_allowed(self.path):
+            super().do_GET()
+            return
+        self._json(404, {"status": "FAIL", "error": "Not found"})
+
+    def do_HEAD(self) -> None:  # noqa: N802 - stdlib server API
+        path = urlsplit(self.path).path
+        if path == "/":
+            self._redirect("/operator/live_command/index.html")
+            return
+        if self._static_route_allowed(self.path):
+            super().do_HEAD()
+            return
+        self._json(404, {"status": "FAIL", "error": "Not found"})
 
     def do_POST(self) -> None:  # noqa: N802 - stdlib server API
         path = urlsplit(self.path).path
@@ -201,8 +243,18 @@ class LiveOperationsHandler(SimpleHTTPRequestHandler):
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="ESPADA live operations server")
-    parser.add_argument("--root", type=Path, required=True)
-    parser.add_argument("--port", type=int, default=4180)
+    parser.add_argument(
+        "--root",
+        type=Path,
+        default=Path(os.environ.get("ESPADA_PROJECT_ROOT", ".")),
+    )
+    parser.add_argument(
+        "--host",
+        default=os.environ.get(
+            "ESPADA_HOST", "0.0.0.0" if os.environ.get("RENDER") else "127.0.0.1"
+        ),
+    )
+    parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "4180")))
     parser.add_argument("--name", default=DEFAULT_LIVE_REGION.name)
     parser.add_argument("--bbox", nargs=4, type=float, default=list(DEFAULT_LIVE_REGION.bbox))
     parser.add_argument("--ais-window-seconds", type=float, default=55.0)
@@ -214,7 +266,7 @@ def main(argv: list[str] | None = None) -> int:
         *handler_args, directory=str(root), **kwargs
     )
     LiveOperationsHandler.engine = engine
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), handler)
+    server = ThreadingHTTPServer((args.host, args.port), handler)
     engine.start()
     try:
         server.serve_forever()

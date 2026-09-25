@@ -20,7 +20,7 @@ from shapely.geometry import MultiPoint, mapping
 from .ais import normalize_ais_csv
 from .ais_filter import filter_ais_candidates
 from .attribution import assess_nomination, write_attribution_outputs
-from .coast_download import clip_land_archive
+from .coast_download import clip_land_archive, sync_land_mask
 from .copernicus import FORECAST_DATASET_ID, normalize_currents
 from .environment import load_environment, sync_historical_wind
 from .historical_ais import GFW_DELAY_HOURS, HistoricalAISRequest, fetch_gfw_presence
@@ -715,6 +715,18 @@ class LiveOperationsEngine:
                 pass
         archive = self.project_root / "data" / "cache" / "natural_earth" / "ne_10m_land.zip"
         if not archive.exists():
+            if os.environ.get("ESPADA_AUTO_COASTLINE") != "1":
+                return
+            try:
+                sync_land_mask(
+                    self.coast_path,
+                    archive,
+                    self.region.bbox,
+                    padding_degrees=0.15,
+                )
+            except Exception:
+                # Coastline is context only; provider collection must still start.
+                return
             return
         try:
             clip_land_archive(archive, self.coast_path, self.region.bbox, padding_degrees=0.15)
