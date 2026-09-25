@@ -86,6 +86,7 @@
     if (value === 'PASS') return 'pass';
     if (['CONNECTING','SEARCHING','REFRESHING','RUNNING'].includes(value)) return 'active';
     if (value === 'STALE') return 'stale';
+    if (value === 'DELAYED') return 'delayed';
     if (['NO_DATA','NOT_CONFIGURED','WAITING'].includes(value)) return 'missing';
     if (['ERROR','FAIL','INTERRUPTED'].includes(value)) return 'error';
     return 'waiting';
@@ -215,7 +216,7 @@
   async function applyClientEnvironmentFallback(snapshot) {
     const serverEnvironment = snapshot?.sources?.environment || {};
     const serverState = normalizeState(serverEnvironment.status);
-    if (serverState === 'pass' || serverState === 'stale') return snapshot;
+    if (serverState === 'pass') return snapshot;
     const rateLimited = /429|too many requests|rate.?limit/i.test(
       `${serverEnvironment.message || ''} ${serverEnvironment.last_error || ''}`
     );
@@ -328,10 +329,13 @@
 
   function detailForVessel(vessel, trackPoints) {
     const motion = String(vessel.motion_state || 'unknown').toUpperCase();
+    const delayed = lastSnapshot?.ais?.mode === 'delayed_context';
     setDetail({
-      type: 'OBSERVED · AIS POSITION',
+      type: delayed ? 'OBSERVED · DELAYED AIS POSITION' : 'OBSERVED · AIS POSITION',
       title: vessel.vessel_name && vessel.vessel_name !== 'UNKNOWN' ? vessel.vessel_name : `MMSI ${vessel.mmsi}`,
-      summary: 'Latest provider-supplied position for this MMSI inside the rolling live window.',
+      summary: delayed
+        ? 'Provider-supplied hourly grid position from the delayed GFW context snapshot.'
+        : 'Latest provider-supplied position for this MMSI inside the rolling live window.',
       fields: [
         ['MMSI', vessel.mmsi],
         ['Motion state', motion],
@@ -342,8 +346,10 @@
         ['Track observations', trackPoints || 1],
         ['Source', vessel.source || 'AIS provider']
       ],
-      noteTitle: 'OBSERVATION BOUNDARY',
-      note: 'A received AIS position is evidence of a broadcast, not proof of identity, intent or conduct.'
+      noteTitle: delayed ? 'NOT A CURRENT POSITION' : 'OBSERVATION BOUNDARY',
+      note: delayed
+        ? 'This real delayed record cannot establish the vessel’s present location, speed or intent.'
+        : 'A received AIS position is evidence of a broadcast, not proof of identity, intent or conduct.'
     });
   }
 
@@ -382,6 +388,31 @@
       svg.append('path').datum(coastline).attr('class','land-shape').attr('d',path);
     }
     svg.append('path').datum(operationalFeature).attr('class','region-border').attr('d',path);
+
+    // Keep the wider Singapore Strait and the compact evidence boundary visible
+    // together. This locator is geographic context; it never widens the AIS query.
+    if (!overview && mapMode === 'live' && Array.isArray(snapshot.map_context?.bbox)) {
+      const contextBbox = snapshot.map_context.bbox.map(Number);
+      const insetWidth = 224, insetHeight = 142, insetX = width - insetWidth - 28, insetY = 28;
+      const insetBounds = bboxPolygon(contextBbox);
+      const insetProjection = d3.geoMercator().fitExtent(
+        [[insetX + 12,insetY + 27],[insetX + insetWidth - 12,insetY + insetHeight - 12]],
+        insetBounds
+      );
+      const insetPath = d3.geoPath(insetProjection);
+      const inset = svg.append('g').attr('class','map-context-inset').attr('tabindex',0)
+        .attr('role','button').attr('aria-label','Open Singapore Strait overview')
+        .on('click keydown', event => {
+          if (event.type === 'keydown' && !['Enter',' '].includes(event.key)) return;
+          updateMapMode('overview');
+        });
+      inset.append('rect').attr('class','context-inset-bg').attr('x',insetX).attr('y',insetY).attr('width',insetWidth).attr('height',insetHeight);
+      if (mapGeometry.contextCoast) inset.append('path').datum(mapGeometry.contextCoast).attr('class','context-inset-land').attr('d',insetPath);
+      inset.append('path').datum(operationalFeature).attr('class','context-inset-watch').attr('d',insetPath);
+      inset.append('text').attr('class','context-inset-title').attr('x',insetX + 12).attr('y',insetY + 17).text('SINGAPORE STRAIT · CONTEXT');
+      inset.append('text').attr('class','context-inset-label').attr('x',insetX + insetWidth - 12).attr('y',insetY + insetHeight - 10).attr('text-anchor','end').text('EAST WATCH BOX');
+      appendMapTitle(inset,'Open the full Singapore Strait context view');
+    }
 
     if (layerVisible('satellite')) {
       if (mapMode !== 'incident' && mapGeometry.footprints) {
@@ -454,11 +485,13 @@
     }
 
     const positions = Array.isArray(snapshot.ais?.positions) ? snapshot.ais.positions : [];
+    const delayedContext = snapshot.ais?.mode === 'delayed_context';
     const showUnderway = layerVisible('vessels');
     const showStationary = layerVisible('stationary');
     const visiblePositions = positions.filter(vessel =>
       (vessel.motion_state === 'underway' && showUnderway)
       || (vessel.motion_state === 'stationary' && showStationary)
+      || (delayedContext && vessel.motion_state === 'unknown' && showUnderway)
     );
     if (mapMode !== 'incident' && (showUnderway || showStationary)) {
       const tracks = snapshot.ais?.tracks || {};
@@ -467,6 +500,7 @@
         .filter(([mmsi,points]) => Array.isArray(points) && points.length > 1 && (
           (stateByMmsi[mmsi] === 'underway' && showUnderway)
           || (stateByMmsi[mmsi] === 'stationary' && showStationary)
+          || (delayedContext && stateByMmsi[mmsi] === 'unknown' && showUnderway)
         ))
         .map(([mmsi,points]) => ({type:'Feature',properties:{mmsi,motion_state:stateByMmsi[mmsi]},geometry:{type:'LineString',coordinates:points.map(point=>[Number(point[0]),Number(point[1])])}}));
       svg.append('g').selectAll('path').data(trackFeatures).join('path').attr('class',feature=>`ais-track ${feature.properties.motion_state}`).attr('d',path);
@@ -529,12 +563,16 @@
 
     const empty = mapMode !== 'incident' && (showUnderway || showStationary) && visiblePositions.length === 0;
     byId('mapEmpty').hidden = !empty;
+    if (empty) {
+      byId('mapEmpty').querySelector('strong').textContent = 'No vessel positions available';
+      byId('mapEmpty').querySelector('span').textContent = 'Neither live AIS nor verified delayed context supplied positions for this view.';
+    }
     const visibleLabels=[];
     if(mapMode!=='incident'){
       if(showUnderway)visibleLabels.push(`${snapshot.ais?.underway_count || 0} underway`);
       if(showStationary)visibleLabels.push(`${snapshot.ais?.stationary_count || 0} stationary`);
-      if(snapshot.ais?.unknown_motion_count)visibleLabels.push(`${snapshot.ais.unknown_motion_count} unknown-motion withheld`);
-      visibleLabels.push(`${compactNumber(snapshot.ais?.window_minutes)} min rolling window`);
+      if(snapshot.ais?.unknown_motion_count)visibleLabels.push(`${snapshot.ais.unknown_motion_count} motion not supplied`);
+      visibleLabels.push(`${compactNumber(snapshot.ais?.window_minutes)} min ${delayedContext ? 'delayed context window' : 'rolling window'}`);
       if(layerVisible('satellite'))visibleLabels.push(`${mapFeatureCount(mapGeometry.footprints)} catalogue footprint${mapFeatureCount(mapGeometry.footprints)===1?'':'s'}`);
     }else{
       if(layerVisible('slick')&&mapGeometry.slick)visibleLabels.push('approved slick');
@@ -2135,14 +2173,24 @@
 
   function renderAis(source = {}, ais = {}) {
     setCardState('ais', source);
+    const delayed = ais.mode === 'delayed_context';
+    html('aisEvidenceType', delayed ? 'OBSERVED · DELAYED CONTEXT' : 'OBSERVED · LIVE STREAM');
+    html('aisPositionsLabel', delayed ? 'Delayed vessels' : 'Current vessels');
+    html('aisVesselsLabel', delayed ? 'Motion classified' : 'Underway now');
+    html('trafficCurrentLabel', delayed ? 'DELAYED VESSELS' : 'CURRENT VESSELS');
+    html('trafficUnderwayLabel', delayed ? 'MOTION CLASSIFIED' : 'UNDERWAY');
+    byId('layerControls').querySelector('[data-layer="vessels"]+span').textContent = delayed ? 'Delayed vessels' : 'Underway';
+    html('aisBoundaryNote', delayed
+      ? 'Hourly GFW grid positions provide real delayed context; they are never presented as current traffic.'
+      : "Only each vessel's latest in-bounds report survives the rolling live window.");
     html('aisPositions', compactNumber(ais.vessel_count));
     html('aisVessels', compactNumber(ais.underway_count));
     html('aisObservation', source.latest_observation_utc ? `${ageLabel(source.latest_observation_utc)} · ${formatUtc(source.latest_observation_utc)}` : 'No position received');
-    html('aisSuccess', finite(ais.window_minutes) ? `${compactNumber(ais.window_minutes)} minutes · latest report per MMSI` : 'Window unavailable');
+    html('aisSuccess', finite(ais.window_minutes) ? `${compactNumber(ais.window_minutes)} minutes · ${delayed ? 'delayed context' : 'latest report per MMSI'}` : 'Window unavailable');
     html('trafficCurrent', compactNumber(ais.vessel_count));
     html('trafficUnderway', compactNumber(ais.underway_count));
     html('trafficStationary', compactNumber(ais.stationary_count));
-    html('trafficWindow', finite(ais.window_minutes) ? `${compactNumber(ais.window_minutes)} min` : '—');
+    html('trafficWindow', finite(ais.window_minutes) ? `${compactNumber(ais.window_minutes)} min${delayed ? ' delayed' : ''}` : '—');
   }
 
   function renderSentinel(source = {}) {
@@ -2173,24 +2221,25 @@
     const entries = ['ais','sentinel','environment'].map(name => ({name,source:sources[name] || {}}));
     const states = entries.map(entry => normalizeState(entry.source.status));
     const current = states.filter(state => state === 'pass').length;
+    const delayed = states.filter(state => state === 'delayed').length;
     const errors = states.filter(state => state === 'error').length;
     const stale = states.filter(state => state === 'stale').length;
     const missing = states.filter(state => state === 'missing').length;
     const active = states.filter(state => state === 'active').length;
-    html('sourceCount', `${current} / 3 current`);
+    html('sourceCount', delayed ? `${current} / 3 current · ${delayed} delayed` : `${current} / 3 current`);
     const notes = entries.flatMap(entry => {
       const state = normalizeState(entry.source.status);
       if (state === 'pass') return [];
-      const label = state === 'error' ? 'error' : state === 'stale' ? 'stale' : state === 'active' ? 'updating' : 'no data';
+      const label = state === 'error' ? 'error' : state === 'stale' ? 'stale' : state === 'delayed' ? 'real delayed context' : state === 'active' ? 'updating' : 'no data';
       return [`${sourceNames[entry.name]}: ${label}`];
     });
     html('sourceSummary', notes.length ? notes.join(' · ') : 'All provider evidence is current');
 
     const connection = byId('connectionState');
-    if (errors || stale || missing) {
+    if (errors || stale || missing || delayed) {
       connection.dataset.tone = 'degraded';
       connection.querySelector('b').textContent = 'LIVE · DEGRADED';
-      connection.querySelector('small').textContent = stale ? 'Some evidence is stale' : 'Some evidence is unavailable';
+      connection.querySelector('small').textContent = delayed ? 'One source is delayed context' : stale ? 'Some evidence is stale' : 'Some evidence is unavailable';
       html('integrityTitle', 'Live service connected with evidence gaps');
       html('integrityMessage', 'Unavailable sources remain explicit. Downstream analysis must respect their timestamps and coverage.');
     } else if (active) {
@@ -2354,6 +2403,26 @@
     renderIntegrity(snapshot);
     renderActiveComponents(snapshot);
     html('mapEvidenceTime', formatUtc(evidenceTime(snapshot)));
+    if (mapMode === 'live' && ['LIVE WATCH','MAP READOUT'].includes(byId('detailType').textContent)) {
+      const delayed = snapshot.ais?.mode === 'delayed_context';
+      setDetail({
+        type: delayed ? 'DELAYED AIS CONTEXT' : 'LIVE WATCH',
+        title: delayed ? 'Historical vessel context' : 'Current maritime picture',
+        summary: delayed
+          ? 'One real GFW hourly grid snapshot is shown because no current AIS positions are available.'
+          : 'One latest in-bounds report per MMSI; stale reports leave the map automatically.',
+        fields: [
+          [delayed ? 'Evidence time' : 'Latest AIS',formatUtc(snapshot.sources?.ais?.latest_observation_utc)],
+          [delayed ? 'Delayed vessels' : 'Current vessels',compactNumber(snapshot.ais?.vessel_count)],
+          ['Underway / stationary',delayed ? 'Motion not supplied by this product' : `${compactNumber(snapshot.ais?.underway_count)} / ${compactNumber(snapshot.ais?.stationary_count)}`],
+          ['Snapshot resolution',delayed ? 'Hourly grid presence' : `${compactNumber(snapshot.ais?.window_minutes)} minutes`]
+        ],
+        noteTitle: delayed ? 'NOT LIVE TRAFFIC' : 'NO SYNTHETIC FALLBACK',
+        note: delayed
+          ? 'These are real provider records from about 96 hours earlier and cannot establish present vessel positions.'
+          : 'If the live provider returns nothing, the map remains empty.'
+      });
+    }
     const nextMapFingerprint = mapRenderFingerprint(snapshot);
     if (nextMapFingerprint !== lastMapRenderFingerprint) {
       lastMapRenderFingerprint = nextMapFingerprint;

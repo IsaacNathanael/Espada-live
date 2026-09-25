@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
   <title>ESPADA Live Command</title>
-  <link rel="stylesheet" href="styles.css?v=20260925-4">
+  <link rel="stylesheet" href="styles.css?v=20260925-7">
 </head>
 <body>
   <header class="masthead">
@@ -165,8 +165,8 @@
       </div>
 
       <div class="traffic-snapshot" id="trafficSnapshot" aria-label="Current AIS traffic snapshot">
-        <div><span>CURRENT VESSELS</span><b id="trafficCurrent">—</b></div>
-        <div><span>UNDERWAY</span><b id="trafficUnderway">—</b></div>
+        <div><span id="trafficCurrentLabel">CURRENT VESSELS</span><b id="trafficCurrent">—</b></div>
+        <div><span id="trafficUnderwayLabel">UNDERWAY</span><b id="trafficUnderway">—</b></div>
         <div><span>STATIONARY</span><b id="trafficStationary">—</b></div>
         <div><span>SNAPSHOT WINDOW</span><b id="trafficWindow">10 min</b></div>
       </div>
@@ -1035,22 +1035,22 @@
         <div class="card-index">01</div>
         <header>
           <div>
-            <span class="evidence-type observed">OBSERVED · LIVE STREAM</span>
+            <span class="evidence-type observed" id="aisEvidenceType">OBSERVED · LIVE STREAM</span>
             <h3>Vessel reception</h3>
           </div>
           <span class="state-badge" id="aisStatus">WAITING</span>
         </header>
         <p class="provider" id="aisProvider">AIS provider not connected</p>
         <div class="metric-row">
-          <div><span>Current vessels</span><b id="aisPositions">—</b></div>
-          <div><span>Underway now</span><b id="aisVessels">—</b></div>
+          <div><span id="aisPositionsLabel">Current vessels</span><b id="aisPositions">—</b></div>
+          <div><span id="aisVesselsLabel">Underway now</span><b id="aisVessels">—</b></div>
         </div>
         <dl class="source-details">
           <div><dt>Latest received position</dt><dd id="aisObservation">—</dd></div>
           <div><dt>Active snapshot window</dt><dd id="aisSuccess">—</dd></div>
         </dl>
         <p class="source-message" id="aisMessage">Waiting for the first server snapshot.</p>
-        <footer>Only each vessel's latest in-bounds report survives the rolling live window.</footer>
+        <footer id="aisBoundaryNote">Only each vessel's latest in-bounds report survives the rolling live window.</footer>
       </article>
 
       <article class="source-card" id="sentinelCard" data-state="waiting">
@@ -1121,6 +1121,6 @@
     <span id="pollState">Live API has not responded</span>
   </footer>
   <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
-  <script src="app.js?v=20260925-4"></script>
+  <script src="app.js?v=20260925-7"></script>
 </body>
 </html>

@@ -112,6 +112,32 @@ def test_empty_snapshot_never_invents_vessels_or_slick(tmp_path: Path) -> None:
     assert snapshot["pipeline"]["slick_detection_ready"] is False
 
 
+def test_real_delayed_ais_context_is_explicit_and_not_counted_as_live(tmp_path: Path) -> None:
+    engine = LiveOperationsEngine(
+        tmp_path,
+        LiveRegion("East Singapore Offshore Watch", 104.02, 1.20, 104.23, 1.31),
+    )
+    engine.ais_context_cache.parent.mkdir(parents=True, exist_ok=True)
+    delayed = datetime.now(UTC) - timedelta(hours=97)
+    pd.DataFrame(
+        [
+            {
+                "timestamp_utc": delayed.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "mmsi": "563123456",
+                "vessel_name": "UNKNOWN",
+                "longitude": 104.12,
+                "latitude": 1.25,
+                "source": "Global Fishing Watch AIS vessel presence (hourly grid)",
+            }
+        ]
+    ).to_csv(engine.ais_context_cache, index=False)
+    snapshot = engine.snapshot()
+    assert snapshot["ais"]["mode"] == "delayed_context"
+    assert snapshot["ais"]["vessel_count"] == 1
+    assert snapshot["pipeline"]["live_ais_ready"] is False
+    assert snapshot["pipeline"]["delayed_ais_context_ready"] is True
+
+
 def test_snapshot_returns_only_received_ais_rows(tmp_path: Path) -> None:
     engine = LiveOperationsEngine(
         tmp_path,
@@ -262,6 +288,9 @@ def test_live_command_map_separates_live_and_incident_evidence() -> None:
     assert 'data-layer="stationary"' in page
     assert "CURRENT VESSELS" in page
     assert "rolling live window" in script
+    assert "SINGAPORE STRAIT · CONTEXT" in script
+    assert "delayed_context" in script
+    assert "serverState === 'pass'" in script
 
 
 def test_controlled_judges_demo_is_integrated_and_explicitly_synthetic() -> None:

@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from urllib.request import Request, urlopen
 
 import numpy as np
 import pandas as pd
@@ -212,6 +213,9 @@ class LiveOperationsEngine:
         self.ais_cache = (
             self.project_root / "data" / "cache" / f"live_operations_ais_{region_cache_tag}.csv"
         )
+        self.ais_context_dir = self.output_root / "ais_context"
+        self.ais_context_cache = self.ais_context_dir / "ais_normalized.csv"
+        self._last_ais_context_attempt = 0.0
         self.state_path = self.output_root / "source_state.json"
         self.coast_path = self.output_root / "coast" / "land_mask.geojson"
         self.context_coast_path = self.output_root / "coast" / "context_land_mask.geojson"
@@ -2273,8 +2277,9 @@ class LiveOperationsEngine:
                 "ais",
                 status="NOT_CONFIGURED",
                 last_attempt_utc=_format_utc(_utc_now()),
-                message="AISSTREAM_API_KEY is not loaded. No vessel positions will be invented.",
+                message="AISSTREAM_API_KEY is not loaded. Checking the real delayed vessel-context feed.",
             )
+            self._refresh_delayed_ais_context("AISStream is not configured")
             return
         bounding_box = AISBoundingBox(*self.region.bbox)
 
@@ -2283,6 +2288,8 @@ class LiveOperationsEngine:
             self._update_source(
                 "ais",
                 status="PASS",
+                provider="AISStream WebSocket",
+                kind="LIVE STREAM",
                 last_success_utc=succeeded,
                 latest_observation_utc=self._latest_ais_time(),
                 positions_accepted=int(progress.get("positions_accepted", 0)),
@@ -2327,6 +2334,8 @@ class LiveOperationsEngine:
                     self._update_source(
                         "ais",
                         status="PASS",
+                        provider="AISStream WebSocket",
+                        kind="LIVE STREAM",
                         last_success_utc=succeeded,
                         latest_observation_utc=latest,
                         positions_accepted=accepted,
@@ -2349,18 +2358,24 @@ class LiveOperationsEngine:
                         cached_vessels=int(status.get("cached_vessels", 0)),
                         error_kind=error_kind,
                         message=(
-                            "AISStream rate-limited this connection. Use one running ESPADA service per API key; "
-                            "the system will retry with a safe backoff."
+                            "AISStream rejected this shared hosting address with a connection-rate limit. "
+                            "The system will retry safely and request real delayed vessel context meanwhile."
                             if rate_limited
                             else "AISStream could not establish a verified provider connection."
                         ),
                         warnings=warnings,
                     )
+                    if rate_limited:
+                        self._refresh_delayed_ais_context(
+                            "AISStream live connection is rate-limited on the public host"
+                        )
                     self._stop.wait(900.0 if rate_limited else 30.0)
                 else:
                     self._update_source(
                         "ais",
                         status="NO_DATA",
+                        provider="AISStream WebSocket",
+                        kind="LIVE STREAM",
                         last_success_utc=succeeded,
                         latest_observation_utc=self._latest_ais_time(),
                         positions_accepted=0,
@@ -2381,6 +2396,85 @@ class LiveOperationsEngine:
                 # Give the provider time to retire the completed socket before a
                 # new long-lived capture session begins.
                 self._stop.wait(5.0)
+
+    def _refresh_delayed_ais_context(self, live_reason: str) -> None:
+        """Use real delayed GFW presence when shared hosting blocks live AIS.
+
+        This never masquerades as a live feed.  The provider, evidence time and
+        approximate 96-hour publication delay remain explicit in the snapshot.
+        """
+        now_monotonic = time.monotonic()
+        if now_monotonic - self._last_ais_context_attempt < 3_600:
+            return
+        self._last_ais_context_attempt = now_monotonic
+        if not os.environ.get("GFW_API_ACCESS_TOKEN", "").strip():
+            self._update_source(
+                "ais",
+                message=(
+                    f"{live_reason}. GFW_API_ACCESS_TOKEN is not configured, so no real delayed "
+                    "vessel context is available."
+                ),
+                fallback_status="NOT_CONFIGURED",
+            )
+            return
+        attempted = _format_utc(_utc_now())
+        available_end = (_utc_now() - timedelta(hours=GFW_DELAY_HOURS + 1)).replace(
+            minute=0, second=0, microsecond=0
+        )
+        request = HistoricalAISRequest(
+            AISBoundingBox(*self.region.bbox),
+            available_end - timedelta(hours=6),
+            available_end,
+        )
+        try:
+            result = fetch_gfw_presence(request, self.ais_context_dir)
+            latest = None
+            if self.ais_context_cache.exists():
+                frame = pd.read_csv(self.ais_context_cache, usecols=["timestamp_utc"])
+                times = pd.to_datetime(frame["timestamp_utc"], utc=True, errors="coerce").dropna()
+                if not times.empty:
+                    latest = times.max().strftime("%Y-%m-%dT%H:%M:%SZ")
+            if result.get("status") == "PASS" and latest:
+                succeeded = _format_utc(_utc_now())
+                self._update_source(
+                    "ais",
+                    status="DELAYED",
+                    provider="Global Fishing Watch vessel presence",
+                    kind="DELAYED AIS CONTEXT",
+                    last_attempt_utc=attempted,
+                    last_success_utc=succeeded,
+                    latest_observation_utc=latest,
+                    positions_accepted=int(result.get("positions_accepted", 0)),
+                    cached_vessels=int(result.get("vessels", 0)),
+                    live_provider="AISStream WebSocket",
+                    live_status="ERROR",
+                    fallback_status="PASS",
+                    delay_hours=GFW_DELAY_HOURS,
+                    message=(
+                        f"{live_reason}. Showing real Global Fishing Watch vessel presence from "
+                        "about 96 hours earlier; it is context, not live traffic."
+                    ),
+                    warnings=result.get("limitations", []),
+                )
+            else:
+                self._update_source(
+                    "ais",
+                    fallback_status=str(result.get("status") or "NO_DATA"),
+                    message=(
+                        f"{live_reason}. The delayed Global Fishing Watch query also returned no "
+                        "positions for this watch area."
+                    ),
+                )
+        except Exception as error:
+            self._update_source(
+                "ais",
+                fallback_status="ERROR",
+                fallback_error=f"{type(error).__name__}: {error}",
+                message=(
+                    f"{live_reason}. The delayed Global Fishing Watch fallback could not be "
+                    "verified, so the vessel layer remains empty."
+                ),
+            )
 
     def _latest_ais_time(self) -> str | None:
         if not self.ais_cache.exists() or self.ais_cache.stat().st_size < 10:
@@ -2425,6 +2519,53 @@ class LiveOperationsEngine:
         }
         return current_vector, samples
 
+    @staticmethod
+    def _met_norway_wind(latitude: float, longitude: float) -> dict[str, object]:
+        """Fetch a fresh no-key wind forecast from MET Norway's documented API."""
+        url = (
+            "https://api.met.no/weatherapi/locationforecast/2.0/compact"
+            f"?lat={latitude:.4f}&lon={longitude:.4f}"
+        )
+        request = Request(
+            url,
+            headers={
+                "Accept": "application/json",
+                "User-Agent": "ESPADA-RDA/0.4 github.com/IsaacNathanael/Espada-live",
+            },
+        )
+        with urlopen(request, timeout=30.0) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        rows = payload.get("properties", {}).get("timeseries", [])
+        now = _utc_now()
+        candidates: list[tuple[float, dict[str, object]]] = []
+        for row in rows:
+            valid_at = _parse_utc(row.get("time"))
+            details = row.get("data", {}).get("instant", {}).get("details", {})
+            try:
+                speed = float(details["wind_speed"])
+                direction_from = float(details["wind_from_direction"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if valid_at is None:
+                continue
+            candidates.append(
+                (
+                    abs((valid_at - now).total_seconds()),
+                    {
+                        "time_utc": _format_utc(valid_at),
+                        "speed_ms": speed,
+                        "direction_from_degrees": direction_from,
+                    },
+                )
+            )
+        if not candidates:
+            raise ValueError("MET Norway response contained no usable wind forecast")
+        result = min(candidates, key=lambda item: item[0])[1]
+        radians = np.deg2rad(float(result["direction_from_degrees"]))
+        result["east_ms"] = float(-float(result["speed_ms"]) * np.sin(radians))
+        result["north_ms"] = float(-float(result["speed_ms"]) * np.cos(radians))
+        return result
+
     def refresh_environment(self) -> None:
         attempted = _format_utc(_utc_now())
         self._update_source(
@@ -2457,6 +2598,49 @@ class LiveOperationsEngine:
                 cached = load_environment("cache", self.environment_cache)
                 current_vector, samples = self._environment_values(cached)
                 payload = json.loads(self.environment_cache.read_text(encoding="utf-8"))
+                try:
+                    fresh_wind = self._met_norway_wind(latitude, longitude)
+                except Exception:
+                    fresh_wind = None
+                if fresh_wind:
+                    current_vector["wind_east_ms"] = round(float(fresh_wind["east_ms"]), 5)
+                    current_vector["wind_north_ms"] = round(float(fresh_wind["north_ms"]), 5)
+                    current_vector["wind_speed_ms"] = round(float(fresh_wind["speed_ms"]), 5)
+                    current_vector["wind_time_utc"] = fresh_wind["time_utc"]
+                    succeeded = _format_utc(_utc_now())
+                    self._update_source(
+                        "environment",
+                        status="PASS",
+                        provider="Open-Meteo ocean-current forecast + MET Norway wind",
+                        last_attempt_utc=attempted,
+                        last_success_utc=succeeded,
+                        latest_observation_utc=current_vector["time_utc"],
+                        source="Open-Meteo cached current forecast + MET Norway Locationforecast wind",
+                        temporal_resolution=cached.temporal_resolution,
+                        location={"longitude": longitude, "latitude": latitude},
+                        current=current_vector,
+                        samples=samples,
+                        components={
+                            "ocean_current": {
+                                "provider": "Open-Meteo / MeteoFrance SMOC",
+                                "valid_time_utc": current_vector["time_utc"],
+                                "cache_fetched_at_utc": payload.get("fetched_at_utc"),
+                                "refresh_status": "RATE_LIMITED",
+                            },
+                            "wind": {
+                                "provider": "MET Norway Locationforecast 2.0",
+                                "valid_time_utc": fresh_wind["time_utc"],
+                                "refresh_status": "PASS",
+                            },
+                        },
+                        message=(
+                            "Current model time is still valid in the verified Open-Meteo cache; "
+                            "wind was refreshed independently from MET Norway after Open-Meteo "
+                            "rate-limited the shared host."
+                        ),
+                        last_error=f"Primary refresh: {type(error).__name__}: {error}",
+                    )
+                    return
                 self._update_source(
                     "environment",
                     status="STALE",
@@ -2522,7 +2706,14 @@ class LiveOperationsEngine:
         except Exception as error:
             self._record_source_failure("sentinel", error, attempted=attempted)
 
-    def _ais_payload(self) -> dict[str, object]:
+    def _ais_payload_from_cache(
+        self,
+        cache_path: Path,
+        *,
+        mode: str,
+        window_minutes: float,
+        anchor_at_latest: bool,
+    ) -> dict[str, object]:
         empty = {
             "positions": [],
             "tracks": {},
@@ -2531,12 +2722,13 @@ class LiveOperationsEngine:
             "underway_count": 0,
             "stationary_count": 0,
             "unknown_motion_count": 0,
-            "window_minutes": self.ais_snapshot_minutes,
+            "window_minutes": window_minutes,
+            "mode": mode,
         }
-        if not self.ais_cache.exists() or self.ais_cache.stat().st_size < 10:
+        if not cache_path.exists() or cache_path.stat().st_size < 10:
             return empty
         try:
-            frame = pd.read_csv(self.ais_cache, dtype={"mmsi": str})
+            frame = pd.read_csv(cache_path, dtype={"mmsi": str})
         except (OSError, pd.errors.EmptyDataError, pd.errors.ParserError):
             return empty
         required = {"timestamp_utc", "mmsi", "longitude", "latitude"}
@@ -2547,8 +2739,17 @@ class LiveOperationsEngine:
             if column in frame:
                 frame[column] = pd.to_numeric(frame[column], errors="coerce")
         frame = frame.dropna(subset=["timestamp_utc", "mmsi", "longitude", "latitude"])
-        cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(minutes=self.ais_snapshot_minutes)
-        frame = frame.loc[frame["timestamp_utc"] >= cutoff].sort_values("timestamp_utc")
+        anchor = (
+            frame["timestamp_utc"].max()
+            if anchor_at_latest
+            else pd.Timestamp.now(tz="UTC")
+        )
+        cutoff = anchor - pd.Timedelta(minutes=window_minutes)
+        frame = frame.loc[
+            frame["timestamp_utc"].eq(anchor)
+            if anchor_at_latest
+            else frame["timestamp_utc"] >= cutoff
+        ].sort_values("timestamp_utc")
         min_longitude, min_latitude, max_longitude, max_latitude = self.region.bbox
         frame = frame.loc[
             frame["longitude"].between(min_longitude, max_longitude, inclusive="both")
@@ -2596,8 +2797,27 @@ class LiveOperationsEngine:
             "underway_count": sum(item["motion_state"] == "underway" for item in positions),
             "stationary_count": sum(item["motion_state"] == "stationary" for item in positions),
             "unknown_motion_count": sum(item["motion_state"] == "unknown" for item in positions),
-            "window_minutes": self.ais_snapshot_minutes,
+            "window_minutes": window_minutes,
+            "mode": mode,
+            "evidence_time_utc": anchor.strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
+
+    def _ais_payload(self) -> dict[str, object]:
+        live = self._ais_payload_from_cache(
+            self.ais_cache,
+            mode="live",
+            window_minutes=self.ais_snapshot_minutes,
+            anchor_at_latest=False,
+        )
+        if int(live.get("vessel_count", 0)) > 0:
+            return live
+        delayed = self._ais_payload_from_cache(
+            self.ais_context_cache,
+            mode="delayed_context",
+            window_minutes=60.0,
+            anchor_at_latest=True,
+        )
+        return delayed if int(delayed.get("vessel_count", 0)) > 0 else live
 
     def snapshot(self) -> dict[str, object]:
         with self._lock:
@@ -2623,6 +2843,23 @@ class LiveOperationsEngine:
                     source.get("latest_observation_utc"), now=now
                 )
         ais = self._ais_payload()
+        if ais.get("mode") == "delayed_context":
+            live_source = dict(state["sources"].get("ais", {}))
+            state["sources"]["ais"] = {
+                **live_source,
+                "status": "DELAYED",
+                "provider": "Global Fishing Watch vessel presence",
+                "kind": "DELAYED AIS CONTEXT",
+                "latest_observation_utc": ais.get("evidence_time_utc"),
+                "live_provider": "AISStream WebSocket",
+                "live_status": live_source.get("status"),
+                "delay_hours": GFW_DELAY_HOURS,
+                "message": (
+                    "No current AIS positions are available in the compact watch window. "
+                    "Showing real Global Fishing Watch vessel presence from about 96 hours "
+                    "earlier; it is context, not live traffic."
+                ),
+            }
         pipeline = self._pipeline_status(state, ais)
         return {
             "status": state["status"],
@@ -2687,6 +2924,7 @@ class LiveOperationsEngine:
             and bool(sentinel.get("scenes"))
         )
         vessels_ready = int(ais.get("vessel_count", 0)) > 0
+        live_vessels_ready = vessels_ready and ais.get("mode") == "live"
         analysis_status = str(state.get("analysis", {}).get("status", "NOT_RUN"))
         analysis_running = analysis_status in {
             "QUEUED",
@@ -2760,6 +2998,8 @@ class LiveOperationsEngine:
             stage = "WAITING_FOR_SATELLITE_ACQUISITION"
         elif not environment_ready:
             stage = "WAITING_FOR_ENVIRONMENT"
+        elif vessels_ready and not live_vessels_ready:
+            stage = "MONITORING_DELAYED_AIS_CONTEXT"
         elif not vessels_ready:
             stage = "MONITORING_NO_LIVE_AIS"
         else:
@@ -2768,7 +3008,8 @@ class LiveOperationsEngine:
             "stage": stage,
             "environment_ready": environment_ready,
             "sentinel_catalog_ready": sentinel_ready,
-            "live_ais_ready": vessels_ready,
+            "live_ais_ready": live_vessels_ready,
+            "delayed_ais_context_ready": vessels_ready and not live_vessels_ready,
             "slick_detection_ready": analysis_complete,
             "analyst_review_ready": review_status == "APPROVED",
             "incident_handoff_ready": handoff_ready,

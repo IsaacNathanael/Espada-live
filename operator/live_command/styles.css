@@ -183,6 +183,7 @@ h1{max-width:760px;margin-bottom:10px;font:700 clamp(32px,4.1vw,58px)/.98 Georgi
 .ais-track.stationary{stroke:#6f797c;stroke-dasharray:3 4;opacity:.28}
 .vessel-mark{fill:#fff;stroke:#0b2538;stroke-width:1.2;vector-effect:non-scaling-stroke;cursor:pointer}
 .vessel-mark.stationary{fill:#d5d8d6;stroke:#626d70;opacity:.82}
+.vessel-mark.unknown{fill:#fff7df;stroke:#8c5b12;opacity:.92}
 .vessel-mark:hover,.vessel-mark:focus{fill:#e5a338;stroke-width:2.2;outline:none}
 .vector-line{stroke-width:2.4;vector-effect:non-scaling-stroke}
 .vector-line.current{stroke:#17687c}.vector-line.wind{stroke:#9a6116}
@@ -194,6 +195,13 @@ h1{max-width:760px;margin-bottom:10px;font:700 clamp(32px,4.1vw,58px)/.98 Georgi
 .map-empty strong{margin-top:10px;color:var(--navy);font:700 18px/1.1 Georgia,serif}
 .map-empty span{margin-top:6px;color:var(--slate);font-size:11px;line-height:1.45}
 .map-loading{position:absolute;left:14px;top:14px;padding:7px 9px;background:#fff;border:1px solid #88969a;color:#41555c;font:700 9px/1 Consolas,monospace;letter-spacing:.06em;z-index:6}
+.map-context-inset{cursor:pointer}
+.context-inset-bg{fill:#f8f5ecf2;stroke:#0b2538;stroke-width:1.3}
+.context-inset-land{fill:#d5d0bd;stroke:#6d756f;stroke-width:.7;vector-effect:non-scaling-stroke}
+.context-inset-watch{fill:#e5a33842;stroke:#8c5b12;stroke-width:2.2;vector-effect:non-scaling-stroke}
+.context-inset-title{fill:#0b2538;font:700 9px Consolas,monospace;letter-spacing:.06em}
+.context-inset-label{fill:#70460c;font:700 8px Consolas,monospace;letter-spacing:.05em}
+.map-context-inset:hover .context-inset-bg,.map-context-inset:focus .context-inset-bg{stroke:#e5a338;stroke-width:2.5;outline:none}
 .map-attribution{position:absolute;right:12px;bottom:9px;padding:4px 6px;background:#f8f5ecd9;color:#4f6066;font:8px/1.2 Consolas,monospace;letter-spacing:.04em}
 .map-scale{position:absolute;left:18px;bottom:18px;width:105px;height:7px;border-left:1px solid var(--navy);border-right:1px solid var(--navy);border-bottom:2px solid var(--navy)}
 .map-scale:after{content:attr(data-label);position:absolute;left:0;right:0;top:9px;text-align:center;color:var(--navy);font:8px/1 Consolas,monospace}
@@ -367,6 +375,7 @@ h1{max-width:760px;margin-bottom:10px;font:700 clamp(32px,4.1vw,58px)/.98 Georgi
 .source-card[data-state="active"]{border-top-color:var(--blue)}
 .source-card[data-state="missing"]{border-top-color:var(--amber)}
 .source-card[data-state="error"],.source-card[data-state="stale"]{border-top-color:var(--red)}
+.source-card[data-state="delayed"]{border-top-color:var(--amber)}
 .card-index{position:absolute;right:18px;bottom:10px;color:#e2ded3;font:700 62px/.9 Georgia,serif;pointer-events:none}
 .source-card header{display:flex;justify-content:space-between;gap:15px;align-items:flex-start;padding-bottom:15px;border-bottom:1px solid var(--line)}
 .source-card h3{margin:7px 0 0;font:700 23px/1.1 Georgia,serif;color:var(--navy)}
@@ -379,6 +388,7 @@ h1{max-width:760px;margin-bottom:10px;font:700 clamp(32px,4.1vw,58px)/.98 Georgi
 .source-card[data-state="active"] .state-badge{color:var(--blue);border-color:#83aabd;background:var(--blue-pale)}
 .source-card[data-state="missing"] .state-badge{color:#87530d;border-color:#c99652;background:var(--amber-pale)}
 .source-card[data-state="error"] .state-badge,.source-card[data-state="stale"] .state-badge{color:var(--red);border-color:#bd7a72;background:var(--red-pale)}
+.source-card[data-state="delayed"] .state-badge{color:#87530d;border-color:#c99652;background:var(--amber-pale)}
 .provider{min-height:42px;margin:16px 0 14px;color:var(--slate);font-size:12px;line-height:1.45}
 .metric-row{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);background:#f1eee5}
 .metric-row>div{min-height:83px;padding:13px;border-right:1px solid var(--line)}
