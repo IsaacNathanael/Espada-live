@@ -181,7 +181,7 @@ h1{max-width:760px;margin-bottom:10px;font:700 clamp(32px,4.1vw,58px)/.98 Georgi
 .candidate-marker:hover,.candidate-marker:focus{fill:#dfc9ec;stroke-width:4;outline:none}
 .ais-track{fill:none;stroke:#21708a;stroke-width:1.5;opacity:.55;vector-effect:non-scaling-stroke}
 .ais-track.stationary{stroke:#6f797c;stroke-dasharray:3 4;opacity:.28}
-.vessel-mark{fill:#fff;stroke:#0b2538;stroke-width:1.2;vector-effect:non-scaling-stroke;cursor:pointer;filter:drop-shadow(0 1px 1px #0b25385c)}
+.vessel-mark{fill:#fff;stroke:#0b2538;stroke-width:1.2;vector-effect:non-scaling-stroke;cursor:pointer}
 .vessel-mark.stationary{fill:#d5d8d6;stroke:#626d70;opacity:.82}
 .vessel-mark:hover,.vessel-mark:focus{fill:#e5a338;stroke-width:2.2;outline:none}
 .vector-line{stroke-width:2.4;vector-effect:non-scaling-stroke}

@@ -2576,7 +2576,10 @@ class LiveOperationsEngine:
             )
         tracks: dict[str, list[list[object]]] = {}
         for mmsi, group in frame.groupby("mmsi"):
-            thinned = group.iloc[:: max(1, len(group) // 80)]
+            # A ten-minute live trail does not need survey-grade vertex density.
+            # Keeping at most ~32 observations per vessel materially reduces SVG
+            # path work while retaining every meaningful turn in this view.
+            thinned = group.iloc[:: max(1, (len(group) + 31) // 32)]
             tracks[str(mmsi)] = [
                 [
                     float(row["longitude"]),

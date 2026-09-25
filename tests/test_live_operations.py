@@ -247,7 +247,8 @@ def test_live_command_map_separates_live_and_incident_evidence() -> None:
     assert 'id="overviewModeButton"' in page
     assert "Singapore Strait overview" in script
     assert "ais-observed-interpolation" in script
-    assert ".duration(12000)" in script
+    assert ".duration(5000)" in script
+    assert "mapRenderFingerprint" in script
     assert "initializeLazyComponents" in script
     assert "IntersectionObserver" in script
     assert 'href="demo.html"' in page

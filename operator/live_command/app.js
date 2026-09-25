@@ -24,6 +24,7 @@
   let geometryLoadKey = '';
   let previousVesselPositions = new Map();
   let lastRenderFingerprint = '';
+  let lastMapRenderFingerprint = '';
   const activeComponentIds = new Set();
   const componentRenderFingerprints = new Map();
   let sarView = 'overview';
@@ -486,7 +487,7 @@
           .attr('d','M0,-10 C4,-7 5,3 3,8 L0,11 L-3,8 C-5,3 -4,-7 0,-10 Z M-3,2 L3,2')
           .attr('transform',`translate(${startPoint[0]},${startPoint[1]}) rotate(${rotation})`);
         if (hasNewObservation) {
-          mark.transition('ais-observed-interpolation').duration(12000).ease(d3.easeLinear)
+          mark.transition('ais-observed-interpolation').duration(5000).ease(d3.easeCubicOut)
             .attr('transform',`translate(${point[0]},${point[1]}) rotate(${rotation})`);
         }
         appendMapTitle(mark, `${vessel.vessel_name || 'UNKNOWN'} · MMSI ${vessel.mmsi}`)
@@ -563,7 +564,10 @@
     byId('layerControls').querySelector('[data-layer="environment"]').disabled=incident;
     byId('trafficSnapshot').hidden=incident;
     setDetail(incident?{type:'INCIDENT TIMELINE',title:'Historical evidence isolated',summary:'Approved slick, reconstructed origin and temporally matched candidate tracks share the selected investigation timeline.',fields:[['SAR observation',formatUtc(lastSnapshot?.analysis?.acquisition_time_utc)],['Estimated release',formatUtc(lastSnapshot?.attribution?.top_candidate?.best_match_time_utc)],['Candidate population',compactNumber(lastSnapshot?.attribution?.candidate_count || lastSnapshot?.attribution?.candidates_compared)],['Decision',String(lastSnapshot?.attribution?.decision || 'Not available').replaceAll('_',' ')]],noteTitle:'NO LIVE OVERLAY',note:'Present-day AIS is intentionally hidden here.'}:overview?{type:'GEOGRAPHIC CONTEXT',title:'Singapore Strait overview',summary:'The wider coastline provides orientation while the outlined East Singapore box remains the only live evidence filter.',fields:[['Operational watch',lastSnapshot?.region?.name || 'East Singapore Offshore Watch'],['Current vessels',compactNumber(lastSnapshot?.ais?.vessel_count)],['AIS scope','Compact outlined box only'],['Map role','Context, not navigation']],noteTitle:'SAME EVIDENCE BOUNDARY',note:'Changing scale does not add ships or widen the operational query.'}:{type:'LIVE WATCH',title:'Current maritime picture',summary:'One latest in-bounds report per MMSI; stale reports leave the map automatically.',fields:[['Latest AIS',formatUtc(lastSnapshot?.sources?.ais?.latest_observation_utc)],['Current vessels',compactNumber(lastSnapshot?.ais?.vessel_count)],['Underway / stationary',`${compactNumber(lastSnapshot?.ais?.underway_count)} / ${compactNumber(lastSnapshot?.ais?.stationary_count)}`],['Rolling window',`${compactNumber(lastSnapshot?.ais?.window_minutes)} minutes`]],noteTitle:'NO SYNTHETIC FALLBACK',note:'If the live provider returns nothing, the map remains empty.'});
-    if(lastSnapshot) renderMap(lastSnapshot);
+    if(lastSnapshot) {
+      renderMap(lastSnapshot);
+      lastMapRenderFingerprint = mapRenderFingerprint(lastSnapshot);
+    }
   }
 
   const analysisBusy = status => ['QUEUED','DOWNLOADING','INFERENCE','INTERPRETING'].includes(String(status || '').toUpperCase());
@@ -2223,6 +2227,38 @@
     });
   }
 
+  function mapRenderFingerprint(snapshot) {
+    const environment = snapshot.sources?.environment || {};
+    const sentinel = snapshot.sources?.sentinel || {};
+    return JSON.stringify({
+      region:snapshot.region,
+      map_context:snapshot.map_context,
+      coastline_url:snapshot.coastline_url,
+      sentinel:{
+        footprints_url:sentinel.footprints_url,
+        latest_observation_utc:sentinel.latest_observation_utc
+      },
+      environment:{
+        latest_observation_utc:environment.latest_observation_utc,
+        current:environment.current
+      },
+      ais:snapshot.ais,
+      analysis:snapshot.analysis,
+      review:{
+        status:snapshot.review?.status,
+        approved_slick_url:snapshot.review?.approved_slick_url
+      },
+      attribution:{
+        origin_zone_url:snapshot.attribution?.origin_zone_url,
+        candidate_tracks_url:snapshot.attribution?.candidate_tracks_url,
+        estimated_origin:snapshot.attribution?.estimated_origin,
+        decision:snapshot.attribution?.decision
+      },
+      mode:mapMode,
+      layers:Array.from(document.querySelectorAll('#layerControls input')).map(input => [input.value,input.checked,input.disabled])
+    });
+  }
+
   const componentSpecs = {
     'detection-workbench': {
       select: snapshot => ({sentinel:snapshot.sources?.sentinel,analysis:snapshot.analysis,review:snapshot.review}),
@@ -2318,7 +2354,11 @@
     renderIntegrity(snapshot);
     renderActiveComponents(snapshot);
     html('mapEvidenceTime', formatUtc(evidenceTime(snapshot)));
-    renderMap(snapshot);
+    const nextMapFingerprint = mapRenderFingerprint(snapshot);
+    if (nextMapFingerprint !== lastMapRenderFingerprint) {
+      lastMapRenderFingerprint = nextMapFingerprint;
+      renderMap(snapshot);
+    }
     syncMapGeometry(snapshot).catch(error => {
       byId('mapLoading').hidden = false;
       html('mapLoading', 'Published map geometry could not be loaded.');
@@ -2375,7 +2415,11 @@
   byId('overviewModeButton').addEventListener('click', () => updateMapMode('overview'));
   byId('liveModeButton').addEventListener('click', () => updateMapMode('live'));
   byId('incidentModeButton').addEventListener('click', () => updateMapMode('incident'));
-  byId('layerControls').addEventListener('change', () => { if (lastSnapshot) renderMap(lastSnapshot); });
+  byId('layerControls').addEventListener('change', () => {
+    if (!lastSnapshot) return;
+    renderMap(lastSnapshot);
+    lastMapRenderFingerprint = mapRenderFingerprint(lastSnapshot);
+  });
   byId('sarSceneSelect').addEventListener('change', event => {
     selectedSceneId = event.target.value;
     if(lastSnapshot) renderDetectionWorkbench(lastSnapshot);
