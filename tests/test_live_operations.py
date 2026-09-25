@@ -272,6 +272,8 @@ def test_controlled_judges_demo_is_integrated_and_explicitly_synthetic() -> None
     assert "MERIDIAN-7" in page
     assert "KNOWN SOURCE RECOVERED" in page
     assert "BEGIN CONTROLLED RUN" in page
+    assert "particle-layer" in page
+    assert "animateMotion" in page
     assert "startDemo" in script
     assert "previousStage" in script
     assert "nextStage" in script
