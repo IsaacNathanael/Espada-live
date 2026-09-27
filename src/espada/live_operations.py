@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -171,6 +172,31 @@ def _map_context_bbox(region: LiveRegion) -> tuple[float, float, float, float]:
         max(-90.0, region.min_latitude - height),
         min(180.0, region.max_longitude + width),
         min(90.0, region.max_latitude + height),
+    )
+
+
+def _current_grid_request(
+    region: LiveRegion, start: datetime, end: datetime
+) -> tuple[datetime, datetime, tuple[float, float, float, float]]:
+    """Include bracketing PT6H samples and neighbouring 0.083-degree cells.
+
+    The particle model still uses the approved age and watch boundary. This only
+    prevents a provider subset from clipping off the interpolation support.
+    """
+    first = start.replace(hour=(start.hour // 6) * 6, minute=0, second=0, microsecond=0)
+    last = end.replace(hour=(end.hour // 6) * 6, minute=0, second=0, microsecond=0)
+    if last < end:
+        last += timedelta(hours=6)
+    margin = 0.17
+    return (
+        first - timedelta(hours=6),
+        last + timedelta(hours=6),
+        (
+            max(-180.0, region.min_longitude - margin),
+            max(-90.0, region.min_latitude - margin),
+            min(180.0, region.max_longitude + margin),
+            min(90.0, region.max_latitude + margin),
+        ),
     )
 
 
@@ -1199,6 +1225,117 @@ class LiveOperationsEngine:
         self._write_state()
         return result
 
+    def resume_approved_case(self, scene_id: str) -> dict[str, object]:
+        """Restore a sealed, reviewed incident without repeating satellite inference.
+
+        Starting a different SAR analysis changes the active workspace, but must not
+        strand an earlier approved case. Its immutable on-disk handoff is verified
+        before it becomes the active reconstruction input again.
+        """
+        scene_id = str(scene_id).strip()
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", scene_id):
+            raise ValueError("Select a valid recorded scene identifier.")
+        run_root = self.output_root / "analysis" / scene_id
+        with self._lock:
+            if any(
+                thread is not None and thread.is_alive()
+                for thread in (self._analysis_thread, self._attribution_thread, self._reanalysis_thread)
+            ):
+                raise RuntimeError("Wait for the active analysis to finish before switching cases.")
+            if (run_root / "attribution" / "ranking" / "candidates.json").exists():
+                raise RuntimeError("This case already has an attribution record; inspect its saved dossier instead.")
+            handoff = self._verify_incident_handoff(run_root)
+            if handoff.get("scene_id") != scene_id or handoff.get("case_id") != scene_id:
+                raise RuntimeError("The approved case identity does not match its sealed handoff.")
+            if handoff.get("watch_region", {}).get("bbox") != list(self.region.bbox):
+                raise RuntimeError("The approved case belongs to a different watch region.")
+            input_status = json.loads((run_root / "input" / "sentinel1_subset_status.json").read_text(encoding="utf-8"))
+            result = json.loads((run_root / "segmentation" / "sar_result.json").read_text(encoding="utf-8"))
+            physics = json.loads((run_root / "segmentation" / "physics_screen.json").read_text(encoding="utf-8"))
+            manifest = json.loads((run_root / "input" / "selected_scene_manifest.json").read_text(encoding="utf-8"))
+            acquired = handoff.get("observation_time_utc")
+            if (
+                input_status.get("status") != "PASS"
+                or input_status.get("scene_id") != scene_id
+                or input_status.get("acquisition_time_utc") != acquired
+                or result.get("status") != "REVIEW_REQUIRED"
+                or result.get("observation_time_utc") != acquired
+                or manifest.get("recommended_scene", {}).get("id") != scene_id
+                or physics.get("status") != "PLAUSIBLE_DARK_SIGNATURE"
+                or physics.get("contrast_gate_passed") is not True
+                or physics.get("wind_gate_passed") is not True
+            ):
+                raise RuntimeError("Saved satellite or physics evidence does not match the approved incident.")
+            crop = input_status.get("bbox")
+            if not isinstance(crop, list) or len(crop) != 4:
+                raise RuntimeError("The approved satellite crop has no valid boundary.")
+            for relative in (
+                "input/sentinel1_vv_quicklook.png",
+                "segmentation/sar_segmentation_overview.png",
+                "segmentation/slick_mask.png",
+            ):
+                if not (run_root / relative).is_file():
+                    raise RuntimeError(f"Approved case cannot be displayed because {relative} is missing.")
+            segmentation = result.get("segmentation") or {}
+            review = {
+                "status": "APPROVED",
+                "scene_id": scene_id,
+                "reviewed_at_utc": handoff.get("analyst_reviewed_at_utc"),
+                "assumed_age_hours": handoff.get("assumed_age_hours"),
+                "estimated_release_time_utc": handoff.get("estimated_release_time_utc"),
+                "approved_slick_url": self._public_url(run_root / "review" / "approved_slick.geojson"),
+                "slick_geometry_sha256": handoff["artifacts"]["approved_slick"]["sha256"],
+                "handoff_status": "SEALED",
+                "handoff_verified": True,
+                "handoff_digest_sha256": handoff["record_digest_sha256"],
+                "handoff_url": self._public_url(run_root / "review" / "incident_handoff.json"),
+                "message": "Previously approved incident restored from a verified sealed record.",
+            }
+            self._state["analysis"] = {
+                "status": "REVIEW_REQUIRED",
+                "scene_id": scene_id,
+                "requested_scene_id": scene_id,
+                "selected_scene": manifest["recommended_scene"],
+                "acquisition_time_utc": acquired,
+                "bbox": crop,
+                "detected_pixel_fraction": result.get("detected_pixel_fraction"),
+                "detected_components": segmentation.get("detected_components"),
+                "probability_summary": segmentation.get("probability_summary", {}),
+                "review_status": "analyst_approved",
+                "input_url": self._public_url(run_root / "input" / "sentinel1_vv_quicklook.png"),
+                "overview_url": self._public_url(run_root / "segmentation" / "sar_segmentation_overview.png"),
+                "mask_url": self._public_url(run_root / "segmentation" / "slick_mask.png"),
+                "result_url": self._public_url(run_root / "segmentation" / "sar_result.json"),
+                "slick_geojson_url": self._public_url(run_root / "segmentation" / "slick_candidate.geojson"),
+                "physics_screen": physics,
+                "input_provenance": {key: input_status.get(key) for key in (
+                    "provider", "polarization", "measurement", "orthorectified",
+                    "backscatter_coefficient", "downloaded_at_utc", "width", "height",
+                )},
+                "model_provenance": {key: segmentation.get(key) for key in (
+                    "model_generation", "architecture", "checkpoint_epoch", "checkpoint_sha256",
+                    "threshold", "threshold_source", "test_time_augmentation", "device", "gpu",
+                )},
+                "provenance_verified": True,
+                "message": "A previously approved candidate is ready for reverse-drift reconstruction.",
+            }
+            self._state["review"] = review
+            self._state["attribution"] = {
+                "status": "READY",
+                "message": "Sealed input verified; ready to build date-matched forcing and vessel evidence.",
+                "candidates": [],
+            }
+            for section, status, message in (
+                ("response", "NOT_BUILT", "Build a response package after attribution completes."),
+                ("retasking", "NOT_BUILT", "Build an evidence plan after the response package exists."),
+                ("evidence_intake", "NOT_READY", "An evidence plan is required before intake."),
+                ("reanalysis", "NOT_READY", "Admitted evidence is required before reanalysis."),
+                ("closure", "NOT_READY", "Complete attribution before recording a case disposition."),
+            ):
+                self._state[section] = {"status": status, "message": message}
+            self._write_state()
+            return dict(review)
+
     def start_attribution(self) -> dict[str, object]:
         with self._lock:
             if self._attribution_thread and self._attribution_thread.is_alive():
@@ -1631,6 +1768,9 @@ class LiveOperationsEngine:
             release_time = observation_time - timedelta(hours=age_hours)
             forcing_start = release_time - timedelta(hours=2)
             forcing_end = observation_time + timedelta(hours=2)
+            grid_start, grid_end, grid_bbox = _current_grid_request(
+                self.region, forcing_start, forcing_end
+            )
             longitude, latitude = self.region.center
             wind_cache = environment_dir / "historical_wind.json"
             current_file = environment_dir / "copernicus_currents.nc"
@@ -1663,19 +1803,19 @@ class LiveOperationsEngine:
                     "espada.copernicus",
                     "download",
                     "--start",
-                    _format_utc(forcing_start),
+                    _format_utc(grid_start),
                     "--end",
-                    _format_utc(forcing_end),
+                    _format_utc(grid_end),
                     "--dataset-id",
                     FORECAST_DATASET_ID,
                     "--min-lon",
-                    str(self.region.min_longitude),
+                    str(grid_bbox[0]),
                     "--max-lon",
-                    str(self.region.max_longitude),
+                    str(grid_bbox[2]),
                     "--min-lat",
-                    str(self.region.min_latitude),
+                    str(grid_bbox[1]),
                     "--max-lat",
-                    str(self.region.max_latitude),
+                    str(grid_bbox[3]),
                     "--out",
                     str(current_file),
                 ],

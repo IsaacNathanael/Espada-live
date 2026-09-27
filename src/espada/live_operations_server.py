@@ -87,6 +87,15 @@ class LiveOperationsHandler(SimpleHTTPRequestHandler):
         """Serve the public allowlist with compression and explicit cache policy."""
         root = Path(self.directory or os.getcwd()).resolve()
         relative = unquote(urlsplit(self.path).path).replace("\\", "/").lstrip("/")
+        # Each workspace has its own URL; the shared shell keeps live state and
+        # controls consistent without duplicating the full operator document.
+        if relative in {
+            "operator/live_command/detection.html",
+            "operator/live_command/investigation.html",
+            "operator/live_command/cases.html",
+            "operator/live_command/case-file.html",
+        }:
+            relative = "operator/live_command/index.html"
         target = (root / relative).resolve()
         try:
             target.relative_to(root)
@@ -192,6 +201,14 @@ class LiveOperationsHandler(SimpleHTTPRequestHandler):
                 self._json(409, {"status": "REJECTED", "error": str(error)})
             except Exception as error:
                 self._json(500, {"status": "FAIL", "error": str(error)})
+            return
+        if path == "/api/live/resume-approved-case":
+            try:
+                payload = self._request_json()
+                review = self.engine.resume_approved_case(str(payload.get("scene_id") or ""))
+                self._json(200, review)
+            except (ValueError, RuntimeError, FileNotFoundError, OSError, KeyError, json.JSONDecodeError) as error:
+                self._json(409, {"status": "REJECTED", "error": str(error)})
             return
         if path == "/api/live/build-attribution":
             try:

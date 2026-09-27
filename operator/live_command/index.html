@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
   <title>ESPADA Live Command</title>
-  <link rel="stylesheet" href="styles.css?v=20260925-7">
+  <link rel="stylesheet" href="styles.css?v=20260926-4">
 </head>
 <body>
   <header class="masthead">
-    <a class="identity" href="#overview" aria-label="ESPADA live command home">
+    <a class="identity" href="index.html" aria-label="ESPADA live watch home">
       <svg class="identity-mark" viewBox="0 0 44 44" aria-hidden="true">
         <path d="M22 3 38 12v20L22 41 6 32V12Z"/>
         <path d="m13 26 9-16 9 16-9 8Z"/>
@@ -36,25 +36,20 @@
     </div>
   </header>
 
-  <nav class="workflow" aria-label="ESPADA investigation workflow">
-    <a class="workflow-step active" href="#overview" aria-current="step"><span>01</span><b>Watch</b><small>Sources & coverage</small></a>
-    <a class="workflow-step available" href="#detection-workbench"><span>02</span><b>Detect</b><small>Satellite review</small></a>
-    <a class="workflow-step available" href="#reverse-drift"><span>03</span><b>Reconstruct</b><small>Reverse drift</small></a>
-    <a class="workflow-step available" href="#ais-filter"><span>04</span><b>Correlate</b><small>Filter + rank AIS</small></a>
-    <a class="workflow-step available" href="#respond-workspace"><span>05</span><b>Respond</b><small>Evidence & impact</small></a>
-    <a class="workflow-step available" href="#case-register"><span>06</span><b>Preserve</b><small>Case register</small></a>
-    <a class="workflow-step available" href="#evidence-planner"><span>07</span><b>Resolve</b><small>Evidence retasking</small></a>
-    <a class="workflow-step available" href="#evidence-intake"><span>08</span><b>Reopen</b><small>Evidence intake</small></a>
-    <a class="workflow-step available" href="#controlled-reanalysis"><span>09</span><b>Reanalyse</b><small>Versioned rerun</small></a>
-    <a class="workflow-step available" href="#decision-closure"><span>10</span><b>Close</b><small>Decision record</small></a>
+  <nav class="workflow" aria-label="ESPADA pages">
+    <a class="workflow-step active" data-page-link="watch" href="index.html" aria-current="page"><span>01</span><b>Live Watch</b><small>Map & sources</small></a>
+    <a class="workflow-step available" data-page-link="detection" href="detection.html"><span>02</span><b>Detection</b><small>Satellite review</small></a>
+    <a class="workflow-step available" data-page-link="investigation" href="investigation.html"><span>03</span><b>Investigation</b><small>Drift & vessels</small></a>
+    <a class="workflow-step available" data-page-link="cases" href="cases.html"><span>04</span><b>Cases</b><small>Saved records</small></a>
+    <a class="workflow-step available" data-page-link="case-file" href="case-file.html"><span>05</span><b>Case File</b><small>Evidence & decisions</small></a>
   </nav>
 
   <main id="overview">
     <section class="briefing">
       <div>
-        <p class="kicker">LIVE EVIDENCE DESK · COMPONENT 01</p>
-        <h1>Know what the system can actually see.</h1>
-        <p class="lede">Live maritime evidence. Auditable attribution.</p>
+        <p class="kicker" id="pageKicker">LIVE WATCH</p>
+        <h1 id="pageTitle">Know what the system can actually see.</h1>
+        <p class="lede" id="pageLede">Live maritime evidence. Auditable attribution.</p>
       </div>
       <div class="briefing-actions">
         <div class="info-actions" aria-label="Product information">
@@ -97,15 +92,36 @@
             </div>
           </details>
         </div>
-        <button class="refresh-button" id="refreshButton" type="button">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M18.5 9A7 7 0 0 0 6.8 6.8L4 9m16 6-2.8 2.2A7 7 0 0 1 5.5 15"/></svg>
-          Request provider refresh
-        </button>
-        <span class="refresh-note" id="refreshNote">Automatic polling every 15 seconds</span>
+        <div id="refreshControl">
+          <button class="refresh-button" id="refreshButton" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M18.5 9A7 7 0 0 0 6.8 6.8L4 9m16 6-2.8 2.2A7 7 0 0 1 5.5 15"/></svg>
+            Request provider refresh
+          </button>
+          <span class="refresh-note" id="refreshNote">Automatic display update every 60 seconds</span>
+        </div>
       </div>
     </section>
 
-    <section class="summary-strip" aria-label="Operational summary">
+    <nav class="chapter-nav" id="investigationTabs" data-chapter-nav="investigation" aria-label="Investigation views" hidden>
+      <a href="investigation.html#reverse-drift" data-panel-link="reverse-drift">1 · Reverse drift</a>
+      <a href="investigation.html#ais-filter" data-panel-link="ais-filter">2 · Match vessel traffic</a>
+      <a href="investigation.html#candidate-attribution" data-panel-link="candidate-attribution">3 · Candidate ranking</a>
+    </nav>
+    <nav class="chapter-nav" id="caseFileTabs" data-chapter-nav="case-file" aria-label="Case file views" hidden>
+      <a href="case-file.html#respond-workspace" data-panel-link="respond-workspace">Dossier</a>
+      <a href="case-file.html#evidence-planner" data-panel-link="evidence-planner">Evidence requests</a>
+      <a href="case-file.html#evidence-intake" data-panel-link="evidence-intake">Evidence intake</a>
+      <a href="case-file.html#controlled-reanalysis" data-panel-link="controlled-reanalysis">Reanalysis</a>
+      <a href="case-file.html#decision-closure" data-panel-link="decision-closure">Decision</a>
+    </nav>
+    <div class="chapter-gate" id="chapterGate" role="status" hidden>
+      <span id="chapterGateLabel">NEXT STEP</span>
+      <h2 id="chapterGateTitle">Waiting for evidence</h2>
+      <p id="chapterGateMessage"></p>
+      <a id="chapterGateLink" href="index.html">Open Live Watch →</a>
+    </div>
+
+    <section class="summary-strip" data-chapter="watch" aria-label="Operational summary">
       <div class="summary-cell">
         <span>ENGINE SNAPSHOT</span>
         <b id="snapshotAge">No response</b>
@@ -128,7 +144,7 @@
       </div>
     </section>
 
-    <section class="map-section" id="sea-map" aria-labelledby="mapTitle">
+    <section class="map-section" id="sea-map" data-chapter="watch" aria-labelledby="mapTitle">
       <header class="map-header">
         <div>
           <p class="kicker">LIVE SEA MAP · COMPONENT 02</p>
@@ -213,7 +229,7 @@
       </footer>
     </section>
 
-    <section class="detection-section" id="detection-workbench" aria-labelledby="detectionTitle">
+    <section class="detection-section" id="detection-workbench" data-chapter="detection" aria-labelledby="detectionTitle">
       <header class="detection-header">
         <div>
           <p class="kicker">SAR DETECTION WORKBENCH · COMPONENT 03</p>
@@ -247,7 +263,7 @@
               <button type="button" data-sar-view="overview" class="active" aria-pressed="true">Model interpretation</button>
               <button type="button" data-sar-view="mask" aria-pressed="false">Binary candidate mask</button>
             </div>
-            <span id="viewerLabel">Awaiting processed image</span>
+            <div class="viewer-actions"><span id="viewerLabel">Awaiting processed image</span><a id="sarFullImageLink" href="#" target="_blank" rel="noopener" hidden>Open full image ↗</a></div>
           </div>
           <div class="image-stage" id="sarImageStage">
             <img id="sarEvidenceImage" alt="Processed Sentinel-1 evidence" hidden>
@@ -297,8 +313,9 @@
           <section class="analyst-review">
             <div class="aside-heading"><span>HUMAN DECISION</span><h3 id="reviewHeading">No reviewable candidate</h3></div>
             <p id="reviewMessage">A decision becomes available only after the model and physics gates complete.</p>
-            <label for="releaseAgeInput"><span>Assumed time since release</span><b id="releaseAgeValue">19 h</b></label>
+            <label for="releaseAgeInput"><span>Assumed time since release · not measured by SAR</span><b id="releaseAgeValue">19 h</b></label>
             <input id="releaseAgeInput" type="range" min="1" max="72" step="1" value="19" disabled>
+            <p class="age-guidance" id="ageGuidance">Suggested first-pass scenario: 19 h. A single radar image cannot measure slick age; this is a starting assumption only. Use a documented release time when available, and compare several ages before interpreting a vessel ranking.</p>
             <div class="review-actions">
               <button type="button" id="approveCandidateButton" class="approve-action" disabled>Approve for reconstruction</button>
               <button type="button" id="rejectCandidateButton" class="reject-action" disabled>Reject candidate</button>
@@ -309,7 +326,7 @@
       </div>
     </section>
 
-    <section class="drift-section" id="reverse-drift" aria-labelledby="driftTitle">
+    <section class="drift-section" id="reverse-drift" data-chapter="investigation" data-panel aria-labelledby="driftTitle">
       <header class="drift-header">
         <div>
           <p class="kicker">REVERSE + FORWARD DRIFT · COMPONENT 05</p>
@@ -412,7 +429,7 @@
       </footer>
     </section>
 
-    <section class="ais-filter-section" id="ais-filter" aria-labelledby="aisFilterTitle">
+    <section class="ais-filter-section" id="ais-filter" data-chapter="investigation" data-panel aria-labelledby="aisFilterTitle">
       <header class="ais-filter-header">
         <div>
           <p class="kicker">HISTORICAL AIS FILTER · COMPONENT 06</p>
@@ -478,7 +495,7 @@
       </div>
     </section>
 
-    <section class="attribution-section" id="candidate-attribution" aria-labelledby="attributionTitle">
+    <section class="attribution-section" id="candidate-attribution" data-chapter="investigation" data-panel aria-labelledby="attributionTitle">
       <header class="attribution-header">
         <div>
           <p class="kicker">CANDIDATE ATTRIBUTION · COMPONENT 07</p>
@@ -577,7 +594,7 @@
       <footer class="attribution-boundary"><b>INVESTIGATIVE BOUNDARY</b> Scores prioritize analyst review. They are not guilt probabilities, identity verification, discharge proof or legal findings.</footer>
     </section>
 
-    <section class="response-section" id="respond-workspace" aria-labelledby="responseTitle">
+    <section class="response-section" id="respond-workspace" data-chapter="case-file" data-panel aria-labelledby="responseTitle">
       <header class="response-header">
         <div>
           <p class="kicker">RESPONSE & EVIDENCE DOSSIER · COMPONENT 08</p>
@@ -654,7 +671,7 @@
       <footer class="response-boundary"><b>ACCOUNTABILITY BOUNDARY</b> ESPADA preserves and explains the evidence. A public allegation, enforcement action or legal finding requires independent corroboration and accountable human authority.</footer>
     </section>
 
-    <section class="case-register-section" id="case-register" aria-labelledby="caseRegisterTitle">
+    <section class="case-register-section" id="case-register" data-chapter="cases" aria-labelledby="caseRegisterTitle">
       <header class="case-register-header">
         <div>
           <p class="kicker">OPERATIONAL CASE REGISTER · AUDIT WORKSPACE</p>
@@ -716,6 +733,8 @@
           </div>
           <div class="provenance-alert" id="caseProvenanceAlert" data-state="clear"><b>PROVENANCE CHECK</b><p>No case selected.</p></div>
           <div class="case-actions">
+            <button id="resumeCaseButton" type="button" disabled>Resume approved case</button>
+            <p id="resumeCaseMessage" class="resume-case-message" role="status">Select an analyst-approved case to continue its investigation.</p>
             <button id="verifyCaseButton" type="button" disabled>Verify package integrity</button>
             <a id="caseDossierLink" href="#" target="_blank" rel="noopener" hidden>Open dossier ↗</a>
             <a id="caseManifestLink" href="#" target="_blank" rel="noopener" hidden>Open manifest ↗</a>
@@ -733,7 +752,7 @@
       <footer class="case-register-boundary"><b>RECORD POLICY</b> A case remains visible when incomplete, rejected or inconclusive. Verification detects file changes; it does not establish the truth of the underlying evidence.</footer>
     </section>
 
-    <section class="planner-section" id="evidence-planner" aria-labelledby="plannerTitle">
+    <section class="planner-section" id="evidence-planner" data-chapter="case-file" data-panel aria-labelledby="plannerTitle">
       <header class="planner-header">
         <div>
           <p class="kicker">EVIDENCE RETASKING DESK · FOLLOW-UP WORKSPACE</p>
@@ -797,7 +816,7 @@
       <footer class="planner-boundary"><b>ACTION BOUNDARY</b> ESPADA drafts and prioritizes evidence requests. It does not contact providers, retask satellites, identify a vessel, or change the attribution decision until new evidence is acquired and reviewed.</footer>
     </section>
 
-    <section class="intake-section" id="evidence-intake" aria-labelledby="intakeTitle">
+    <section class="intake-section" id="evidence-intake" data-chapter="case-file" data-panel aria-labelledby="intakeTitle">
       <header class="intake-header">
         <div>
           <p class="kicker">EVIDENCE RETURN INTAKE · FOLLOW-UP WORKSPACE</p>
@@ -876,7 +895,7 @@
       <footer class="intake-boundary"><b>DECISION BOUNDARY</b> Admission means the evidence may enter a new analysis. The preserved attribution remains unchanged until a separate, explicit rerun completes and passes every safety gate.</footer>
     </section>
 
-    <section class="reanalysis-section" id="controlled-reanalysis" aria-labelledby="reanalysisTitle">
+    <section class="reanalysis-section" id="controlled-reanalysis" data-chapter="case-file" data-panel aria-labelledby="reanalysisTitle">
       <header class="reanalysis-header">
         <div>
           <p class="kicker">CONTROLLED REANALYSIS · FOLLOW-UP WORKSPACE</p>
@@ -949,7 +968,7 @@
       <footer class="reanalysis-boundary"><b>VERSION BOUNDARY</b> A rerun may change candidate ordering or keep the system in abstention. It never erases the original result, proves a discharge or authorizes enforcement.</footer>
     </section>
 
-    <section class="closure-section" id="decision-closure" aria-labelledby="closureTitle">
+    <section class="closure-section" id="decision-closure" data-chapter="case-file" data-panel aria-labelledby="closureTitle">
       <header class="closure-header">
         <div>
           <p class="kicker">DECISION COMPARISON &amp; CLOSURE · DECISION WORKSPACE</p>
@@ -1017,7 +1036,7 @@
       <footer class="closure-boundary"><b>AUTHORITY BOUNDARY</b> ESPADA records evidence-supported workflow decisions. Public allegation, detention, penalty or legal finding remains outside the system and requires independent corroboration and lawful human authority.</footer>
     </section>
 
-    <section class="section-heading">
+    <section class="section-heading" data-chapter="watch">
       <div>
         <p class="kicker">SOURCE REGISTER</p>
         <h2>Three feeds, three different meanings</h2>
@@ -1030,7 +1049,7 @@
       </div>
     </section>
 
-    <section class="source-grid" aria-live="polite">
+    <section class="source-grid" data-chapter="watch" aria-live="polite">
       <article class="source-card" id="aisCard" data-state="waiting">
         <div class="card-index">01</div>
         <header>
@@ -1098,7 +1117,7 @@
       </article>
     </section>
 
-    <section class="integrity-panel">
+    <section class="integrity-panel" data-chapter="watch">
       <div class="integrity-mark" aria-hidden="true">
         <svg viewBox="0 0 56 56"><path d="M28 4 48 12v14c0 13-8 21-20 26C16 47 8 39 8 26V12Z"/><path d="m18 28 7 7 14-16"/></svg>
       </div>
@@ -1121,6 +1140,6 @@
     <span id="pollState">Live API has not responded</span>
   </footer>
   <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
-  <script src="app.js?v=20260925-7"></script>
+  <script src="app.js?v=20260926-8"></script>
 </body>
 </html>

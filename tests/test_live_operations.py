@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from espada.live_operations import LiveOperationsEngine, LiveRegion, freshness_label
+from espada.live_operations import LiveOperationsEngine, LiveRegion, _current_grid_request, freshness_label
 from espada.live_operations_server import DEFAULT_LIVE_REGION
 
 
@@ -23,17 +23,19 @@ def _prepare_reviewable_case(
     input_dir.mkdir(parents=True, exist_ok=True)
     segmentation.mkdir(parents=True, exist_ok=True)
     (input_dir / "selected_scene_manifest.json").write_text(
-        json.dumps({"scene_id": scene_id, "acquisition_time_utc": acquisition_time_utc}),
+        json.dumps({"recommended_scene": {"id": scene_id, "acquisition_time_utc": acquisition_time_utc}}),
         encoding="utf-8",
     )
     (input_dir / "sentinel1_subset_status.json").write_text(
-        json.dumps({"scene_id": scene_id, "acquisition_time_utc": acquisition_time_utc}),
+        json.dumps({"status": "PASS", "scene_id": scene_id, "acquisition_time_utc": acquisition_time_utc, "bbox": list(engine.region.bbox)}),
         encoding="utf-8",
     )
     (segmentation / "sar_result.json").write_text(
-        json.dumps({"status": "REVIEW_REQUIRED", "observation_time_utc": acquisition_time_utc}),
+        json.dumps({"status": "REVIEW_REQUIRED", "observation_time_utc": acquisition_time_utc, "segmentation": {"detected_components": 1}}),
         encoding="utf-8",
     )
+    for image in (input_dir / "sentinel1_vv_quicklook.png", segmentation / "sar_segmentation_overview.png", segmentation / "slick_mask.png"):
+        image.write_bytes(b"test image")
     physics = {
         "status": "PLAUSIBLE_DARK_SIGNATURE",
         "contrast_gate_passed": True,
@@ -85,6 +87,17 @@ def test_freshness_labels_live_delayed_stale_and_missing() -> None:
 def test_default_live_watch_is_the_compact_east_singapore_offshore_sector() -> None:
     assert DEFAULT_LIVE_REGION.name == "East Singapore Offshore Watch"
     assert DEFAULT_LIVE_REGION.bbox == (104.02, 1.20, 104.23, 1.31)
+
+
+def test_current_request_brackets_native_times_and_spatial_cells() -> None:
+    region = LiveRegion("East", 104.02, 1.20, 104.23, 1.31)
+    start = datetime(2026, 9, 16, 1, 47, tzinfo=UTC)
+    end = datetime(2026, 9, 17, 0, 47, tzinfo=UTC)
+    grid_start, grid_end, bbox = _current_grid_request(region, start, end)
+    assert grid_start == datetime(2026, 9, 15, 18, 0, tzinfo=UTC)
+    assert grid_end == datetime(2026, 9, 17, 12, 0, tzinfo=UTC)
+    assert bbox[0] < region.min_longitude < region.max_longitude < bbox[2]
+    assert bbox[1] < region.min_latitude < region.max_latitude < bbox[3]
 
 
 def test_live_provider_caches_are_isolated_by_watch_boundary(tmp_path: Path) -> None:
@@ -659,6 +672,37 @@ def test_reverse_drift_accepts_only_the_verified_handoff(tmp_path: Path, monkeyp
     queued = engine.start_attribution()
     assert queued["status"] == "QUEUED"
     assert queued["handoff_digest_sha256"] == review["handoff_digest_sha256"]
+
+
+def test_approved_case_can_be_resumed_after_a_different_scene_fails(tmp_path: Path) -> None:
+    engine = LiveOperationsEngine(tmp_path, LiveRegion("Test region", 70.8, 17.8, 73.0, 20.0))
+    _prepare_reviewable_case(engine, scene_id="SCENE-APPROVED")
+    original = engine.review_candidate("APPROVE", age_hours=12)
+    engine._state["analysis"] = {"status": "ERROR", "scene_id": "SCENE-NEW"}
+    engine._state["review"] = {"status": "BLOCKED_BY_ANALYSIS"}
+    engine._write_state()
+
+    resumed = engine.resume_approved_case("SCENE-APPROVED")
+    snapshot = engine.snapshot()
+    assert resumed["status"] == "APPROVED"
+    assert resumed["handoff_digest_sha256"] == original["handoff_digest_sha256"]
+    assert resumed["assumed_age_hours"] == 12
+    assert snapshot["analysis"]["scene_id"] == "SCENE-APPROVED"
+    assert snapshot["analysis"]["provenance_verified"] is True
+    assert snapshot["attribution"]["status"] == "READY"
+
+
+def test_approved_case_resume_rejects_tampered_evidence(tmp_path: Path) -> None:
+    engine = LiveOperationsEngine(tmp_path, LiveRegion("Test region", 70.8, 17.8, 73.0, 20.0))
+    run_root = _prepare_reviewable_case(engine, scene_id="SCENE-APPROVED")
+    engine.review_candidate("APPROVE", age_hours=12)
+    physics = run_root / "segmentation" / "physics_screen.json"
+    physics.write_text(physics.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    engine._state["analysis"] = {"status": "ERROR", "scene_id": "SCENE-NEW"}
+
+    with pytest.raises(RuntimeError, match="integrity failed"):
+        engine.resume_approved_case("SCENE-APPROVED")
+    assert engine.snapshot()["analysis"]["scene_id"] == "SCENE-NEW"
 
 
 def test_coastline_cache_is_regenerated_when_region_changes(tmp_path: Path, monkeypatch) -> None:

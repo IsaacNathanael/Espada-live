@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const POLL_MS = 15000;
+  const POLL_MS = 60000;
   const CLIENT_ENVIRONMENT_TTL_MS = 30 * 60 * 1000;
   const CLIENT_ENVIRONMENT_RETRY_MS = 10 * 60 * 1000;
   const SNAPSHOT_ENDPOINT = '/api/live/snapshot';
@@ -11,12 +11,41 @@
   const ATTRIBUTION_ENDPOINT = '/api/live/build-attribution';
   const RESPONSE_ENDPOINT = '/api/live/build-response';
   const VERIFY_CASE_ENDPOINT = '/api/live/verify-case';
+  const RESUME_CASE_ENDPOINT = '/api/live/resume-approved-case';
   const EVIDENCE_PLAN_ENDPOINT = '/api/live/build-evidence-plan';
   const STAGE_EVIDENCE_ENDPOINT = '/api/live/stage-evidence-return';
   const REVIEW_EVIDENCE_ENDPOINT = '/api/live/review-evidence-return';
   const REANALYSIS_ENDPOINT = '/api/live/start-reanalysis';
   const CLOSURE_ENDPOINT = '/api/live/record-case-disposition';
   const byId = id => document.getElementById(id);
+  const pageFiles = {
+    watch:'index.html', detection:'detection.html',
+    investigation:'investigation.html', cases:'cases.html', 'case-file':'case-file.html'
+  };
+  const pageByFile = Object.fromEntries(Object.entries(pageFiles).map(([page,file]) => [file,page]));
+  const pageByComponent = {
+    'sea-map':'watch', 'detection-workbench':'detection',
+    'reverse-drift':'investigation', 'ais-filter':'investigation',
+    'candidate-attribution':'investigation', 'case-register':'cases',
+    'respond-workspace':'case-file', 'evidence-planner':'case-file',
+    'evidence-intake':'case-file', 'controlled-reanalysis':'case-file',
+    'decision-closure':'case-file'
+  };
+  const pageCopy = {
+    watch:['LIVE WATCH','Know what the system can actually see.','Current traffic, satellite coverage and environmental conditions in one place.'],
+    detection:['SATELLITE REVIEW','Inspect the latest radar scene.','Examine the image and approve a candidate only when the evidence supports it.'],
+    investigation:['INCIDENT INVESTIGATION','Trace the slick. Compare the traffic.','Follow the reconstructed release zone through vessel filtering and ranking.'],
+    cases:['CASE REGISTER','Find a recorded investigation.','Inspect completed, incomplete and inconclusive cases.'],
+    'case-file':['CASE FILE','Preserve the evidence and decision.','Review the dossier, request missing evidence and record the outcome.']
+  };
+  const filename = window.location.pathname.split('/').pop() || 'index.html';
+  const currentPage = pageByFile[filename] || 'watch';
+  const defaultPanels = {investigation:'reverse-drift', 'case-file':'respond-workspace'};
+  const requestedComponent = window.location.hash.slice(1);
+  if (pageByComponent[requestedComponent] && pageByComponent[requestedComponent] !== currentPage) {
+    window.location.replace(`${pageFiles[pageByComponent[requestedComponent]]}#${requestedComponent}`);
+    return;
+  }
   let lastSnapshot = null;
   let mapMode = 'live';
   let mapGeometry = {coast: null, contextCoast: null, footprints: null, slick: null, origin: null, candidateTracks: null};
@@ -255,6 +284,49 @@
     properties: {},
     geometry: {type: 'Polygon', coordinates: [[[bbox[0],bbox[1]],[bbox[0],bbox[3]],[bbox[2],bbox[3]],[bbox[2],bbox[1]],[bbox[0],bbox[1]]]]}
   });
+  function evidenceBbox(snapshot, {includeDrift=false, tracks=[]}={}) {
+    const bounds = [Infinity, Infinity, -Infinity, -Infinity];
+    const addPoint = point => {
+      const lon = Number(point?.[0]), lat = Number(point?.[1]);
+      if (!Number.isFinite(lon) || !Number.isFinite(lat) || Math.abs(lon) > 180 || Math.abs(lat) > 90) return;
+      bounds[0] = Math.min(bounds[0], lon);
+      bounds[1] = Math.min(bounds[1], lat);
+      bounds[2] = Math.max(bounds[2], lon);
+      bounds[3] = Math.max(bounds[3], lat);
+    };
+    const addGeometry = value => {
+      if (!value) return;
+      if (value.type === 'FeatureCollection') return (value.features || []).forEach(addGeometry);
+      if (value.type === 'Feature') return addGeometry(value.geometry);
+      const visit = coordinates => {
+        if (!Array.isArray(coordinates)) return;
+        if (coordinates.length >= 2 && !Array.isArray(coordinates[0])) addPoint(coordinates);
+        else coordinates.forEach(visit);
+      };
+      visit(value.coordinates);
+    };
+    const watch = snapshot.region?.bbox;
+    if (Array.isArray(watch) && watch.length === 4) {
+      addPoint([watch[0], watch[1]]);
+      addPoint([watch[2], watch[3]]);
+    }
+    addGeometry(mapGeometry.slick);
+    addGeometry(mapGeometry.origin);
+    tracks.forEach(addGeometry);
+    if (includeDrift) {
+      const attribution = snapshot.attribution || {};
+      [attribution.observed_centroid, attribution.estimated_origin].forEach(value => {
+        if (value) addPoint(Array.isArray(value) ? value : [value.longitude, value.latitude]);
+      });
+      [attribution.origin_particles, attribution.forward_replay_particles].forEach(cloud => {
+        if (Array.isArray(cloud)) cloud.forEach(addPoint);
+      });
+    }
+    if (!bounds.every(Number.isFinite)) return null;
+    const lonPad = Math.max(0.015, (bounds[2] - bounds[0]) * 0.08);
+    const latPad = Math.max(0.015, (bounds[3] - bounds[1]) * 0.08);
+    return [bounds[0]-lonPad, bounds[1]-latPad, bounds[2]+lonPad, bounds[3]+latPad];
+  }
   const layerVisible = name => byId('layerControls').querySelector(`[data-layer="${name}"]`)?.checked;
   const mapFeatureCount = value => value?.type === 'FeatureCollection' ? value.features?.length || 0 : value ? 1 : 0;
   const setDetail = ({type='MAP READOUT', title='Select evidence on the map', summary='Click a map feature to inspect its provenance.', fields=[], noteTitle='TIME INTEGRITY', note='Live and incident-time evidence remain separated.'}={}) => {
@@ -317,7 +389,7 @@
     });
     byId('mapLoading').hidden = true;
     if (failures.length) html('mapLayerStatus', `Unavailable geometry: ${failures.join(', ')}`);
-    renderMap(snapshot);
+    if (currentPage === 'watch') renderMap(snapshot);
     if (activeComponentIds.has('reverse-drift')) renderDriftMap(snapshot);
     if (activeComponentIds.has('candidate-attribution')) renderCandidateMap(snapshot);
   }
@@ -366,7 +438,10 @@
     svg.selectAll('*').remove();
     const operationalBbox = snapshot.region?.bbox;
     const overview = mapMode === 'overview';
-    const bbox = overview ? snapshot.map_context?.bbox : operationalBbox;
+    const incidentTracks = (mapGeometry.candidateTracks?.features || []).filter(feature => Number(feature.properties?.rank) <= 10);
+    const bbox = overview ? snapshot.map_context?.bbox
+      : mapMode === 'incident' ? evidenceBbox(snapshot, {includeDrift:true, tracks:incidentTracks}) || operationalBbox
+      : operationalBbox;
     if (!Array.isArray(bbox) || bbox.length !== 4 || !Array.isArray(operationalBbox)) return;
     const width = 1100, height = 650;
     const boundsFeature = bboxPolygon(bbox.map(Number));
@@ -486,6 +561,9 @@
 
     const positions = Array.isArray(snapshot.ais?.positions) ? snapshot.ais.positions : [];
     const delayedContext = snapshot.ais?.mode === 'delayed_context';
+    if (mapMode === 'live') html('mapTimeRule',delayedContext
+      ? 'No current AIS positions; displayed vessel locations are delayed historical context.'
+      : 'Only recent provider AIS and current source state are shown.');
     const showUnderway = layerVisible('vessels');
     const showStationary = layerVisible('stationary');
     const visiblePositions = positions.filter(vessel =>
@@ -516,13 +594,21 @@
         const startPoint = hasNewObservation
           ? projection([Number(previous.longitude),Number(previous.latitude)])
           : point;
-        const rotation = finite(vessel.cog) ? Number(vessel.cog) : 0;
+        const underway = vessel.motion_state === 'underway';
+        const course = underway && finite(vessel.cog) && Number(vessel.cog) >= 0 && Number(vessel.cog) < 360
+          ? Number(vessel.cog) : null;
+        const shape = vessel.motion_state === 'stationary'
+          ? 'M0,-9 a2,2 0 1,1 0,4 a2,2 0 1,1 0,-4 M0,-5 V7 M-5,-1 H5 M-7,5 Q-6,10 0,10 Q6,10 7,5'
+          : course === null
+            ? 'M0,-7 A7,7 0 1,1 0,7 A7,7 0 1,1 0,-7 M0,-2 A2,2 0 1,1 0,2 A2,2 0 1,1 0,-2'
+            : 'M0,-10 C4,-7 5,3 3,8 L0,11 L-3,8 C-5,3 -4,-7 0,-10 Z M-3,2 L3,2';
+        const rotation = course === null ? '' : ` rotate(${course})`;
         const mark = vesselGroup.append('path').attr('class',`vessel-mark ${vessel.motion_state}`).attr('tabindex',0).attr('aria-label',`AIS vessel ${vessel.vessel_name || vessel.mmsi}`)
-          .attr('d','M0,-10 C4,-7 5,3 3,8 L0,11 L-3,8 C-5,3 -4,-7 0,-10 Z M-3,2 L3,2')
-          .attr('transform',`translate(${startPoint[0]},${startPoint[1]}) rotate(${rotation})`);
+          .attr('d',shape)
+          .attr('transform',`translate(${startPoint[0]},${startPoint[1]})${rotation}`);
         if (hasNewObservation) {
           mark.transition('ais-observed-interpolation').duration(5000).ease(d3.easeCubicOut)
-            .attr('transform',`translate(${point[0]},${point[1]}) rotate(${rotation})`);
+            .attr('transform',`translate(${point[0]},${point[1]})${rotation}`);
         }
         appendMapTitle(mark, `${vessel.vessel_name || 'UNKNOWN'} · MMSI ${vessel.mmsi}`)
           .on('click keydown',event=>{if(event.type==='keydown'&&!['Enter',' '].includes(event.key))return;detailForVessel(vessel,tracks[vessel.mmsi]?.length);});
@@ -553,7 +639,9 @@
     }
 
     const [labelX,labelY] = projection([bbox[0]+(bbox[2]-bbox[0])*.025,bbox[3]-(bbox[3]-bbox[1])*.035]);
-    svg.append('text').attr('class','place-label').attr('x',labelX).attr('y',labelY).text(String(overview ? snapshot.map_context?.name : snapshot.region?.name || 'WATCH REGION').toUpperCase());
+    svg.append('text').attr('class','place-label').attr('x',labelX).attr('y',labelY).text(mapMode === 'incident'
+      ? 'INCIDENT EVIDENCE EXTENT'
+      : String(overview ? snapshot.map_context?.name : snapshot.region?.name || 'WATCH REGION').toUpperCase());
     const centreLat = Number(snapshot.region?.center?.[1] ?? (bbox[1]+bbox[3])/2);
     const tenKmDegrees = 10/(111.32*Math.cos(centreLat*Math.PI/180));
     const p0=projection([bbox[0],centreLat]),p1=projection([bbox[0]+tenKmDegrees,centreLat]);
@@ -688,6 +776,10 @@
     const image = byId('sarEvidenceImage');
     const empty = byId('sarImageEmpty');
     const viewUrl = matchesAnalysis ? urls[sarView] : null;
+    const fullImageLink = byId('sarFullImageLink');
+    fullImageLink.hidden = !viewUrl;
+    if (viewUrl) fullImageLink.href = viewUrl;
+    byId('sarImageStage').dataset.hasImage = viewUrl ? 'true' : 'false';
     document.querySelectorAll('[data-sar-view]').forEach(button => { button.disabled = !matchesAnalysis || !urls[button.dataset.sarView]; });
     html('viewerLabel',matchesAnalysis ? labels[sarView] : 'SELECTED SCENE HAS NOT BEEN PROCESSED');
     if (viewUrl) {
@@ -777,6 +869,9 @@
     const age = finite(review.assumed_age_hours) ? Number(review.assumed_age_hours) : Number(byId('releaseAgeInput').value || 19);
     byId('releaseAgeInput').value = String(age);
     html('releaseAgeValue',`${age} h`);
+    html('ageGuidance',approved
+      ? `${age} h was recorded as the analyst's release-age assumption. It was not measured by the radar image; the sealed case preserves that choice.`
+      : 'Suggested first-pass scenario: 19 h. A single radar image cannot measure slick age; this is a starting assumption only. Use a documented release time when available, and compare several ages before interpreting a vessel ranking.');
     byId('releaseAgeInput').disabled = !approvalReady;
     byId('approveCandidateButton').disabled = !approvalReady;
     byId('rejectCandidateButton').disabled = !reviewable;
@@ -802,15 +897,25 @@
 
   async function submitCandidateReview(decision) {
     for(const id of ['approveCandidateButton','rejectCandidateButton']) byId(id).disabled = true;
+    let reviewRecorded = false;
     try {
       const response = await fetch(REVIEW_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({decision,age_hours:Number(byId('releaseAgeInput').value)})});
       const result = await response.json().catch(()=>({}));
       if(!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
-      setDetectionStatus(decision === 'APPROVE'?'approved':'rejected',decision === 'APPROVE'?'DECISION RECORDED':'CANDIDATE REJECTED',result.message || 'Review state updated');
-      window.setTimeout(poll,600);
+      reviewRecorded = true;
+      if(decision === 'APPROVE') {
+        setDetectionStatus('approved','DECISION RECORDED','Starting reverse-drift reconstruction from the sealed slick.');
+        const buildResponse = await fetch(ATTRIBUTION_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+        const buildResult = await buildResponse.json().catch(()=>({}));
+        if(!buildResponse.ok) throw new Error(buildResult.error || `Reconstruction could not start (HTTP ${buildResponse.status}).`);
+        window.location.assign('investigation.html#reverse-drift');
+      } else {
+        setDetectionStatus('rejected','CANDIDATE REJECTED',result.message || 'Review state updated');
+        window.setTimeout(poll,600);
+      }
     } catch(error) {
-      setDetectionStatus('error','REVIEW COULD NOT BE RECORDED',operatorMessage(error.message));
-      if(lastSnapshot) renderDetectionWorkbench(lastSnapshot);
+      setDetectionStatus('error',reviewRecorded?'APPROVED · RECONSTRUCTION NOT STARTED':'REVIEW COULD NOT BE RECORDED',operatorMessage(error.message));
+      window.setTimeout(poll,600);
     }
   }
 
@@ -857,7 +962,7 @@
     byId('driftMapEmpty').hidden = complete;
     if (!complete) return;
 
-    const bbox = Array.isArray(snapshot.region?.bbox) ? snapshot.region.bbox.map(Number) : null;
+    const bbox = evidenceBbox(snapshot, {includeDrift:true});
     if (!bbox || bbox.length !== 4) return;
     const width = 1040, height = 650;
     const projection = d3.geoMercator().fitExtent([[28,28],[width-28,height-28]], bboxPolygon(bbox));
@@ -914,7 +1019,7 @@
       svg.append('text').attr('class','drift-displacement-label').attr('x',(a[0]+b[0])/2).attr('y',(a[1]+b[1])/2-9).attr('text-anchor','middle').text(`${distanceKm(origin,observed).toFixed(2)} km centroid displacement`);
     }
     const [labelX,labelY]=projection([bbox[0]+(bbox[2]-bbox[0])*.028,bbox[3]-(bbox[3]-bbox[1])*.055]);
-    svg.append('text').attr('class','drift-map-title').attr('x',labelX).attr('y',labelY).text(String(snapshot.region?.name||'WATCH REGION').toUpperCase());
+    svg.append('text').attr('class','drift-map-title').attr('x',labelX).attr('y',labelY).text('INCIDENT EVIDENCE EXTENT');
     const subtitle=driftView==='observed'?'SATELLITE OBSERVATION':driftView==='origin'?'INFERRED RELEASE DISTRIBUTION':driftView==='forward'?'POSTERIOR FORWARD CLOSURE':'OBSERVATION ↔ REVERSE ↔ FORWARD';
     const mapLabel=driftView==='observed'?'OBSERVED SLICK':driftView==='origin'?'RELEASE ENSEMBLE':driftView==='forward'?'FORWARD REPLAY':'FULL DRIFT COMPARISON';
     svg.append('text').attr('class','drift-map-subtitle').attr('x',labelX).attr('y',labelY+18).text(subtitle);
@@ -1132,11 +1237,11 @@
     const selected=selectedCandidate(snapshot);
     const candidateIds=new Set(candidates.map(candidate=>String(candidate.mmsi)));
     const allFeatures=mapGeometry.candidateTracks?.features||[];
-    const tracks=allFeatures.filter(feature=>candidateIds.has(String(feature.properties?.mmsi)));
+    const tracks=allFeatures.filter(feature=>Number(feature.properties?.rank)<=12 && candidateIds.has(String(feature.properties?.mmsi)));
     const complete=String(snapshot.attribution?.status||'').toUpperCase()==='COMPLETE'&&tracks.length>0;
     byId('candidateMapEmpty').hidden=complete;
     if(!complete)return;
-    const bbox=Array.isArray(snapshot.region?.bbox)?snapshot.region.bbox.map(Number):null;
+    const bbox=evidenceBbox(snapshot,{includeDrift:true,tracks});
     if(!bbox||bbox.length!==4)return;
     const width=1040,height=590;
     const projection=d3.geoMercator().fitExtent([[28,28],[width-28,height-28]],bboxPolygon(bbox));
@@ -1235,7 +1340,7 @@
     const decision=String(attribution.decision||'ABSTAIN_INSUFFICIENT_EVIDENCE');
     const abstain=decision.startsWith('ABSTAIN');
     const verdict=byId('gateVerdict');verdict.className=`gate-verdict ${abstain?'abstain':'shortlist'}`;
-    verdict.querySelector('b').textContent=abstain?'ABSTAIN · INSUFFICIENT SEPARATION':'LIMITED SHORTLIST';
+    verdict.querySelector('b').textContent=abstain?'ABSTAIN · EVIDENCE GATES NOT MET':'LIMITED SHORTLIST';
     const tieCount=Number(assessment.near_tied_count??candidates.filter(candidate=>Math.abs(Number(candidate.total_score)-score)<.02).length);
     verdict.querySelector('p').textContent=assessment.rationale||(abstain?`${tieCount} candidate(s) sit within the ambiguity band; a ${Number(margin*100).toFixed(1)}-point lead cannot support nomination.`:'All minimum gates passed. Human investigation and independent verification remain required.');
   }
@@ -1435,6 +1540,8 @@
       html('selectedCaseTitle', 'No cases match this view');
       html('selectedCaseId', '—');
       byId('verifyCaseButton').disabled = true;
+      byId('resumeCaseButton').disabled = true;
+      html('resumeCaseMessage','Select an analyst-approved case to continue its investigation.');
       ['caseDossierLink', 'caseManifestLink', 'caseSarLink', 'verificationRecordLink'].forEach(id => byId(id).hidden = true);
       return;
     }
@@ -1460,6 +1567,14 @@
     setCaseMilestone('milestonePackaged', milestones.packaged);
 
     const warnings = Array.isArray(record.provenance_warnings) ? record.provenance_warnings : [];
+    const canResume = record.stage === 'ANALYST_APPROVED' && warnings.length === 0;
+    const resumeButton = byId('resumeCaseButton');
+    resumeButton.disabled = !canResume;
+    resumeButton.textContent = canResume ? 'Resume approved case → Reverse drift' : 'No approved case to resume';
+    html('resumeCaseMessage',canResume
+      ? 'Restores this case from its verified sealed record. Other cases remain saved.'
+      : record.stage === 'EVIDENCE_PACKAGE_READY' ? 'This case is complete; open its dossier instead.'
+      : 'A reviewed and sealed slick is required before reconstruction.');
     const alert = byId('caseProvenanceAlert');
     alert.dataset.state = warnings.length ? 'warning' : 'clear';
     alert.querySelector('b').textContent = warnings.length ? 'PROVENANCE WARNING' : 'PROVENANCE CHECK';
@@ -1552,6 +1667,23 @@
       html('verificationCounts', error.message);
       button.disabled = false;
       button.textContent = 'Retry integrity verification';
+    }
+  }
+
+  async function resumeSelectedCase() {
+    if (!selectedCaseId) return;
+    const button = byId('resumeCaseButton');
+    button.disabled = true;
+    button.textContent = 'Verifying sealed inputs…';
+    try {
+      const response = await fetch(RESUME_CASE_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scene_id:selectedCaseId})});
+      const result = await response.json().catch(()=>({}));
+      if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
+      window.location.href = 'investigation.html#reverse-drift';
+    } catch(error) {
+      html('resumeCaseMessage',`Could not resume: ${operatorMessage(error.message)}`);
+      button.disabled = false;
+      button.textContent = 'Retry verified case resume';
     }
   }
 
@@ -2273,6 +2405,8 @@
       reanalysis:snapshot.reanalysis,
       closure:snapshot.closure,
       case_register:snapshot.case_register
+        ? {...snapshot.case_register,generated_at_utc:undefined}
+        : null
     });
   }
 
@@ -2342,6 +2476,97 @@
     }
   };
 
+  function chapterGate(snapshot) {
+    if (!snapshot || currentPage === 'watch') return null;
+    const hasScene = (snapshot.sources?.sentinel?.scenes || []).length > 0 || Boolean(snapshot.analysis?.scene_id);
+    const hasApprovedSlick = snapshot.review?.status === 'APPROVED';
+    const hasAttribution = snapshot.attribution?.status === 'COMPLETE';
+    if (currentPage === 'detection' && !hasScene) return {
+      title:'No radar scene available yet',
+      message:'The satellite catalogue has not returned a scene for this watch area. Check coverage on Live Watch and try again later.',
+      href:'index.html', action:'Open Live Watch →'
+    };
+    if (currentPage === 'investigation' && !hasApprovedSlick && !hasAttribution) return {
+      title:(snapshot.case_register?.cases || []).some(item=>item.stage==='ANALYST_APPROVED' && !(item.provenance_warnings || []).length)
+        ? 'An earlier approved case is saved' : 'An approved slick is needed',
+      message:(snapshot.case_register?.cases || []).some(item=>item.stage==='ANALYST_APPROVED' && !(item.provenance_warnings || []).length)
+        ? 'A later satellite analysis changed the active workspace. Open Cases, select the approved record, and resume it for reverse drift.'
+        : 'Review a satellite candidate first. Vessel matching starts only after an analyst approves the slick.',
+      href:(snapshot.case_register?.cases || []).some(item=>item.stage==='ANALYST_APPROVED' && !(item.provenance_warnings || []).length)
+        ? 'cases.html' : 'detection.html',
+      action:(snapshot.case_register?.cases || []).some(item=>item.stage==='ANALYST_APPROVED' && !(item.provenance_warnings || []).length)
+        ? 'Open saved cases →' : 'Open Detection →'
+    };
+    if (currentPage === 'cases' && !(snapshot.case_register?.cases || []).length) return {
+      title:'No recorded cases yet',
+      message:'Cases appear here after a radar scene enters the investigation workflow.',
+      href:'detection.html', action:'Open Detection →'
+    };
+    if (currentPage === 'case-file' && !hasAttribution && snapshot.response?.status !== 'READY') return {
+      title:'No completed investigation to package',
+      message:'Finish the drift and vessel comparison before building an evidence package or recording a decision.',
+      href:'investigation.html', action:'Open Investigation →'
+    };
+    return null;
+  }
+
+  function activateChapter(snapshot=lastSnapshot) {
+    const gate = chapterGate(snapshot);
+    const requestedPanel = window.location.hash.slice(1);
+    const selectedPanel = pageByComponent[requestedPanel] === currentPage && defaultPanels[currentPage]
+      ? requestedPanel : defaultPanels[currentPage];
+    byId('chapterGate').hidden = !gate;
+    if (gate) {
+      html('chapterGateTitle',gate.title);
+      html('chapterGateMessage',gate.message);
+      const link = byId('chapterGateLink');
+      link.href = gate.href;
+      link.textContent = gate.action;
+    }
+    document.querySelectorAll('main > [data-chapter]').forEach(section => {
+      const visible = section.dataset.chapter === currentPage
+        && (!section.hasAttribute('data-panel') || section.id === selectedPanel);
+      section.classList.toggle('chapter-active',visible);
+      if (componentSpecs[section.id]) {
+        if (visible) activeComponentIds.add(section.id);
+        else activeComponentIds.delete(section.id);
+      }
+    });
+    document.querySelectorAll('[data-chapter-nav]').forEach(nav => {
+      nav.hidden = nav.dataset.chapterNav !== currentPage;
+    });
+    document.querySelectorAll('[data-panel-link]').forEach(link => {
+      const active = link.dataset.panelLink === selectedPanel;
+      link.classList.toggle('active',active);
+      if (active) link.setAttribute('aria-current','page');
+      else link.removeAttribute('aria-current');
+    });
+  }
+
+  function initializePages() {
+    document.body.dataset.page = currentPage;
+    const [kicker,title,lede] = pageCopy[currentPage];
+    html('pageKicker',kicker);
+    html('pageTitle',title);
+    html('pageLede',lede);
+    document.title = `${currentPage === 'watch' ? 'Live Watch' : title.replace(/[.]$/,'')} · ESPADA`;
+    byId('refreshControl').hidden = currentPage !== 'watch';
+    document.querySelectorAll('[data-page-link]').forEach(link => {
+      const active = link.dataset.pageLink === currentPage;
+      link.classList.toggle('active',active);
+      link.classList.toggle('available',!active);
+      if (active) link.setAttribute('aria-current','page');
+      else link.removeAttribute('aria-current');
+    });
+    activateChapter();
+    window.addEventListener('hashchange', () => {
+      activateChapter();
+      const selected = window.location.hash.slice(1);
+      if (activeComponentIds.has(selected)) renderComponent(selected,lastSnapshot,true);
+      window.scrollTo({top:0,behavior:'instant'});
+    });
+  }
+
   function renderComponent(id, snapshot=lastSnapshot, force=false) {
     const spec = componentSpecs[id];
     if (!spec || !snapshot) return;
@@ -2358,7 +2583,7 @@
   function initializeLazyComponents() {
     const ids = Object.keys(componentSpecs);
     if (!('IntersectionObserver' in window)) {
-      ids.forEach(id => activeComponentIds.add(id));
+      ids.filter(id => byId(id)?.classList.contains('chapter-active')).forEach(id => activeComponentIds.add(id));
       return;
     }
     const observer = new IntersectionObserver(entries => {
@@ -2376,20 +2601,12 @@
       const element = byId(id);
       if (element) observer.observe(element);
     });
-    const activateHash = () => {
-      const id = window.location.hash.slice(1);
-      if (componentSpecs[id]) {
-        activeComponentIds.add(id);
-        renderComponent(id, lastSnapshot, true);
-      }
-    };
-    window.addEventListener('hashchange', activateHash);
-    activateHash();
   }
 
   function render(snapshot) {
     lastSnapshot = snapshot;
     renderHeader(snapshot);
+    activateChapter(snapshot);
     const fingerprint = meaningfulFingerprint(snapshot);
     if (fingerprint === lastRenderFingerprint) {
       html('mapEvidenceTime', formatUtc(evidenceTime(snapshot)));
@@ -2397,13 +2614,15 @@
       return;
     }
     lastRenderFingerprint = fingerprint;
-    renderAis(snapshot.sources?.ais, snapshot.ais);
-    renderSentinel(snapshot.sources?.sentinel);
-    renderEnvironment(snapshot.sources?.environment);
+    if (currentPage === 'watch') {
+      renderAis(snapshot.sources?.ais, snapshot.ais);
+      renderSentinel(snapshot.sources?.sentinel);
+      renderEnvironment(snapshot.sources?.environment);
+    }
     renderIntegrity(snapshot);
     renderActiveComponents(snapshot);
-    html('mapEvidenceTime', formatUtc(evidenceTime(snapshot)));
-    if (mapMode === 'live' && ['LIVE WATCH','MAP READOUT'].includes(byId('detailType').textContent)) {
+    if (currentPage === 'watch') html('mapEvidenceTime', formatUtc(evidenceTime(snapshot)));
+    if (currentPage === 'watch' && mapMode === 'live' && ['LIVE WATCH','MAP READOUT'].includes(byId('detailType').textContent)) {
       const delayed = snapshot.ais?.mode === 'delayed_context';
       setDetail({
         type: delayed ? 'DELAYED AIS CONTEXT' : 'LIVE WATCH',
@@ -2423,16 +2642,22 @@
           : 'If the live provider returns nothing, the map remains empty.'
       });
     }
-    const nextMapFingerprint = mapRenderFingerprint(snapshot);
-    if (nextMapFingerprint !== lastMapRenderFingerprint) {
-      lastMapRenderFingerprint = nextMapFingerprint;
-      renderMap(snapshot);
+    if (currentPage === 'watch') {
+      const nextMapFingerprint = mapRenderFingerprint(snapshot);
+      if (nextMapFingerprint !== lastMapRenderFingerprint) {
+        lastMapRenderFingerprint = nextMapFingerprint;
+        renderMap(snapshot);
+      }
     }
-    syncMapGeometry(snapshot).catch(error => {
-      byId('mapLoading').hidden = false;
-      html('mapLoading', 'Published map geometry could not be loaded.');
-      html('mapLayerStatus', `Map data unavailable · ${error.message}`);
-    });
+    if (currentPage === 'watch' || currentPage === 'investigation') {
+      syncMapGeometry(snapshot).catch(error => {
+        if (currentPage === 'watch') {
+          byId('mapLoading').hidden = false;
+          html('mapLoading', 'Published map geometry could not be loaded.');
+          html('mapLayerStatus', `Map data unavailable · ${error.message}`);
+        }
+      });
+    }
     html('pollState', `Last API response ${new Date().toISOString().replace('T',' ').slice(0,19)} UTC`);
   }
 
@@ -2514,6 +2739,7 @@
     if (lastSnapshot) renderCaseRegister(lastSnapshot);
   });
   byId('verifyCaseButton').addEventListener('click', verifySelectedCase);
+  byId('resumeCaseButton').addEventListener('click', resumeSelectedCase);
   byId('buildEvidencePlanButton').addEventListener('click', buildEvidencePlan);
   byId('intakeRequestSelect').addEventListener('change', event => {
     selectedIntakeRequestId = event.target.value;
@@ -2536,6 +2762,7 @@
   byId('closureReviewerRole').addEventListener('input', updateClosureButton);
   byId('closureRationale').addEventListener('input', updateClosureButton);
   byId('closureAcknowledge').addEventListener('change', updateClosureButton);
+  initializePages();
   updateMapMode('live');
   initializeLazyComponents();
   tickClock();
