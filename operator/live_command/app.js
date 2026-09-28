@@ -17,8 +17,6 @@
   const REVIEW_EVIDENCE_ENDPOINT = '/api/live/review-evidence-return';
   const REANALYSIS_ENDPOINT = '/api/live/start-reanalysis';
   const CLOSURE_ENDPOINT = '/api/live/record-case-disposition';
-  const example = window.espadaExample;
-  const isExample = () => Boolean(example?.enabled());
   const byId = id => document.getElementById(id);
   const pageFiles = {
     watch:'index.html', detection:'detection.html',
@@ -359,7 +357,6 @@
 
   async function loadGeometry(url) {
     if (!url) return null;
-    if (isExample() && url.startsWith('example:')) return example.geometry(url.slice(8));
     if (geometryCache.has(url)) return geometryCache.get(url);
     const response = await fetch(`${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`, {cache: 'no-store'});
     if (!response.ok) throw new Error(`Geometry HTTP ${response.status}`);
@@ -406,9 +403,9 @@
     const motion = String(vessel.motion_state || 'unknown').toUpperCase();
     const delayed = lastSnapshot?.ais?.mode === 'delayed_context';
     setDetail({
-      type: isExample() ? 'SYNTHETIC · EXERCISE POSITION' : delayed ? 'OBSERVED · DELAYED AIS POSITION' : 'OBSERVED · AIS POSITION',
+      type: delayed ? 'OBSERVED · DELAYED AIS POSITION' : 'OBSERVED · AIS POSITION',
       title: vessel.vessel_name && vessel.vessel_name !== 'UNKNOWN' ? vessel.vessel_name : `MMSI ${vessel.mmsi}`,
-      summary: isExample() ? 'Generated vessel position in the fixed example incident.' : delayed
+      summary: delayed
         ? 'Provider-supplied hourly grid position from the delayed GFW context snapshot.'
         : 'Latest provider-supplied position for this MMSI inside the rolling live window.',
       fields: [
@@ -421,8 +418,8 @@
         ['Track observations', trackPoints || 1],
         ['Source', vessel.source || 'AIS provider']
       ],
-      noteTitle: isExample() ? 'EXERCISE DATA' : delayed ? 'NOT A CURRENT POSITION' : 'OBSERVATION BOUNDARY',
-      note: isExample() ? 'This vessel and its identifier are invented for the exercise.' : delayed
+      noteTitle: delayed ? 'NOT A CURRENT POSITION' : 'OBSERVATION BOUNDARY',
+      note: delayed
         ? 'This real delayed record cannot establish the vessel’s present location, speed or intent.'
         : 'A received AIS position is evidence of a broadcast, not proof of identity, intent or conduct.'
     });
@@ -564,7 +561,7 @@
 
     const positions = Array.isArray(snapshot.ais?.positions) ? snapshot.ais.positions : [];
     const delayedContext = snapshot.ais?.mode === 'delayed_context';
-    if (mapMode === 'live') html('mapTimeRule',isExample() ? 'Generated vessel positions at the fixed exercise observation time.' : delayedContext
+    if (mapMode === 'live') html('mapTimeRule',delayedContext
       ? 'No current AIS positions; displayed vessel locations are delayed historical context.'
       : 'Only recent provider AIS and current source state are shown.');
     const showUnderway = layerVisible('vessels');
@@ -663,8 +660,8 @@
       if(showUnderway)visibleLabels.push(`${snapshot.ais?.underway_count || 0} underway`);
       if(showStationary)visibleLabels.push(`${snapshot.ais?.stationary_count || 0} stationary`);
       if(snapshot.ais?.unknown_motion_count)visibleLabels.push(`${snapshot.ais.unknown_motion_count} motion not supplied`);
-      visibleLabels.push(isExample() ? 'fixed exercise snapshot' : `${compactNumber(snapshot.ais?.window_minutes)} min ${delayedContext ? 'delayed context window' : 'rolling window'}`);
-      if(layerVisible('satellite'))visibleLabels.push(`${mapFeatureCount(mapGeometry.footprints)} ${isExample()?'exercise':'catalogue'} footprint${mapFeatureCount(mapGeometry.footprints)===1?'':'s'}`);
+      visibleLabels.push(`${compactNumber(snapshot.ais?.window_minutes)} min ${delayedContext ? 'delayed context window' : 'rolling window'}`);
+      if(layerVisible('satellite'))visibleLabels.push(`${mapFeatureCount(mapGeometry.footprints)} catalogue footprint${mapFeatureCount(mapGeometry.footprints)===1?'':'s'}`);
     }else{
       if(layerVisible('slick')&&mapGeometry.slick)visibleLabels.push('approved slick');
       if(layerVisible('origin')&&mapGeometry.origin)visibleLabels.push('origin uncertainty');
@@ -685,14 +682,14 @@
     byId('incidentModeButton').setAttribute('aria-pressed',String(incident));
     byId('mapModeChip').classList.toggle('incident',incident);
     byId('mapModeChip').classList.toggle('overview',overview);
-    html('mapModeChip',isExample()?(incident?'EXERCISE INCIDENT':overview?'EXERCISE OVERVIEW':'EXERCISE WATCH'):incident?'INCIDENT EVIDENCE':overview?'STRAIT OVERVIEW':'LIVE WATCH');
+    html('mapModeChip',incident?'INCIDENT EVIDENCE':overview?'STRAIT OVERVIEW':'LIVE WATCH');
     html('mapEvidenceTime',lastSnapshot ? formatUtc(evidenceTime(lastSnapshot)) : 'Waiting for evidence time');
-    html('mapTimeRule',isExample()?'All positions, imagery and forcing are generated for one fixed training incident.':incident?'Only evidence tied to the selected SAR investigation is shown.':overview?'Wider geographic context; vessel evidence remains limited to the compact watch box.':'Only recent provider AIS and current source state are shown.');
+    html('mapTimeRule',incident?'Only evidence tied to the selected SAR investigation is shown.':overview?'Wider geographic context; vessel evidence remains limited to the compact watch box.':'Only recent provider AIS and current source state are shown.');
     for (const name of ['slick','origin']) byId('layerControls').querySelector(`[data-layer="${name}"]`).disabled=!incident;
     for (const name of ['vessels','stationary']) byId('layerControls').querySelector(`[data-layer="${name}"]`).disabled=incident;
     byId('layerControls').querySelector('[data-layer="environment"]').disabled=incident;
     byId('trafficSnapshot').hidden=incident;
-    setDetail(isExample()?{type:incident?'EXERCISE INCIDENT':overview?'EXERCISE CONTEXT':'EXERCISE WATCH',title:incident?'Generated incident timeline':overview?'East Singapore overview':'Generated vessel snapshot',summary:incident?'The approved exercise slick, calculated origin and invented vessel tracks share one fixed timeline.':overview?'The coastline is geographic context; all ships and incident evidence are synthetic.':'One generated position per exercise vessel at the fixed observation time.',fields:[['Exercise time',formatUtc(lastSnapshot?.sources?.ais?.latest_observation_utc)],['Generated vessels',compactNumber(lastSnapshot?.ais?.vessel_count)],['Underway / stationary',`${compactNumber(lastSnapshot?.ais?.underway_count)} / ${compactNumber(lastSnapshot?.ais?.stationary_count)}`],['Source','Synthetic exercise']],noteTitle:'NO LIVE OVERLAY',note:'This mode makes no live provider or operational analysis requests.'}:incident?{type:'INCIDENT TIMELINE',title:'Historical evidence isolated',summary:'Approved slick, reconstructed origin and temporally matched candidate tracks share the selected investigation timeline.',fields:[['SAR observation',formatUtc(lastSnapshot?.analysis?.acquisition_time_utc)],['Estimated release',formatUtc(lastSnapshot?.attribution?.top_candidate?.best_match_time_utc)],['Candidate population',compactNumber(lastSnapshot?.attribution?.candidate_count || lastSnapshot?.attribution?.candidates_compared)],['Decision',String(lastSnapshot?.attribution?.decision || 'Not available').replaceAll('_',' ')]],noteTitle:'NO LIVE OVERLAY',note:'Present-day AIS is intentionally hidden here.'}:overview?{type:'GEOGRAPHIC CONTEXT',title:'Singapore Strait overview',summary:'The wider coastline provides orientation while the outlined East Singapore box remains the only live evidence filter.',fields:[['Operational watch',lastSnapshot?.region?.name || 'East Singapore Offshore Watch'],['Current vessels',compactNumber(lastSnapshot?.ais?.vessel_count)],['AIS scope','Compact outlined box only'],['Map role','Context, not navigation']],noteTitle:'SAME EVIDENCE BOUNDARY',note:'Changing scale does not add ships or widen the operational query.'}:{type:'LIVE WATCH',title:'Current maritime picture',summary:'One latest in-bounds report per MMSI; stale reports leave the map automatically.',fields:[['Latest AIS',formatUtc(lastSnapshot?.sources?.ais?.latest_observation_utc)],['Current vessels',compactNumber(lastSnapshot?.ais?.vessel_count)],['Underway / stationary',`${compactNumber(lastSnapshot?.ais?.underway_count)} / ${compactNumber(lastSnapshot?.ais?.stationary_count)}`],['Rolling window',`${compactNumber(lastSnapshot?.ais?.window_minutes)} minutes`]],noteTitle:'NO SYNTHETIC FALLBACK',note:'If the live provider returns nothing, the map remains empty.'});
+    setDetail(incident?{type:'INCIDENT TIMELINE',title:'Historical evidence isolated',summary:'Approved slick, reconstructed origin and temporally matched candidate tracks share the selected investigation timeline.',fields:[['SAR observation',formatUtc(lastSnapshot?.analysis?.acquisition_time_utc)],['Estimated release',formatUtc(lastSnapshot?.attribution?.top_candidate?.best_match_time_utc)],['Candidate population',compactNumber(lastSnapshot?.attribution?.candidate_count || lastSnapshot?.attribution?.candidates_compared)],['Decision',String(lastSnapshot?.attribution?.decision || 'Not available').replaceAll('_',' ')]],noteTitle:'NO LIVE OVERLAY',note:'Present-day AIS is intentionally hidden here.'}:overview?{type:'GEOGRAPHIC CONTEXT',title:'Singapore Strait overview',summary:'The wider coastline provides orientation while the outlined East Singapore box remains the only live evidence filter.',fields:[['Operational watch',lastSnapshot?.region?.name || 'East Singapore Offshore Watch'],['Current vessels',compactNumber(lastSnapshot?.ais?.vessel_count)],['AIS scope','Compact outlined box only'],['Map role','Context, not navigation']],noteTitle:'SAME EVIDENCE BOUNDARY',note:'Changing scale does not add ships or widen the operational query.'}:{type:'LIVE WATCH',title:'Current maritime picture',summary:'One latest in-bounds report per MMSI; stale reports leave the map automatically.',fields:[['Latest AIS',formatUtc(lastSnapshot?.sources?.ais?.latest_observation_utc)],['Current vessels',compactNumber(lastSnapshot?.ais?.vessel_count)],['Underway / stationary',`${compactNumber(lastSnapshot?.ais?.underway_count)} / ${compactNumber(lastSnapshot?.ais?.stationary_count)}`],['Rolling window',`${compactNumber(lastSnapshot?.ais?.window_minutes)} minutes`]],noteTitle:'NO SYNTHETIC FALLBACK',note:'If the live provider returns nothing, the map remains empty.'});
     if(lastSnapshot) {
       renderMap(lastSnapshot);
       lastMapRenderFingerprint = mapRenderFingerprint(lastSnapshot);
@@ -734,7 +731,7 @@
       option.value = scene.id;
       const acquired = parseTime(scene.acquisition_time_utc);
       const ageHours = acquired ? (Date.now() - acquired.getTime()) / 3600000 : null;
-      option.textContent = isExample() ? `${formatUtc(scene.acquisition_time_utc)} · SYNTHETIC EXERCISE` : `${formatUtc(scene.acquisition_time_utc)} · ${String(scene.platform || 'Sentinel-1').toUpperCase()} · ${scene.processed_evidence ? 'PROCESSED EVIDENCE' : ageHours !== null && ageHours >= 96 ? 'AIS READY' : 'AIS DELAY'}`;
+      option.textContent = `${formatUtc(scene.acquisition_time_utc)} · ${String(scene.platform || 'Sentinel-1').toUpperCase()} · ${scene.processed_evidence ? 'PROCESSED EVIDENCE' : ageHours !== null && ageHours >= 96 ? 'AIS READY' : 'AIS DELAY'}`;
       select.append(option);
     });
     if (scenes.some(scene => scene.id === preferred)) select.value = preferred;
@@ -749,8 +746,8 @@
     const acquired = parseTime(scene.acquisition_time_utc);
     const ageHours = acquired ? (Date.now() - acquired.getTime()) / 3600000 : null;
     const ready = ageHours !== null && ageHours >= 96;
-    html('sceneAvailability',isExample()?'EXERCISE INPUT READY':ready?'FULL EVIDENCE PATH READY':'SAR READY · AIS DELAYED');
-    html('sceneDelayNote',isExample()?'Generated case; no provider download is needed':ready?'Historical AIS availability window has elapsed':`Historical AIS expected in about ${Math.max(1,Math.ceil(96-(ageHours||0)))} h`);
+    html('sceneAvailability',ready?'FULL EVIDENCE PATH READY':'SAR READY · AIS DELAYED');
+    html('sceneDelayNote',ready?'Historical AIS availability window has elapsed':`Historical AIS expected in about ${Math.max(1,Math.ceil(96-(ageHours||0)))} h`);
     return scene;
   }
 
@@ -784,7 +781,7 @@
     if (viewUrl) fullImageLink.href = viewUrl;
     byId('sarImageStage').dataset.hasImage = viewUrl ? 'true' : 'false';
     document.querySelectorAll('[data-sar-view]').forEach(button => { button.disabled = !matchesAnalysis || !urls[button.dataset.sarView]; });
-    html('viewerLabel',isExample() ? matchesAnalysis ? 'SYNTHETIC SAR-LIKE EXERCISE IMAGE' : 'EXERCISE SCENE AWAITS ANALYSIS' : matchesAnalysis ? labels[sarView] : 'SELECTED SCENE HAS NOT BEEN PROCESSED');
+    html('viewerLabel',matchesAnalysis ? labels[sarView] : 'SELECTED SCENE HAS NOT BEEN PROCESSED');
     if (viewUrl) {
       if (image.dataset.url !== viewUrl) {
         image.dataset.url = viewUrl;
@@ -811,7 +808,7 @@
     const coverage = finite(scene?.aoi_overlap_fraction) ? `${(Number(scene.aoi_overlap_fraction)*100).toFixed(1)}% AOI` : 'COVERAGE —';
     html('sarFootprint',`${orbit} · ${coverage}`);
     html('sarModel',model.model_generation ? `${model.model_generation} · T=${finite(model.threshold) ? Number(model.threshold).toFixed(3) : '—'}` : '—');
-    html('sarIntegrity',isExample() ? matchesAnalysis ? 'SYNTHETIC EXERCISE' : 'NOT PROCESSED' : matchesAnalysis && analysis.provenance_verified ? 'VERIFIED' : matchesAnalysis && analysis.status === 'ERROR' ? 'STOPPED SAFELY' : 'NOT PROCESSED');
+    html('sarIntegrity',matchesAnalysis && analysis.provenance_verified ? 'VERIFIED' : matchesAnalysis && analysis.status === 'ERROR' ? 'STOPPED SAFELY' : 'NOT PROCESSED');
   }
 
   function renderDetectionWorkbench(snapshot) {
@@ -869,13 +866,10 @@
 
     html('reviewHeading',approved?'Candidate approved':rejected?'Candidate rejected':reviewable?'Decision required':'No reviewable candidate');
     html('reviewMessage',operatorMessage(review.message || analysis.message) || 'A decision becomes available only after the model and physics gates complete.');
-    if (isExample() && !approved) { byId('releaseAgeInput').min='1'; byId('releaseAgeInput').max='4'; }
-    const age = finite(review.assumed_age_hours) ? Number(review.assumed_age_hours) : isExample() ? 4 : Number(byId('releaseAgeInput').value || 19);
+    const age = finite(review.assumed_age_hours) ? Number(review.assumed_age_hours) : Number(byId('releaseAgeInput').value || 19);
     byId('releaseAgeInput').value = String(age);
     html('releaseAgeValue',`${age} h`);
-    html('ageGuidance',isExample() ? approved
-      ? `${age} h selected. The exercise recalculated the release zone and candidate ranking from this assumption.`
-      : 'Choose 1–4 h, the range covered by these generated vessel tracks. The suggested 4 h matches the configured release.' : approved
+    html('ageGuidance',approved
       ? `${age} h was recorded as the analyst's release-age assumption. It was not measured by the radar image; the sealed case preserves that choice.`
       : 'Suggested first-pass scenario: 19 h. A single radar image cannot measure slick age; this is a starting assumption only. Use a documented release time when available, and compare several ages before interpreting a vessel ranking.');
     byId('releaseAgeInput').disabled = !approvalReady;
@@ -885,7 +879,6 @@
   }
 
   async function analyzeSelectedSar() {
-    if (isExample()) { example.analyze(); await poll(); return; }
     const button = byId('analyzeSarButton');
     button.disabled = true;
     button.textContent = 'QUEUED…';
@@ -903,14 +896,6 @@
   }
 
   async function submitCandidateReview(decision) {
-    if (isExample()) {
-      try {
-        example.review(decision,Number(byId('releaseAgeInput').value));
-        if (decision === 'APPROVE') { example.reconstruct(); window.location.assign('investigation.html#reverse-drift'); }
-        else await poll();
-      } catch(error) { setDetectionStatus('error','EXERCISE REVIEW FAILED',error.message); }
-      return;
-    }
     for(const id of ['approveCandidateButton','rejectCandidateButton']) byId(id).disabled = true;
     let reviewRecorded = false;
     try {
@@ -1095,7 +1080,6 @@
   }
 
   async function buildAttribution() {
-    if (isExample()) { example.reconstruct(); await poll(); return; }
     const button=byId('buildAttributionButton');
     button.disabled=true;
     button.textContent='QUEUED…';
@@ -1416,16 +1400,16 @@
     const packageIncomplete = ready && Number(response.missing_required_files || 0) > 0;
     const status = byId('responseStatus');
     status.dataset.state = error || packageIncomplete ? 'error' : ready ? (abstain ? 'abstain' : 'ready') : building ? 'ready' : 'waiting';
-    status.querySelector('b').textContent = isExample() && ready ? 'EXERCISE DOSSIER READY' : error ? 'PACKAGE FAILED' : packageIncomplete ? 'PACKAGE INCOMPLETE' : ready ? (abstain ? 'SAFE ABSTENTION READY' : 'ANALYST SHORTLIST READY') : building ? 'BUILDING EVIDENCE PACKAGE…' : attributionComplete ? 'READY TO PACKAGE' : 'WAITING FOR ATTRIBUTION';
-    status.querySelector('small').textContent = isExample() ? ready ? 'Generated result; no real evidence files were sealed' : 'Generated case inputs only' : error ? String(response.message || 'The response package could not be generated.') : ready ? `${compactNumber(response.verified_files)} evidence files integrity-checked` : building ? 'Hashing artifacts and assembling the dossier' : attributionComplete ? 'Candidate attribution is complete' : 'No package is available';
+    status.querySelector('b').textContent = error ? 'PACKAGE FAILED' : packageIncomplete ? 'PACKAGE INCOMPLETE' : ready ? (abstain ? 'SAFE ABSTENTION READY' : 'ANALYST SHORTLIST READY') : building ? 'BUILDING EVIDENCE PACKAGE…' : attributionComplete ? 'READY TO PACKAGE' : 'WAITING FOR ATTRIBUTION';
+    status.querySelector('small').textContent = error ? String(response.message || 'The response package could not be generated.') : ready ? `${compactNumber(response.verified_files)} evidence files integrity-checked` : building ? 'Hashing artifacts and assembling the dossier' : attributionComplete ? 'Candidate attribution is complete' : 'No package is available';
 
     const button = byId('buildResponseButton');
     button.disabled = !attributionComplete || building;
-    button.textContent = isExample() ? ready ? 'Refresh exercise dossier' : 'Build exercise dossier' : building ? 'Building package…' : ready ? 'Refresh evidence package' : 'Build evidence package';
+    button.textContent = building ? 'Building package…' : ready ? 'Refresh evidence package' : 'Build evidence package';
 
     html('responseDecision', attributionComplete ? (abstain ? 'NO NOMINATION' : 'LIMITED SHORTLIST') : '—');
-    html('responseVerified', isExample() ? 'EXERCISE' : ready ? compactNumber(response.verified_files) : '—');
-    html('responseRequired', isExample() ? 'No real evidence file checks' : ready ? `${compactNumber(response.required_files)} required files checked` : 'required evidence not checked');
+    html('responseVerified', ready ? compactNumber(response.verified_files) : '—');
+    html('responseRequired', ready ? `${compactNumber(response.required_files)} required files checked` : 'required evidence not checked');
     html('responseMissing', ready ? compactNumber(response.missing_required_files) : '—');
     html('responseAction', ready ? String(response.permitted_action || 'HUMAN REVIEW ONLY').replaceAll('_', ' ') : '—');
     html('responseCaseReference', analysis.scene_id ? `CASE · ${analysis.scene_id}` : 'CASE NOT READY');
@@ -1438,7 +1422,7 @@
     const reviewControl = byId('controlReview');
     reviewControl.dataset.state = ready ? 'ready' : 'waiting';
     reviewControl.querySelector('em').textContent = ready ? 'READY' : 'WAITING';
-    reviewControl.querySelector('small').textContent = isExample() ? 'Synthetic comparison for practice only' : ready ? 'Auditable package available to an accountable analyst' : 'Requires a complete evidence package';
+    reviewControl.querySelector('small').textContent = ready ? 'Auditable package available to an accountable analyst' : 'Requires a complete evidence package';
     const evidenceControl = byId('controlEvidence');
     evidenceControl.dataset.state = ready && abstain ? 'ready' : 'waiting';
     evidenceControl.querySelector('em').textContent = ready && abstain ? 'RECOMMENDED' : 'WAITING';
@@ -1450,15 +1434,15 @@
     const driftVerified = attributionComplete && Boolean(attribution.origin_zone_url) && Boolean(attribution.release_time_utc);
     const correlationVerified = attributionComplete && Array.isArray(attribution.candidates) && Boolean(attribution.candidate_tracks_url);
     const decisionVerified = attributionComplete && Boolean(attribution.decision);
-    setResponseChain('chainObservation', observationVerified ? 'verified' : 'waiting', isExample() && observationVerified ? 'GENERATED' : null);
-    setResponseChain('chainInference', inferenceVerified ? 'verified' : 'waiting', isExample() && inferenceVerified ? 'EXERCISE' : null);
-    setResponseChain('chainReview', reviewVerified ? 'verified' : 'waiting', isExample() && reviewVerified ? 'EXERCISE' : null);
-    setResponseChain('chainDrift', driftVerified ? 'verified' : 'waiting', isExample() && driftVerified ? 'CALCULATED' : null);
-    setResponseChain('chainCorrelation', correlationVerified ? 'verified' : 'waiting', isExample() && correlationVerified ? 'CALCULATED' : null);
-    setResponseChain('chainDecision', decisionVerified ? 'verified' : 'waiting', isExample() && decisionVerified ? 'EXERCISE' : null);
+    setResponseChain('chainObservation', observationVerified ? 'verified' : 'waiting');
+    setResponseChain('chainInference', inferenceVerified ? 'verified' : 'waiting');
+    setResponseChain('chainReview', reviewVerified ? 'verified' : 'waiting');
+    setResponseChain('chainDrift', driftVerified ? 'verified' : 'waiting');
+    setResponseChain('chainCorrelation', correlationVerified ? 'verified' : 'waiting');
+    setResponseChain('chainDecision', decisionVerified ? 'verified' : 'waiting');
 
-    html('responseDigest', isExample() ? 'Not applicable to synthetic example' : ready ? response.chain_digest_sha256 || 'Digest unavailable' : 'Not generated');
-    html('responseGenerated', isExample() ? ready ? `Generated ${formatUtc(response.generated_at_utc)} · synthetic exercise only` : 'No exercise dossier generated yet.' : ready ? `Generated ${formatUtc(response.generated_at_utc)} · ${packageIncomplete ? 'required evidence is missing' : 'integrity register complete'}` : 'Every included file receives an integrity fingerprint.');
+    html('responseDigest', ready ? response.chain_digest_sha256 || 'Digest unavailable' : 'Not generated');
+    html('responseGenerated', ready ? `Generated ${formatUtc(response.generated_at_utc)} · ${packageIncomplete ? 'required evidence is missing' : 'integrity register complete'}` : 'Every included file receives an integrity fingerprint.');
     const links = [
       ['dossierLink', response.dossier_url],
       ['bundleLink', response.bundle_url],
@@ -1481,7 +1465,6 @@
   }
 
   async function buildResponsePackage() {
-    if (isExample()) { example.packageCase(); await poll(); return; }
     const button = byId('buildResponseButton');
     button.disabled = true;
     button.textContent = 'Building package…';
@@ -1570,7 +1553,7 @@
     html('selectedCaseAcquired', formatUtc(record.acquisition_time_utc));
     html('selectedCaseStage', caseStageLabel(record.stage));
     html('selectedCaseDecision', record.operational_decision ? String(record.operational_decision).replaceAll('_', ' ') : 'NOT YET DECIDED');
-    html('selectedCaseFiles', isExample() ? 'Generated in browser · no sealed files' : `${compactNumber(record.artifact_count)} files · ${compactNumber(record.verified_files)} sealed`);
+    html('selectedCaseFiles', `${compactNumber(record.artifact_count)} files · ${compactNumber(record.verified_files)} sealed`);
     const integrity = String(record.integrity_status || 'NOT_VERIFIED').toUpperCase();
     const integrityBadge = byId('selectedCaseIntegrity');
     integrityBadge.dataset.state = integrityClass(integrity) || 'waiting';
@@ -1588,19 +1571,19 @@
     const resumeButton = byId('resumeCaseButton');
     resumeButton.disabled = !canResume;
     resumeButton.textContent = canResume ? 'Resume approved case → Reverse drift' : 'No approved case to resume';
-    html('resumeCaseMessage',isExample() ? 'Exercise case only. Continue on Investigation, or reset the example to begin again.' : canResume
+    html('resumeCaseMessage',canResume
       ? 'Restores this case from its verified sealed record. Other cases remain saved.'
       : record.stage === 'EVIDENCE_PACKAGE_READY' ? 'This case is complete; open its dossier instead.'
       : 'A reviewed and sealed slick is required before reconstruction.');
     const alert = byId('caseProvenanceAlert');
     alert.dataset.state = warnings.length ? 'warning' : 'clear';
     alert.querySelector('b').textContent = warnings.length ? 'PROVENANCE WARNING' : 'PROVENANCE CHECK';
-    alert.querySelector('p').textContent = isExample() ? 'Generated case only; no real source metadata or sealed files were verified.' : warnings.length ? warnings.join(' ') : 'Directory identity and recorded Sentinel metadata agree.';
+    alert.querySelector('p').textContent = warnings.length ? warnings.join(' ') : 'Directory identity and recorded Sentinel metadata agree.';
 
     const urls = record.urls || {};
     const verifyButton = byId('verifyCaseButton');
-    verifyButton.disabled = isExample() || !urls.manifest;
-    verifyButton.textContent = isExample() ? 'Synthetic case · no file verification' : urls.manifest ? 'Verify package integrity' : 'No package to verify';
+    verifyButton.disabled = !urls.manifest;
+    verifyButton.textContent = urls.manifest ? 'Verify package integrity' : 'No package to verify';
     setCaseLink('caseDossierLink', urls.dossier);
     setCaseLink('caseManifestLink', urls.manifest);
     setCaseLink('caseSarLink', urls.sar_diagnostic);
@@ -1643,7 +1626,7 @@
     const status = byId('registerStatus');
     status.dataset.state = warnings ? 'warning' : cases.length ? 'ready' : 'waiting';
     status.querySelector('b').textContent = warnings ? 'REGISTER READY · REVIEW FLAGS' : cases.length ? 'REGISTER READY' : 'NO RECORDED CASES';
-    status.querySelector('small').textContent = isExample() ? 'One in-memory synthetic case; no live evidence files are created' : warnings ? `${warnings} provenance conflict${warnings === 1 ? ' requires' : 's require'} inspection` : cases.length ? `${cases.length} durable case record${cases.length === 1 ? '' : 's'} discovered` : 'No case directories were found';
+    status.querySelector('small').textContent = warnings ? `${warnings} provenance conflict${warnings === 1 ? ' requires' : 's require'} inspection` : cases.length ? `${cases.length} durable case record${cases.length === 1 ? '' : 's'} discovered` : 'No case directories were found';
     html('registerCaseCount', compactNumber(register.case_count));
     html('registerSealedCount', compactNumber(register.sealed_count));
     html('registerReviewCount', compactNumber(register.review_required_count));
@@ -1688,7 +1671,6 @@
   }
 
   async function resumeSelectedCase() {
-    if (isExample()) { example.reconstruct(); window.location.assign('investigation.html#reverse-drift'); return; }
     if (!selectedCaseId) return;
     const button = byId('resumeCaseButton');
     button.disabled = true;
@@ -2324,19 +2306,19 @@
   function renderAis(source = {}, ais = {}) {
     setCardState('ais', source);
     const delayed = ais.mode === 'delayed_context';
-    html('aisEvidenceType', isExample() ? 'SYNTHETIC · EXERCISE TRACKS' : delayed ? 'OBSERVED · DELAYED CONTEXT' : 'OBSERVED · LIVE STREAM');
-    html('aisPositionsLabel', isExample() ? 'Exercise vessels' : delayed ? 'Delayed vessels' : 'Current vessels');
-    html('aisVesselsLabel', isExample() ? 'Underway in example' : delayed ? 'Motion classified' : 'Underway now');
-    html('trafficCurrentLabel', isExample() ? 'EXERCISE VESSELS' : delayed ? 'DELAYED VESSELS' : 'CURRENT VESSELS');
+    html('aisEvidenceType', delayed ? 'OBSERVED · DELAYED CONTEXT' : 'OBSERVED · LIVE STREAM');
+    html('aisPositionsLabel', delayed ? 'Delayed vessels' : 'Current vessels');
+    html('aisVesselsLabel', delayed ? 'Motion classified' : 'Underway now');
+    html('trafficCurrentLabel', delayed ? 'DELAYED VESSELS' : 'CURRENT VESSELS');
     html('trafficUnderwayLabel', delayed ? 'MOTION CLASSIFIED' : 'UNDERWAY');
     byId('layerControls').querySelector('[data-layer="vessels"]+span').textContent = delayed ? 'Delayed vessels' : 'Underway';
-    html('aisBoundaryNote', isExample() ? 'All names, identifiers and vessel tracks here are generated for the exercise.' : delayed
+    html('aisBoundaryNote', delayed
       ? 'Hourly GFW grid positions provide real delayed context; they are never presented as current traffic.'
       : "Only each vessel's latest in-bounds report survives the rolling live window.");
     html('aisPositions', compactNumber(ais.vessel_count));
     html('aisVessels', compactNumber(ais.underway_count));
-    html('aisObservation', source.latest_observation_utc ? `${isExample()?'Fixed example time':ageLabel(source.latest_observation_utc)} · ${formatUtc(source.latest_observation_utc)}` : 'No position received');
-    html('aisSuccess', isExample() ? 'Fixed generated snapshot · one position per exercise vessel' : finite(ais.window_minutes) ? `${compactNumber(ais.window_minutes)} minutes · ${delayed ? 'delayed context' : 'latest report per MMSI'}` : 'Window unavailable');
+    html('aisObservation', source.latest_observation_utc ? `${ageLabel(source.latest_observation_utc)} · ${formatUtc(source.latest_observation_utc)}` : 'No position received');
+    html('aisSuccess', finite(ais.window_minutes) ? `${compactNumber(ais.window_minutes)} minutes · ${delayed ? 'delayed context' : 'latest report per MMSI'}` : 'Window unavailable');
     html('trafficCurrent', compactNumber(ais.vessel_count));
     html('trafficUnderway', compactNumber(ais.underway_count));
     html('trafficStationary', compactNumber(ais.stationary_count));
@@ -2366,17 +2348,6 @@
   }
 
   function renderIntegrity(snapshot) {
-    if (isExample()) {
-      html('sourceCount','3 / 3 generated');
-      html('sourceSummary','Exercise inputs · no live provider calls');
-      const connection=byId('connectionState');
-      connection.dataset.tone='exercise';
-      connection.querySelector('b').textContent='SYNTHETIC EXERCISE';
-      connection.querySelector('small').textContent='No live provider data shown';
-      html('integrityTitle','Generated incident inputs are isolated');
-      html('integrityMessage','This case demonstrates the workflow with invented vessels and fixed environmental inputs. It makes no operational claim.');
-      return;
-    }
     const sources = snapshot.sources || {};
     const sourceNames = {ais:'AIS stream',sentinel:'Sentinel catalogue',environment:'Ocean / weather'};
     const entries = ['ais','sentinel','environment'].map(name => ({name,source:sources[name] || {}}));
@@ -2542,7 +2513,7 @@
   function activateChapter(snapshot=lastSnapshot) {
     const gate = chapterGate(snapshot);
     const requestedPanel = window.location.hash.slice(1);
-    const selectedPanel = !(isExample() && currentPage === 'case-file') && pageByComponent[requestedPanel] === currentPage && defaultPanels[currentPage]
+    const selectedPanel = pageByComponent[requestedPanel] === currentPage && defaultPanels[currentPage]
       ? requestedPanel : defaultPanels[currentPage];
     byId('chapterGate').hidden = !gate;
     if (gate) {
@@ -2578,59 +2549,8 @@
     html('pageKicker',kicker);
     html('pageTitle',title);
     html('pageLede',lede);
-    document.title = `${isExample()?'Example Incident · ':''}${currentPage === 'watch' ? 'Live Watch' : title.replace(/[.]$/,'')} · ESPADA`;
-    document.body.classList.toggle('example-mode',isExample());
-    byId('exerciseBanner').hidden=!isExample();
-    byId('resetExampleButton').hidden=!isExample();
-    const modeButton=byId('exampleModeButton');
-    modeButton.textContent=isExample()?'Return to Live':'Open example incident';
-    modeButton.setAttribute('aria-pressed',String(isExample()));
-    if (isExample()) {
-      html('pageKicker',`EXAMPLE INCIDENT · ${kicker}`);
-      html('pageTitle',{
-        watch:'Explore a complete example incident.',
-        detection:'Inspect the generated radar-like scene.',
-        investigation:'Trace the release. Compare exercise vessels.',
-        cases:'Inspect the generated case record.',
-        'case-file':'Review the example dossier.'
-      }[currentPage]);
-      html('pageLede','Operate a fixed synthetic case. Its inputs never enter the live evidence engine.');
-      html('snapshotLabel','EXERCISE SNAPSHOT');
-      html('sourceLabel','GENERATED INPUTS');
-      html('ruleLabel','EXERCISE RULE');
-      html('ruleTitle','Synthetic case stays separate');
-      html('ruleNote','Return to Live for provider data');
-      html('seaMapKicker','EXERCISE SEA MAP');
-      html('watchModeLabel','EXERCISE WATCH');
-      html('watchModeNote','Fixed observation time');
-      html('incidentModeLabel','EXERCISE INCIDENT');
-      html('incidentModeNote','Generated case timeline');
-      html('trafficCurrentLabel','EXERCISE VESSELS');
-      html('trafficWindowLabel','EXERCISE WINDOW');
-      html('vesselLegend','Generated underway vessel');
-      html('satelliteLegend','Exercise image footprint');
-      html('mapSvgDescription','Generated maritime positions and exercise incident geometry. Coastline is geographic context.');
-      html('driftObservationNote','Generated SAR-like observation');
-      html('packageTypeLabel','EXERCISE OUTPUT');
-      html('packageTitle','Example dossier');
-      html('packageDigestLabel','REAL EVIDENCE SEAL');
-      html('verifiedFilesLabel','REAL FILE CHECKS');
-      html('missingFilesLabel','EXERCISE GAPS');
-      html('missingFilesNote','Not an evidence integrity pass');
-      html('chainTypeLabel','EXERCISE WORKFLOW');
-      html('evidenceChainTitle','Six simulated transitions');
-      byId('dossierLink').textContent='Open example dossier ↗';
-      document.querySelector('.scene-selector > span').textContent='GENERATED SAR-LIKE SCENE';
-      document.querySelector('#modelGate b').textContent='Synthetic candidate generation';
-      document.querySelector('#modelGate small').textContent='Generated feature, not model validation';
-      document.querySelector('.integrity-panel dl').innerHTML='<div><dt>Generated</dt><dd>Vessel tracks and SAR-like image</dd></div><div><dt>Fixed</dt><dd>Current and wind exercise values</dd></div><div><dt>Calculated</dt><dd>Reverse drift and vessel ranking</dd></div><div><dt>Boundary</dt><dd>No operational or legal finding</dd></div>';
-      document.querySelectorAll('[data-page-link="watch"] b').forEach(item=>item.textContent='Example Watch');
-      document.querySelectorAll('[data-chapter-nav="case-file"] a').forEach(link=>{
-        if (link.dataset.panelLink!=='respond-workspace') link.hidden=true;
-      });
-      byId('refreshControl').hidden=true;
-    }
-    if (!isExample()) byId('refreshControl').hidden = currentPage !== 'watch';
+    document.title = `${currentPage === 'watch' ? 'Live Watch' : title.replace(/[.]$/,'')} · ESPADA`;
+    byId('refreshControl').hidden = currentPage !== 'watch';
     document.querySelectorAll('[data-page-link]').forEach(link => {
       const active = link.dataset.pageLink === currentPage;
       link.classList.toggle('active',active);
@@ -2690,7 +2610,7 @@
     const fingerprint = meaningfulFingerprint(snapshot);
     if (fingerprint === lastRenderFingerprint) {
       html('mapEvidenceTime', formatUtc(evidenceTime(snapshot)));
-      html('pollState', isExample()?'Synthetic incident · no live API requests':`Last API response ${new Date().toISOString().replace('T',' ').slice(0,19)} UTC`);
+      html('pollState', `Last API response ${new Date().toISOString().replace('T',' ').slice(0,19)} UTC`);
       return;
     }
     lastRenderFingerprint = fingerprint;
@@ -2701,9 +2621,8 @@
     }
     renderIntegrity(snapshot);
     renderActiveComponents(snapshot);
-    if (isExample() && currentPage === 'watch' && ['MAP READOUT','EXERCISE WATCH','EXERCISE CONTEXT','EXERCISE INCIDENT'].includes(byId('detailType').textContent)) updateMapMode(mapMode);
     if (currentPage === 'watch') html('mapEvidenceTime', formatUtc(evidenceTime(snapshot)));
-    if (!isExample() && currentPage === 'watch' && mapMode === 'live' && ['LIVE WATCH','MAP READOUT'].includes(byId('detailType').textContent)) {
+    if (currentPage === 'watch' && mapMode === 'live' && ['LIVE WATCH','MAP READOUT'].includes(byId('detailType').textContent)) {
       const delayed = snapshot.ais?.mode === 'delayed_context';
       setDetail({
         type: delayed ? 'DELAYED AIS CONTEXT' : 'LIVE WATCH',
@@ -2739,7 +2658,7 @@
         }
       });
     }
-    html('pollState', isExample()?'Synthetic incident · no live API requests':`Last API response ${new Date().toISOString().replace('T',' ').slice(0,19)} UTC`);
+    html('pollState', `Last API response ${new Date().toISOString().replace('T',' ').slice(0,19)} UTC`);
   }
 
   function renderOffline(error) {
@@ -2753,7 +2672,6 @@
   }
 
   async function poll() {
-    if (isExample()) { render(example.snapshot()); return; }
     try {
       const response = await fetch(`${SNAPSHOT_ENDPOINT}?t=${Date.now()}`, {cache: 'no-store'});
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -2764,7 +2682,6 @@
   }
 
   async function requestRefresh() {
-    if (isExample()) return;
     const button = byId('refreshButton');
     button.disabled = true;
     html('refreshNote', 'Refresh requested…');
@@ -2789,14 +2706,6 @@
   }
 
   byId('refreshButton').addEventListener('click', requestRefresh);
-  byId('exampleModeButton').addEventListener('click',()=>{
-    example.setMode(!isExample());
-    window.location.assign('index.html');
-  });
-  byId('resetExampleButton').addEventListener('click',()=>{
-    example.reset();
-    window.location.assign('index.html');
-  });
   byId('overviewModeButton').addEventListener('click', () => updateMapMode('overview'));
   byId('liveModeButton').addEventListener('click', () => updateMapMode('live'));
   byId('incidentModeButton').addEventListener('click', () => updateMapMode('incident'));
