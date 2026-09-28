@@ -3,7 +3,7 @@ services:
     name: espada-live-operations
     runtime: python
     plan: free
-    autoDeploy: true
+    autoDeployTrigger: commit
     buildCommand: pip install -r requirements-live.txt && pip install --no-deps -e .
     startCommand: python -m espada.live_operations_server --root .
     healthCheckPath: /api/live/health
