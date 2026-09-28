@@ -2668,6 +2668,8 @@
     connection.querySelector('small').textContent = 'Live API did not respond';
     html('integrityTitle', 'Live engine is unreachable');
     html('integrityMessage', 'Start the ESPADA live operations service. This page will reconnect automatically without displaying saved data as live.');
+    html('sourceCount', 'API unavailable');
+    html('sourceSummary', 'The page will retry automatically');
     html('pollState', `API unavailable · ${error?.message || 'connection failed'}`);
   }
 

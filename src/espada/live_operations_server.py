@@ -120,10 +120,9 @@ class LiveOperationsHandler(SimpleHTTPRequestHandler):
         self.send_header("Vary", "Accept-Encoding")
         if compressed:
             self.send_header("Content-Encoding", "gzip")
-        if relative.startswith("operator/live_command/") and target.suffix.lower() in {".css", ".js"}:
-            self.send_header("Cache-Control", "public, max-age=3600")
-        else:
-            self.send_header("Cache-Control", "no-store")
+        # Operator assets change together; caching one script across a deployment
+        # can leave the browser running an incompatible UI against the live API.
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
         if include_body:
             self.wfile.write(body)
