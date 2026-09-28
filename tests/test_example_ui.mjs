@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
@@ -12,7 +12,6 @@ try { playwright = require('playwright'); }
 catch { playwright = require(path.join(os.homedir(),'.cache','codex-runtimes','codex-primary-runtime','dependencies','node','node_modules','playwright')); }
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const publicRoot = path.join(root,'operator','live_command');
-const virtualPages = new Set(['detection.html','investigation.html','cases.html','case-file.html']);
 const apiRequests=[];
 const screenDir=process.argv.includes('--screenshots') ? path.join(root,'out','example_incident_review') : null;
 if (screenDir) await fs.mkdir(screenDir,{recursive:true});
@@ -26,7 +25,7 @@ const server=http.createServer(async (request,response)=>{
   }
   if (!pathname.startsWith('/operator/live_command/')) { response.writeHead(404); response.end(); return; }
   const name=path.posix.basename(pathname)||'index.html';
-  const file=path.join(publicRoot,virtualPages.has(name)?'index.html':name);
+  const file=path.join(publicRoot,name);
   try {
     const body=await fs.readFile(file);
     const mime=name.endsWith('.css')?'text/css':name.endsWith('.js')?'text/javascript':'text/html';
@@ -44,6 +43,9 @@ try {
   const errors=[];
   page.on('pageerror',error=>errors.push(error.message));
   await page.goto(base+'index.html');
+  const firstAction=await page.locator('.briefing-actions .info-actions').locator('a,button').allTextContents();
+  assert.match(firstAction[0],/Judge demo/);
+  assert.match(firstAction[1],/example event/i);
   const liveRequestCount=apiRequests.length;
   await page.locator('#exampleModeButton').click();
   await page.waitForFunction(()=>document.body.classList.contains('example-mode'));
@@ -55,13 +57,14 @@ try {
   if (screenDir) await page.screenshot({path:path.join(screenDir,'watch.png'),fullPage:true});
 
   await page.locator('[data-page-link="detection"]').click();
+  await page.waitForFunction(()=>document.body.dataset.page==='detection');
   assert.match(await page.locator('#sarSceneSelect').inputValue(),/EXERCISE_SAR/);
   await page.locator('#analyzeSarButton').click();
   await page.waitForFunction(()=>document.querySelector('#detectionStatus b')?.textContent==='ANALYST REVIEW REQUIRED');
   assert.equal(await page.locator('#sarEvidenceImage').evaluate(image=>image.complete&&image.naturalWidth>0),true);
   if (screenDir) await page.screenshot({path:path.join(screenDir,'detection.png'),fullPage:true});
   await page.locator('#approveCandidateButton').click();
-  await page.waitForURL('**/investigation.html#reverse-drift');
+  await page.waitForFunction(()=>document.body.dataset.page==='investigation'&&location.hash==='#reverse-drift');
   await page.waitForFunction(()=>document.querySelector('#driftStatus b')?.textContent==='DRIFT CLOSURE COMPLETE');
 
   await page.locator('[data-panel-link="candidate-attribution"]').click();
@@ -85,6 +88,23 @@ try {
   await page.locator('#exampleModeButton').click();
   await page.waitForFunction(()=>!document.body.classList.contains('example-mode'));
   assert.equal(await page.locator('#exerciseBanner').isHidden(),true);
+
+  const filePage=await browser.newPage();
+  await filePage.goto(pathToFileURL(path.join(publicRoot,'index.html')).href);
+  await filePage.locator('[data-page-link="detection"]').click();
+  await filePage.waitForFunction(()=>document.body.dataset.page==='detection');
+  assert.match(filePage.url(),/index\.html\?page=detection/,'Direct-file navigation must resolve to a real page');
+  await filePage.locator('#exampleModeButton').click();
+  await filePage.waitForFunction(()=>document.body.classList.contains('example-mode'));
+  await filePage.locator('[data-page-link="detection"]').click();
+  await filePage.waitForFunction(()=>document.body.dataset.page==='detection');
+  await filePage.locator('#analyzeSarButton').click();
+  await filePage.waitForFunction(()=>document.querySelector('#detectionStatus b')?.textContent==='ANALYST REVIEW REQUIRED');
+  await filePage.locator('[data-page-link="cases"]').click();
+  await filePage.waitForFunction(()=>document.body.dataset.page==='cases');
+  await filePage.locator('.demo-launch').click();
+  await filePage.waitForURL('**/demo.html');
+  await filePage.close();
   console.log('Example incident UI: Watch → Detection → Investigation → Case File → Live passed');
 } finally {
   if (browser) await browser.close();
