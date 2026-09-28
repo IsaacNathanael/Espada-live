@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
   <title>ESPADA Live Command</title>
-  <link rel="stylesheet" href="styles.css?v=20260926-4">
+  <link rel="stylesheet" href="styles.css?v=20260928-1">
 </head>
 <body>
   <header class="masthead">
@@ -44,6 +44,11 @@
     <a class="workflow-step available" data-page-link="case-file" href="case-file.html"><span>05</span><b>Case File</b><small>Evidence & decisions</small></a>
   </nav>
 
+  <div class="exercise-banner" id="exerciseBanner" role="status" hidden>
+    <b>EXAMPLE INCIDENT · SYNTHETIC</b>
+    <span>Generated ships, radar-like image, current and wind. No real vessel or provider feed is shown in this mode.</span>
+  </div>
+
   <main id="overview">
     <section class="briefing">
       <div>
@@ -53,6 +58,8 @@
       </div>
       <div class="briefing-actions">
         <div class="info-actions" aria-label="Product information">
+          <button class="exercise-switch" id="exampleModeButton" type="button" aria-pressed="false">Open example incident</button>
+          <button class="exercise-reset" id="resetExampleButton" type="button" hidden>Reset example</button>
           <a class="demo-launch" href="demo.html"><span>▶</span> Animated judges demo</a>
           <details class="info-menu" name="espada-field-guide">
             <summary class="info-button"><span aria-hidden="true">i</span> How it works</summary>
@@ -123,12 +130,12 @@
 
     <section class="summary-strip" data-chapter="watch" aria-label="Operational summary">
       <div class="summary-cell">
-        <span>ENGINE SNAPSHOT</span>
+        <span id="snapshotLabel">ENGINE SNAPSHOT</span>
         <b id="snapshotAge">No response</b>
         <small id="snapshotTime">—</small>
       </div>
       <div class="summary-cell">
-        <span>PROVIDER SOURCES</span>
+        <span id="sourceLabel">PROVIDER SOURCES</span>
         <b id="sourceCount">0 / 3 responding</b>
         <small id="sourceSummary">No provider state received</small>
       </div>
@@ -138,16 +145,16 @@
         <small>WGS84 · longitude, latitude</small>
       </div>
       <div class="summary-cell decision-cell">
-        <span>OPERATIONAL RULE</span>
-        <b>Missing data stays missing</b>
-        <small>No synthetic fallback in live mode</small>
+        <span id="ruleLabel">OPERATIONAL RULE</span>
+        <b id="ruleTitle">Missing data stays missing</b>
+        <small id="ruleNote">No synthetic fallback in live mode</small>
       </div>
     </section>
 
     <section class="map-section" id="sea-map" data-chapter="watch" aria-labelledby="mapTitle">
       <header class="map-header">
         <div>
-          <p class="kicker">LIVE SEA MAP · COMPONENT 02</p>
+          <p class="kicker" id="seaMapKicker">LIVE SEA MAP · COMPONENT 02</p>
           <h2 id="mapTitle">One map. Two scales. Honest timelines.</h2>
         </div>
         <div class="timeline-switch" role="group" aria-label="Map timeline">
@@ -155,10 +162,10 @@
             <span>STRAIT OVERVIEW</span><small>Singapore context</small>
           </button>
           <button class="timeline-button active" id="liveModeButton" type="button" aria-pressed="true">
-            <span>LIVE WATCH</span><small>Current provider window</small>
+            <span id="watchModeLabel">LIVE WATCH</span><small id="watchModeNote">Current provider window</small>
           </button>
           <button class="timeline-button" id="incidentModeButton" type="button" aria-pressed="false">
-            <span>INCIDENT EVIDENCE</span><small>Matched SAR investigation</small>
+            <span id="incidentModeLabel">INCIDENT EVIDENCE</span><small id="incidentModeNote">Matched SAR investigation</small>
           </button>
         </div>
       </header>
@@ -184,7 +191,7 @@
         <div><span id="trafficCurrentLabel">CURRENT VESSELS</span><b id="trafficCurrent">—</b></div>
         <div><span id="trafficUnderwayLabel">UNDERWAY</span><b id="trafficUnderway">—</b></div>
         <div><span>STATIONARY</span><b id="trafficStationary">—</b></div>
-        <div><span>SNAPSHOT WINDOW</span><b id="trafficWindow">10 min</b></div>
+        <div><span id="trafficWindowLabel">SNAPSHOT WINDOW</span><b id="trafficWindow">10 min</b></div>
       </div>
 
       <div class="map-layout">
@@ -219,9 +226,9 @@
       </div>
 
       <footer class="map-legend" aria-label="Map legend">
-        <span><i class="legend-vessel"></i>Underway AIS vessel</span>
+        <span><i class="legend-vessel"></i><span id="vesselLegend">Underway AIS vessel</span></span>
         <span><i class="legend-stationary"></i>Stationary / anchored</span>
-        <span><i class="legend-satellite"></i>Sentinel-1 footprint</span>
+        <span><i class="legend-satellite"></i><span id="satelliteLegend">Sentinel-1 footprint</span></span>
         <span><i class="legend-slick"></i>Analyst-approved slick</span>
         <span><i class="legend-origin"></i>Inferred 90% origin zone</span>
         <span><i class="legend-current"></i>Modelled environmental vector</span>
@@ -391,7 +398,7 @@
             <ol>
               <li><span>RELEASE</span><b id="driftReleaseTime">—</b><small>estimated from approved slick age</small></li>
               <li class="time-bridge"><i></i><b id="driftDuration">—</b><small>backward integration</small></li>
-              <li><span>OBSERVED</span><b id="driftObservationTime">—</b><small>Sentinel-1 acquisition</small></li>
+              <li><span>OBSERVED</span><b id="driftObservationTime">—</b><small id="driftObservationNote">Sentinel-1 acquisition</small></li>
             </ol>
           </section>
 
@@ -607,8 +614,8 @@
 
       <div class="response-summary" aria-label="Evidence response summary">
         <div><span>OPERATIONAL OUTPUT</span><b id="responseDecision">—</b><small>controlled by the nomination gate</small></div>
-        <div><span>VERIFIED FILES</span><b id="responseVerified">—</b><small id="responseRequired">required evidence not checked</small></div>
-        <div><span>MISSING REQUIRED</span><b id="responseMissing">—</b><small>zero required for an integrity pass</small></div>
+        <div><span id="verifiedFilesLabel">VERIFIED FILES</span><b id="responseVerified">—</b><small id="responseRequired">required evidence not checked</small></div>
+        <div><span id="missingFilesLabel">MISSING REQUIRED</span><b id="responseMissing">—</b><small id="missingFilesNote">zero required for an integrity pass</small></div>
         <div class="response-action-cell"><span>PERMITTED ACTION</span><b id="responseAction">—</b><small>automatic accusation is never permitted</small></div>
       </div>
 
@@ -630,11 +637,11 @@
 
         <aside class="evidence-package" aria-live="polite">
           <div class="package-heading">
-            <div><span>AUDITABLE EXPORT</span><h3>Evidence package</h3></div>
+            <div><span id="packageTypeLabel">AUDITABLE EXPORT</span><h3 id="packageTitle">Evidence package</h3></div>
             <button id="buildResponseButton" type="button" disabled>Build evidence package</button>
           </div>
           <div class="package-seal">
-            <span>SHA-256 CHAIN DIGEST</span>
+            <span id="packageDigestLabel">SHA-256 CHAIN DIGEST</span>
             <code id="responseDigest">Not generated</code>
             <small id="responseGenerated">Every included file receives an integrity fingerprint.</small>
           </div>
@@ -650,7 +657,7 @@
 
       <div class="response-lower">
         <section class="evidence-chain" aria-labelledby="evidenceChainTitle">
-          <header><span>CHAIN OF CUSTODY</span><h3 id="evidenceChainTitle">Six recorded transitions</h3></header>
+          <header><span id="chainTypeLabel">CHAIN OF CUSTODY</span><h3 id="evidenceChainTitle">Six recorded transitions</h3></header>
           <ol>
             <li id="chainObservation" data-state="waiting"><span>01</span><div><b>Satellite observation</b><small>Source raster and acquisition metadata</small></div><em>WAITING</em></li>
             <li id="chainInference" data-state="waiting"><span>02</span><div><b>Model + physics screen</b><small>Frozen inference and plausibility record</small></div><em>WAITING</em></li>
@@ -1140,6 +1147,7 @@
     <span id="pollState">Live API has not responded</span>
   </footer>
   <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
-  <script src="app.js?v=20260926-8"></script>
+  <script src="example_incident.js?v=20260928-1"></script>
+  <script src="app.js?v=20260928-1"></script>
 </body>
 </html>

@@ -77,6 +77,15 @@ button{cursor:pointer}
 .workflow-step.available>span{color:var(--blue)}
 .workflow-step.locked{cursor:default}
 
+.exercise-banner{display:flex;align-items:center;gap:16px;padding:11px max(24px,calc((100vw - 1500px)/2));background:#f2dfbd;border-bottom:2px solid var(--amber);color:#50350e;font-size:12px;line-height:1.4}
+.exercise-banner b{flex:none;font:700 11px/1.4 Consolas,monospace;letter-spacing:.08em}
+.exercise-switch,.exercise-reset{min-height:38px;padding:8px 13px;border:1px solid var(--navy);background:var(--paper-strong);color:var(--navy);font-size:12px;font-weight:700;white-space:nowrap}
+.exercise-switch:hover,.exercise-switch:focus-visible,.exercise-reset:hover,.exercise-reset:focus-visible{background:var(--amber-pale)}
+body.example-mode .exercise-switch{background:var(--navy);color:white}
+body.example-mode .exercise-switch:hover,body.example-mode .exercise-switch:focus-visible{background:var(--navy-2)}
+body.example-mode .connection[data-tone="exercise"] .connection-light{background:#efb454;box-shadow:0 0 0 4px rgba(239,180,84,.17)}
+@media(max-width:760px){.exercise-banner{display:block}.exercise-banner span{display:block;margin-top:4px}.exercise-switch,.exercise-reset{white-space:normal}}
+
 main{width:min(1500px,calc(100% - 48px));margin:0 auto;padding:38px 0 52px}
 main>[data-chapter]:not(.chapter-active){display:none!important}
 .chapter-nav{display:flex;flex-wrap:wrap;gap:0;margin:0 0 22px;border:1px solid var(--line-dark);background:var(--paper-strong)}
