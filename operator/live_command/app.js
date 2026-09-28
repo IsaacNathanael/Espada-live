@@ -41,8 +41,7 @@
     'case-file':['CASE FILE','Preserve the evidence and decision.','Review the dossier, request missing evidence and record the outcome.']
   };
   const filename = window.location.pathname.split('/').pop() || 'index.html';
-  const queryPage = new URLSearchParams(window.location.search).get('page');
-  const currentPage = pageFiles[queryPage] ? queryPage : pageByFile[filename] || 'watch';
+  const currentPage = pageByFile[filename] || 'watch';
   const defaultPanels = {investigation:'reverse-drift', 'case-file':'respond-workspace'};
   const requestedComponent = window.location.hash.slice(1);
   if (pageByComponent[requestedComponent] && pageByComponent[requestedComponent] !== currentPage) {
@@ -2584,7 +2583,7 @@
     byId('exerciseBanner').hidden=!isExample();
     byId('resetExampleButton').hidden=!isExample();
     const modeButton=byId('exampleModeButton');
-    modeButton.textContent=isExample()?'Return to Live':'Open example event';
+    modeButton.textContent=isExample()?'Return to Live':'Open example incident';
     modeButton.setAttribute('aria-pressed',String(isExample()));
     if (isExample()) {
       html('pageKicker',`EXAMPLE INCIDENT · ${kicker}`);
