@@ -91,7 +91,10 @@ def test_capture_writes_sanitized_status_and_cache(tmp_path: Path, monkeypatch: 
 
     class FakeSocket:
         def __init__(self) -> None:
-            self.messages = [json.dumps(position)]
+            self.messages = [
+                json.dumps({"MessageType": "SubscriptionConfirmation"}),
+                json.dumps(position),
+            ]
             self.subscription = ""
 
         async def __aenter__(self):
@@ -107,6 +110,7 @@ def test_capture_writes_sanitized_status_and_cache(tmp_path: Path, monkeypatch: 
             return self.messages.pop(0)
 
     monkeypatch.setenv("AISSTREAM_API_KEY", "top-secret")
+    progress_events = []
     result = asyncio.run(
         capture_aisstream(
             AISBoundingBox(-80.2, 25.6, -80.0, 25.8),
@@ -115,10 +119,14 @@ def test_capture_writes_sanitized_status_and_cache(tmp_path: Path, monkeypatch: 
             duration_seconds=1,
             max_messages=1,
             connect_factory=lambda *args, **kwargs: FakeSocket(),
+            progress_callback=progress_events.append,
         )
     )
     assert result["status"] == "PASS"
     assert result["positions_accepted"] == 1
+    assert progress_events[0]["subscription_confirmed"] is True
+    assert progress_events[0]["positions_accepted"] == 0
+    assert progress_events[1]["positions_accepted"] == 1
     assert (tmp_path / "cache.csv").exists()
     status_text = (tmp_path / "out" / "live_ais_status.json").read_text(encoding="utf-8")
     assert "top-secret" not in status_text

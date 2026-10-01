@@ -17,7 +17,7 @@ from .live_operations import LiveOperationsEngine, LiveRegion
 # from start_live_operations.ps1 for a specific incident or exercise.
 DEFAULT_LIVE_REGION = LiveRegion(
     "East Singapore Offshore Watch",
-    104.02,
+    103.90,
     1.20,
     104.23,
     1.31,

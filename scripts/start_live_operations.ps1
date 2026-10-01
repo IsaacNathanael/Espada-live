@@ -4,7 +4,7 @@ param(
     [switch]$Restart,
     [string]$PythonPath = "",
     [string]$RegionName = "East Singapore Offshore Watch",
-    [double]$MinLongitude = 104.02,
+    [double]$MinLongitude = 103.90,
     [double]$MinLatitude = 1.20,
     [double]$MaxLongitude = 104.23,
     [double]$MaxLatitude = 1.31

@@ -64,6 +64,15 @@ def _parse_utc(value: object) -> datetime | None:
     return parsed.astimezone(UTC)
 
 
+def _current_model_time_usable(value: object, *, now: datetime | None = None) -> bool:
+    """A recent wind update cannot make an expired ocean-current field current."""
+    observed = _parse_utc(value)
+    if observed is None:
+        return False
+    current = now or _utc_now()
+    return abs((current.astimezone(UTC) - observed).total_seconds()) <= 6 * 3_600
+
+
 def _sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with Path(path).open("rb") as handle:
@@ -2425,6 +2434,23 @@ class LiveOperationsEngine:
 
         def report_progress(progress: dict[str, object]) -> None:
             succeeded = _format_utc(_utc_now())
+            if progress.get("subscription_confirmed") and not int(
+                progress.get("positions_accepted", 0)
+            ):
+                self._update_source(
+                    "ais",
+                    status="NO_DATA",
+                    provider="AISStream WebSocket",
+                    kind="LIVE STREAM",
+                    last_success_utc=succeeded,
+                    error_kind=None,
+                    message=(
+                        "AISStream subscription confirmed; waiting for vessel position "
+                        "reports in the watch area."
+                    ),
+                    warnings=[],
+                )
+                return
             self._update_source(
                 "ais",
                 status="PASS",
@@ -2442,10 +2468,12 @@ class LiveOperationsEngine:
 
         while not self._stop.is_set():
             attempted = _format_utc(_utc_now())
-            with self._lock:
-                has_verified_capture = bool(
-                    self._state.get("sources", {}).get("ais", {}).get("last_success_utc")
-                )
+            latest_position = _parse_utc(self._latest_ais_time())
+            has_verified_capture = bool(
+                latest_position
+                and 0 <= (_utc_now() - latest_position).total_seconds()
+                <= self.ais_snapshot_minutes * 60
+            )
             self._update_source(
                 "ais",
                 status="PASS" if has_verified_capture else "CONNECTING",
@@ -2721,9 +2749,10 @@ class LiveOperationsEngine:
             )
             current_vector, samples = self._environment_values(bundle)
             succeeded = _format_utc(_utc_now())
+            current_usable = _current_model_time_usable(current_vector["time_utc"])
             self._update_source(
                 "environment",
-                status="PASS",
+                status="PASS" if current_usable else "STALE",
                 last_success_utc=succeeded,
                 latest_observation_utc=current_vector["time_utc"],
                 source=bundle.source,
@@ -2731,7 +2760,11 @@ class LiveOperationsEngine:
                 location={"longitude": longitude, "latitude": latitude},
                 current=current_vector,
                 samples=samples,
-                message="Fresh provider response received; vectors are model fields, not observations.",
+                message=(
+                    "Fresh provider response received; vectors are model fields, not observations."
+                    if current_usable
+                    else "Provider response has no near-current ocean field; do not use it as live forcing."
+                ),
             )
         except Exception as error:
             try:
@@ -2748,12 +2781,15 @@ class LiveOperationsEngine:
                     current_vector["wind_speed_ms"] = round(float(fresh_wind["speed_ms"]), 5)
                     current_vector["wind_time_utc"] = fresh_wind["time_utc"]
                     succeeded = _format_utc(_utc_now())
+                    current_usable = _current_model_time_usable(current_vector["time_utc"])
                     self._update_source(
                         "environment",
-                        status="PASS",
+                        status="PASS" if current_usable else "STALE",
                         provider="Open-Meteo ocean-current forecast + MET Norway wind",
                         last_attempt_utc=attempted,
-                        last_success_utc=succeeded,
+                        last_success_utc=(
+                            succeeded if current_usable else payload.get("fetched_at_utc")
+                        ),
                         latest_observation_utc=current_vector["time_utc"],
                         source="Open-Meteo cached current forecast + MET Norway Locationforecast wind",
                         temporal_resolution=cached.temporal_resolution,
@@ -2765,7 +2801,9 @@ class LiveOperationsEngine:
                                 "provider": "Open-Meteo / MeteoFrance SMOC",
                                 "valid_time_utc": current_vector["time_utc"],
                                 "cache_fetched_at_utc": payload.get("fetched_at_utc"),
-                                "refresh_status": "RATE_LIMITED",
+                                "refresh_status": (
+                                    "RATE_LIMITED" if current_usable else "EXPIRED"
+                                ),
                             },
                             "wind": {
                                 "provider": "MET Norway Locationforecast 2.0",
@@ -2777,6 +2815,9 @@ class LiveOperationsEngine:
                             "Current model time is still valid in the verified Open-Meteo cache; "
                             "wind was refreshed independently from MET Norway after Open-Meteo "
                             "rate-limited the shared host."
+                            if current_usable
+                            else "Ocean-current cache has expired. MET Norway wind is fresh, but "
+                            "the combined forcing is unavailable until currents refresh."
                         ),
                         last_error=f"Primary refresh: {type(error).__name__}: {error}",
                     )
@@ -2972,12 +3013,21 @@ class LiveOperationsEngine:
                     delayed_seconds=10 * 86_400,
                 )
             elif key == "environment":
+                current_time = (source.get("current") or {}).get("time_utc")
                 source["freshness"] = freshness_label(
-                    source.get("last_success_utc"),
+                    current_time,
                     now=now,
-                    live_seconds=1_800,
-                    delayed_seconds=7_200,
+                    live_seconds=3 * 3_600,
+                    delayed_seconds=6 * 3_600,
                 )
+                if current_time and not _current_model_time_usable(current_time, now=now):
+                    source["freshness"]["label"] = "STALE"
+                    if source.get("status") == "PASS":
+                        source["status"] = "STALE"
+                        source["message"] = (
+                            "Ocean-current model time is outside the near-current window; "
+                            "a recent wind update does not refresh the current field."
+                        )
             else:
                 source["freshness"] = freshness_label(
                     source.get("latest_observation_utc"), now=now
@@ -3057,6 +3107,9 @@ class LiveOperationsEngine:
             environment.get("status") in {"PASS", "STALE"}
             and bool(environment.get("last_success_utc"))
             and bool(environment.get("current"))
+            and _current_model_time_usable(
+                (environment.get("current") or {}).get("time_utc")
+            )
         )
         sentinel_ready = (
             sentinel.get("status") in {"PASS", "PARTIAL", "STALE"}

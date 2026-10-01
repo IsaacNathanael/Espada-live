@@ -213,6 +213,9 @@
       );
       const currentTime = new Date(`${marineHourly.time[marineIndex]}Z`).toISOString();
       const windTime = new Date(`${weatherHourly.time[weatherIndex]}Z`).toISOString();
+      if (Math.abs(Date.now() - Date.parse(currentTime)) > 6 * 60 * 60 * 1000) {
+        throw new Error('marine provider returned no near-current field');
+      }
       const now = new Date().toISOString();
       return {
         status:'PASS',
@@ -245,11 +248,10 @@
   async function applyClientEnvironmentFallback(snapshot) {
     const serverEnvironment = snapshot?.sources?.environment || {};
     const serverState = normalizeState(serverEnvironment.status);
-    if (serverState === 'pass') return snapshot;
-    const rateLimited = /429|too many requests|rate.?limit/i.test(
-      `${serverEnvironment.message || ''} ${serverEnvironment.last_error || ''}`
-    );
-    if (!rateLimited) return snapshot;
+    const currentTime = Date.parse(serverEnvironment.current?.time_utc || '');
+    const currentUsable = Number.isFinite(currentTime)
+      && Math.abs(Date.now() - currentTime) <= 6 * 60 * 60 * 1000;
+    if (serverState === 'pass' && currentUsable) return snapshot;
     const now = Date.now();
     if (clientEnvironmentCache && clientEnvironmentCache.expires > now) {
       snapshot.sources.environment = clientEnvironmentCache.source;

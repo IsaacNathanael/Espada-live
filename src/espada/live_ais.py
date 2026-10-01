@@ -316,6 +316,21 @@ async def capture_aisstream(
                         continue
                     if envelope.get("MessageType") == "SubscriptionConfirmation":
                         confirmations += 1
+                        if progress_callback is not None:
+                            try:
+                                progress_callback(
+                                    {
+                                        "subscription_confirmed": True,
+                                        "positions_accepted": accepted,
+                                    }
+                                )
+                            except Exception as callback_error:
+                                warning = (
+                                    "progress callback failed: "
+                                    f"{type(callback_error).__name__}: {callback_error}"
+                                )
+                                if warning not in warnings:
+                                    warnings.append(warning)
                         continue
                     row = parse_aisstream_message(envelope)
                     if row is None:

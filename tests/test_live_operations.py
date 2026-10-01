@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 import pandas as pd
 import pytest
@@ -86,7 +87,7 @@ def test_freshness_labels_live_delayed_stale_and_missing() -> None:
 
 def test_default_live_watch_is_the_compact_east_singapore_offshore_sector() -> None:
     assert DEFAULT_LIVE_REGION.name == "East Singapore Offshore Watch"
-    assert DEFAULT_LIVE_REGION.bbox == (104.02, 1.20, 104.23, 1.31)
+    assert DEFAULT_LIVE_REGION.bbox == (103.90, 1.20, 104.23, 1.31)
 
 
 def test_current_request_brackets_native_times_and_spatial_cells() -> None:
@@ -570,7 +571,11 @@ def test_refresh_failure_preserves_last_verified_provider_payload(tmp_path: Path
         "environment",
         status="PASS",
         last_success_utc=verified_at,
-        current={"current_speed_ms": 0.18, "wind_speed_ms": 6.4},
+        current={
+            "time_utc": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "current_speed_ms": 0.18,
+            "wind_speed_ms": 6.4,
+        },
     )
     engine._update_source(
         "sentinel",
@@ -593,6 +598,57 @@ def test_refresh_failure_preserves_last_verified_provider_payload(tmp_path: Path
     assert snapshot["sources"]["sentinel"]["scenes"][0]["id"] == "S1-VERIFIED"
     assert snapshot["pipeline"]["environment_ready"] is True
     assert snapshot["pipeline"]["sentinel_catalog_ready"] is True
+
+
+def test_fresh_wind_cannot_make_expired_ocean_current_live(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    engine = LiveOperationsEngine(
+        tmp_path, LiveRegion("Test region", 104.02, 1.20, 104.23, 1.31)
+    )
+    old_time = datetime.now(UTC) - timedelta(days=5)
+    current_time = datetime.now(UTC)
+    old_label = old_time.strftime("%Y-%m-%dT%H:%M:%SZ")
+    frame = pd.DataFrame(
+        [{
+            "time_utc": old_time,
+            "current_east_ms": 0.2,
+            "current_north_ms": 0.1,
+            "wind_east_ms": 1.0,
+            "wind_north_ms": 0.0,
+        }]
+    )
+    cached = SimpleNamespace(frame=frame, source="verified cached current", temporal_resolution="hourly")
+    engine.environment_cache.parent.mkdir(parents=True, exist_ok=True)
+    engine.environment_cache.write_text(
+        json.dumps({"fetched_at_utc": old_label}), encoding="utf-8"
+    )
+
+    def load_stub(mode: str, *_args: object, **_kwargs: object) -> object:
+        if mode == "live":
+            raise RuntimeError("HTTP 429: Too Many Requests")
+        return cached
+
+    monkeypatch.setattr("espada.live_operations.load_environment", load_stub)
+    monkeypatch.setattr(
+        engine,
+        "_met_norway_wind",
+        lambda *_args: {
+            "east_ms": 0.0,
+            "north_ms": -2.0,
+            "speed_ms": 2.0,
+            "time_utc": current_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        },
+    )
+
+    engine.refresh_environment()
+    snapshot = engine.snapshot()
+    source = snapshot["sources"]["environment"]
+    assert source["status"] == "STALE"
+    assert source["freshness"]["label"] == "STALE"
+    assert source["components"]["ocean_current"]["refresh_status"] == "EXPIRED"
+    assert source["components"]["wind"]["refresh_status"] == "PASS"
+    assert snapshot["pipeline"]["environment_ready"] is False
 
 
 def test_live_server_defaults_to_long_lived_ais_sessions() -> None:
