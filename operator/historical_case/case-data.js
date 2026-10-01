@@ -1,0 +1,933 @@
+window.ESPADA_WAKASHIO_CASE = {
+  "schema": "espada.historical-case-site.v1",
+  "mode": "RECORDED HISTORICAL REPLAY — NOT LIVE",
+  "case": "Mauritius oil-spill reconstruction · August 2020",
+  "observation_time_utc": "2020-08-06T06:24:49Z",
+  "release_time_utc": "2020-08-06T04:54:49Z",
+  "source_vessel": {
+    "vessel_name": "MV Wakashio",
+    "mmsi": "372711000",
+    "imo": "9337119"
+  },
+  "documented_wreck": {
+    "longitude": 57.74333333333333,
+    "latitude": -20.443333333333335,
+    "source": "https://blueconomy.govmu.org/Documents/Publications/Report%20Court%20of%20Investigation-MV%20Wakashio.pdf"
+  },
+  "slick": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {
+          "observation_time_utc": "2020-08-06T06:24:49Z",
+          "observation_time_source": "https://www.sentinelvision.eu/gallery/pdf/031dbec6963f41c4991d1cf06d8668f4",
+          "detection_confidence": 0.85,
+          "confidence_basis": "UNOSAT source attribute: High; numeric value is an ESPADA display mapping, not a calibrated probability",
+          "source": "UNITAR-UNOSAT Sentinel-2 oil-spill extent, 6 August 2020",
+          "source_product": "https://unosat.org/products/2888",
+          "source_sensor": "Sentinel-2",
+          "source_confidence": "High",
+          "source_area_m2": 231436.020847,
+          "field_validation": "Not yet field validated",
+          "review_status": "approved_external_analysis_product",
+          "licence": "UNITAR-UNOSAT product terms apply; attribution required"
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                57.737095414000066,
+                -20.430633677999936
+              ],
+              [
+                57.73789491300005,
+                -20.431090533999964
+              ],
+              [
+                57.73840887700004,
+                -20.43114764099994
+              ],
+              [
+                57.73892284000004,
+                -20.431318961999978
+              ],
+              [
+                57.739608125000075,
+                -20.432004246999952
+              ],
+              [
+                57.73995076700004,
+                -20.432061353999927
+              ],
+              [
+                57.74126423000007,
+                -20.432975066999973
+              ],
+              [
+                57.74143555100005,
+                -20.43320349499993
+              ],
+              [
+                57.741663979000066,
+                -20.43354613799994
+              ],
+              [
+                57.74189240700008,
+                -20.434060100999943
+              ],
+              [
+                57.742006622000076,
+                -20.43445985099993
+              ],
+              [
+                57.74217794300006,
+                -20.43497381399993
+              ],
+              [
+                57.74240637100007,
+                -20.435202242999935
+              ],
+              [
+                57.742577692000054,
+                -20.43485959999998
+              ],
+              [
+                57.74240637100007,
+                -20.434402743999954
+              ],
+              [
+                57.742577692000054,
+                -20.433945886999936
+              ],
+              [
+                57.74280612100006,
+                -20.43383167299993
+              ],
+              [
+                57.74303454900007,
+                -20.43388877999996
+              ],
+              [
+                57.74349140500004,
+                -20.434745385999975
+              ],
+              [
+                57.74377694100008,
+                -20.435202242999935
+              ],
+              [
+                57.74383404800005,
+                -20.43548777799998
+              ],
+              [
+                57.74383404800005,
+                -20.435887527999967
+              ],
+              [
+                57.74429090400008,
+                -20.43605884899995
+              ],
+              [
+                57.744633547000035,
+                -20.43605884899995
+              ],
+              [
+                57.744804868000074,
+                -20.43605884899995
+              ],
+              [
+                57.74509040300006,
+                -20.436287276999963
+              ],
+              [
+                57.74549015300005,
+                -20.436344383999938
+              ],
+              [
+                57.74554726000008,
+                -20.436173062999956
+              ],
+              [
+                57.74509040300006,
+                -20.435259349999967
+              ],
+              [
+                57.74549015300005,
+                -20.435030921999953
+              ],
+              [
+                57.74606122300003,
+                -20.435088028999928
+              ],
+              [
+                57.74663229400005,
+                -20.435202242999935
+              ],
+              [
+                57.747146257000054,
+                -20.43560199199993
+              ],
+              [
+                57.74743179300003,
+                -20.43594463499994
+              ],
+              [
+                57.74731757900008,
+                -20.436344383999938
+              ],
+              [
+                57.74708915000008,
+                -20.436801240999955
+              ],
+              [
+                57.74697493600007,
+                -20.437258096999983
+              ],
+              [
+                57.746860722000065,
+                -20.43782916799995
+              ],
+              [
+                57.74663229400005,
+                -20.437943381999958
+              ],
+              [
+                57.74606122300003,
+                -20.438057595999965
+              ],
+              [
+                57.745947009000076,
+                -20.437543631999972
+              ],
+              [
+                57.74600411600005,
+                -20.437086775999944
+              ],
+              [
+                57.74549015300005,
+                -20.437258096999983
+              ],
+              [
+                57.744633547000035,
+                -20.43720098999995
+              ],
+              [
+                57.744176690000074,
+                -20.437315203999958
+              ],
+              [
+                57.74377694100008,
+                -20.43765784599998
+              ],
+              [
+                57.743377191000036,
+                -20.437943381999958
+              ],
+              [
+                57.74297744200004,
+                -20.437772060999976
+              ],
+              [
+                57.74297744200004,
+                -20.437258096999983
+              ],
+              [
+                57.74274901300004,
+                -20.43720098999995
+              ],
+              [
+                57.74189240700008,
+                -20.437086775999944
+              ],
+              [
+                57.74143555100005,
+                -20.43623016999993
+              ],
+              [
+                57.74143555100005,
+                -20.43548777799998
+              ],
+              [
+                57.740978694000034,
+                -20.43451695799996
+              ],
+              [
+                57.74052183800006,
+                -20.433374816999958
+              ],
+              [
+                57.74000787400007,
+                -20.433146387999955
+              ],
+              [
+                57.73955101800004,
+                -20.432975066999973
+              ],
+              [
+                57.73903705400005,
+                -20.432689531999927
+              ],
+              [
+                57.73852309100005,
+                -20.432403996999938
+              ],
+              [
+                57.73823755500007,
+                -20.432232674999966
+              ],
+              [
+                57.73755227100003,
+                -20.432004246999952
+              ],
+              [
+                57.73698120000006,
+                -20.431376068999953
+              ],
+              [
+                57.73635302200006,
+                -20.431090533999964
+              ],
+              [
+                57.73555352300008,
+                -20.430747891999943
+              ],
+              [
+                57.73526798800003,
+                -20.430119713999943
+              ],
+              [
+                57.73635302200006,
+                -20.430176820999975
+              ],
+              [
+                57.737095414000066,
+                -20.430633677999936
+              ]
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  "slick_area_km2": 0.2322473728341409,
+  "slick_source": {
+    "observation_time_utc": "2020-08-06T06:24:49Z",
+    "observation_time_source": "https://www.sentinelvision.eu/gallery/pdf/031dbec6963f41c4991d1cf06d8668f4",
+    "detection_confidence": 0.85,
+    "confidence_basis": "UNOSAT source attribute: High; numeric value is an ESPADA display mapping, not a calibrated probability",
+    "source": "UNITAR-UNOSAT Sentinel-2 oil-spill extent, 6 August 2020",
+    "source_product": "https://unosat.org/products/2888",
+    "source_sensor": "Sentinel-2",
+    "source_confidence": "High",
+    "source_area_m2": 231436.020847,
+    "field_validation": "Not yet field validated",
+    "review_status": "approved_external_analysis_product",
+    "licence": "UNITAR-UNOSAT product terms apply; attribution required"
+  },
+  "release": {
+    "release_time_utc": "2020-08-06T04:54:49Z",
+    "observation_time_utc": "2020-08-06T06:24:49Z",
+    "estimated_origin": {
+      "longitude": 57.752076058841,
+      "latitude": -20.4406607379164
+    },
+    "credible_radius_50_km": 0.6153816316307918,
+    "credible_radius_90_km": 1.1378803218527396,
+    "assumed_age_hours": 1.5,
+    "believed_forcing": {
+      "current_east_ms": -0.04933825694024563,
+      "current_north_ms": 0.06169825326651335,
+      "wind_east_ms": -6.4908059307236154,
+      "wind_north_ms": 3.167329802231442,
+      "windage": 0.02,
+      "diffusivity_m2s": 12.0
+    },
+    "forcing_provenance": {
+      "source": "Copernicus Marine cmems_mod_glo_phy_my_0.083deg_P1D-m currents + Open-Meteo Historical Forecast API wind",
+      "forcing_steps": 2,
+      "temporal_resolution": "hourly linear interpolation from native Copernicus timestamps"
+    },
+    "assumption": "Release age is supplied by the analyst and must be sensitivity-tested."
+  },
+  "alignment": {
+    "status": "PASS",
+    "incident_window": {
+      "estimated_release_time_utc": "2020-08-06T04:54:49Z",
+      "observation_time_utc": "2020-08-06T06:24:49Z",
+      "assumed_age_hours": 1.5
+    },
+    "checks": {
+      "environment_has_at_least_two_steps": true,
+      "environment_covers_release_time": true,
+      "environment_covers_observation_time": true,
+      "ais_has_positions_near_release_time": true
+    },
+    "environment": {
+      "source": "Copernicus Marine cmems_mod_glo_phy_my_0.083deg_P1D-m currents + Open-Meteo Historical Forecast API wind",
+      "time_start_utc": "2020-08-05T00:00:00Z",
+      "time_end_utc": "2020-08-11T00:00:00Z",
+      "steps_inside_incident_window": 2,
+      "sampling_interval_hours": 1.0
+    },
+    "ais": {
+      "time_start_utc": "2020-08-05T00:00:00Z",
+      "time_end_utc": "2020-08-06T11:00:00Z",
+      "positions": 85,
+      "vessels": 5,
+      "positions_near_release_time": 12,
+      "vessels_near_release_time": 3,
+      "allowed_release_time_offset_hours": 2.0
+    },
+    "interpretation": "All sources cover the same incident window; processing may continue.",
+    "report_file": "C:\\Users\\glori\\Documents\\Codex\\2026-09-02\\do-x20\\outputs\\espada\\out\\wakashio\\case_alignment.json"
+  },
+  "ranking": [
+    {
+      "rank": 1,
+      "mmsi": "372711000",
+      "name": "MV Wakashio",
+      "score": 0.7795027488742844,
+      "presence": 0.6475565605772727,
+      "forward_error_km": 0.7390043092876206,
+      "shape_error_km": 0.5128466165478609,
+      "data_quality": 0.4930555555555556,
+      "ais_gap": "vessel_specific_gap_with_peer_coverage"
+    },
+    {
+      "rank": 2,
+      "mmsi": "215337000",
+      "name": "BOKA EXPEDITION",
+      "score": 0.40974958898652475,
+      "presence": 0.24338282875075723,
+      "forward_error_km": 1.8180769642650947,
+      "shape_error_km": 1.1937880529269613,
+      "data_quality": 0.3055555555555556,
+      "ais_gap": "no_significant_gap"
+    },
+    {
+      "rank": 3,
+      "mmsi": "376955000",
+      "name": "STANFORD HAWK",
+      "score": 0.3711021939474638,
+      "presence": 3.653296505141179e-06,
+      "forward_error_km": 5.401737440818813,
+      "shape_error_km": 5.181110244143941,
+      "data_quality": 1.0,
+      "ais_gap": "no_significant_gap"
+    },
+    {
+      "rank": 4,
+      "mmsi": "660003900",
+      "name": "VB CARTIER",
+      "score": 0.14879724551306156,
+      "presence": 5.8176456227882465e-37,
+      "forward_error_km": 12.539831161459212,
+      "shape_error_km": 11.422446346682307,
+      "data_quality": 0.3888888888888889,
+      "ais_gap": "no_significant_gap"
+    },
+    {
+      "rank": 5,
+      "mmsi": "645465000",
+      "name": null,
+      "score": 0.004166666998310578,
+      "presence": 6.029889289874341e-10,
+      "forward_error_km": Infinity,
+      "shape_error_km": Infinity,
+      "data_quality": 0.08333333333333333,
+      "ais_gap": "no_significant_gap"
+    }
+  ],
+  "decision": {
+    "value": "PRIORITY_ANALYST_REVIEW",
+    "recommended_action": "Escalate this ranked shortlist to a human investigator with the complete evidence bundle.",
+    "checks": [
+      {
+        "gate": "incident_alignment",
+        "status": "PASS",
+        "observed": "PASS",
+        "requirement": "all incident-time inputs aligned"
+      },
+      {
+        "gate": "candidate_competition",
+        "status": "PASS",
+        "observed": 5,
+        "requirement": "at least two candidates"
+      },
+      {
+        "gate": "comparative_score",
+        "status": "PASS",
+        "observed": 0.7795027488742844,
+        "requirement": ">=0.60 for priority review"
+      },
+      {
+        "gate": "candidate_separation",
+        "status": "PASS",
+        "observed": 0.36975315988775964,
+        "requirement": ">=0.15 score margin for priority review"
+      },
+      {
+        "gate": "forward_replay",
+        "status": "PASS",
+        "observed": 0.7390043092876206,
+        "requirement": "<=3.0 km for priority review"
+      },
+      {
+        "gate": "forward_shape_replay",
+        "status": "PASS",
+        "observed": 0.5128466165478609,
+        "requirement": "<=3.0 km particle-cloud shape error for priority review"
+      },
+      {
+        "gate": "track_data_quality",
+        "status": "WARN",
+        "observed": 0.4930555555555556,
+        "requirement": ">=0.40; >=0.60 preferred"
+      },
+      {
+        "gate": "assumption_stability",
+        "status": "PASS",
+        "observed": {
+          "source": "answer-key-free release-time search",
+          "top_1_rate": 0.7916666666666666,
+          "top_3_rate": 1.0,
+          "worst_rank": null,
+          "candidate_matches": true
+        },
+        "requirement": ">=0.80 Top-3 retention for the same leading candidate"
+      }
+    ],
+    "policy_interpretation": "Fixed engineering escalation thresholds; not statistically calibrated accuracy or a legal standard."
+  },
+  "vessels": [
+    {
+      "mmsi": "215337000",
+      "name": "BOKA EXPEDITION",
+      "source": "https://www.tradlinx.com/vessel-tracking/VesselId%3A209326-Vessel%3ABOKA_EXPEDITION-MMSI%3A215337000-CallSign%3A9HA5068-IMO%3A9358943",
+      "note": "Later registry identification; 2020 name not verified here.",
+      "positions": [
+        {
+          "time": "2020-08-06T01:00:00Z",
+          "longitude": 57.759998,
+          "latitude": -20.45
+        },
+        {
+          "time": "2020-08-06T02:00:00Z",
+          "longitude": 57.790001,
+          "latitude": -20.42
+        },
+        {
+          "time": "2020-08-06T03:00:00Z",
+          "longitude": 57.790001,
+          "latitude": -20.41
+        },
+        {
+          "time": "2020-08-06T04:00:00Z",
+          "longitude": 57.759998,
+          "latitude": -20.39
+        },
+        {
+          "time": "2020-08-06T05:00:00Z",
+          "longitude": 57.759998,
+          "latitude": -20.39
+        },
+        {
+          "time": "2020-08-06T06:00:00Z",
+          "longitude": 57.779999,
+          "latitude": -20.41
+        },
+        {
+          "time": "2020-08-06T07:00:00Z",
+          "longitude": 57.75,
+          "latitude": -20.44
+        },
+        {
+          "time": "2020-08-06T08:00:00Z",
+          "longitude": 57.75,
+          "latitude": -20.44
+        },
+        {
+          "time": "2020-08-06T09:00:00Z",
+          "longitude": 57.75,
+          "latitude": -20.44
+        },
+        {
+          "time": "2020-08-06T10:00:00Z",
+          "longitude": 57.75,
+          "latitude": -20.44
+        },
+        {
+          "time": "2020-08-06T11:00:00Z",
+          "longitude": 57.75,
+          "latitude": -20.44
+        }
+      ]
+    },
+    {
+      "mmsi": "372711000",
+      "name": "MV Wakashio",
+      "source": "https://blueconomy.govmu.org/Documents/Publications/Report%20Court%20of%20Investigation-MV%20Wakashio.pdf",
+      "note": "Identity corroborated by the official casualty report.",
+      "positions": [
+        {
+          "time": "2020-08-05T00:00:00Z",
+          "longitude": 57.740002,
+          "latitude": -20.44
+        },
+        {
+          "time": "2020-08-05T01:00:00Z",
+          "longitude": 57.740002,
+          "latitude": -20.44
+        },
+        {
+          "time": "2020-08-05T02:00:00Z",
+          "longitude": 57.740002,
+          "latitude": -20.44
+        },
+        {
+          "time": "2020-08-05T03:00:00Z",
+          "longitude": 57.740002,
+          "latitude": -20.44
+        },
+        {
+          "time": "2020-08-05T04:00:00Z",
+          "longitude": 57.740002,
+          "latitude": -20.44
+        },
+        {
+          "time": "2020-08-05T05:00:00Z",
+          "longitude": 57.740002,
+          "latitude": -20.44
+        },
+        {
+          "time": "2020-08-05T06:00:00Z",
+          "longitude": 57.740002,
+          "latitude": -20.44
+        },
+        {
+          "time": "2020-08-05T07:00:00Z",
+          "longitude": 57.740002,
+          "latitude": -20.44
+        }
+      ]
+    },
+    {
+      "mmsi": "376955000",
+      "name": "STANFORD HAWK",
+      "source": "https://www.itu.int/en/ITU-R/terrestrial/mars/Documents/1st_ListV_compilation%202025.pdf",
+      "note": "Later registry identification; 2020 name not verified here.",
+      "positions": [
+        {
+          "time": "2020-08-05T00:00:00Z",
+          "longitude": 57.75,
+          "latitude": -20.44
+        },
+        {
+          "time": "2020-08-05T01:00:00Z",
+          "longitude": 57.75,
+          "latitude": -20.44
+        },
+        {
+          "time": "2020-08-05T02:00:00Z",
+          "longitude": 57.75,
+          "latitude": -20.44
+        },
+        {
+          "time": "2020-08-05T03:00:00Z",
+          "longitude": 57.75,
+          "latitude": -20.44
+        },
+        {
+          "time": "2020-08-05T04:00:00Z",
+          "longitude": 57.75,
+          "latitude": -20.44
+        },
+        {
+          "time": "2020-08-05T05:00:00Z",
+          "longitude": 57.779999,
+          "latitude": -20.42
+        },
+        {
+          "time": "2020-08-05T06:00:00Z",
+          "longitude": 57.759998,
+          "latitude": -20.39
+        },
+        {
+          "time": "2020-08-05T07:00:00Z",
+          "longitude": 57.759998,
+          "latitude": -20.39
+        },
+        {
+          "time": "2020-08-05T08:00:00Z",
+          "longitude": 57.759998,
+          "latitude": -20.39
+        },
+        {
+          "time": "2020-08-05T09:00:00Z",
+          "longitude": 57.759998,
+          "latitude": -20.39
+        },
+        {
+          "time": "2020-08-05T10:00:00Z",
+          "longitude": 57.759998,
+          "latitude": -20.39
+        },
+        {
+          "time": "2020-08-05T11:00:00Z",
+          "longitude": 57.759998,
+          "latitude": -20.39
+        },
+        {
+          "time": "2020-08-05T12:00:00Z",
+          "longitude": 57.759998,
+          "latitude": -20.39
+        },
+        {
+          "time": "2020-08-05T13:00:00Z",
+          "longitude": 57.759998,
+          "latitude": -20.39
+        },
+        {
+          "time": "2020-08-05T14:00:00Z",
+          "longitude": 57.759998,
+          "latitude": -20.39
+        },
+        {
+          "time": "2020-08-05T15:00:00Z",
+          "longitude": 57.759998,
+          "latitude": -20.39
+        },
+        {
+          "time": "2020-08-05T16:00:00Z",
+          "longitude": 57.759998,
+          "latitude": -20.39
+        },
+        {
+          "time": "2020-08-05T17:00:00Z",
+          "longitude": 57.759998,
+          "latitude": -20.39
+        },
+        {
+          "time": "2020-08-05T18:00:00Z",
+          "longitude": 57.759998,
+          "latitude": -20.39
+        },
+        {
+          "time": "2020-08-05T19:00:00Z",
+          "longitude": 57.759998,
+          "latitude": -20.39
+        },
+        {
+          "time": "2020-08-05T20:00:00Z",
+          "longitude": 57.759998,
+          "latitude": -20.39
+        },
+        {
+          "time": "2020-08-05T21:00:00Z",
+          "longitude": 57.759998,
+          "latitude": -20.39
+        },
+        {
+          "time": "2020-08-05T22:00:00Z",
+          "longitude": 57.759998,
+          "latitude": -20.39
+        },
+        {
+          "time": "2020-08-05T23:00:00Z",
+          "longitude": 57.759998,
+          "latitude": -20.39
+        },
+        {
+          "time": "2020-08-06T00:00:00Z",
+          "longitude": 57.759998,
+          "latitude": -20.39
+        },
+        {
+          "time": "2020-08-06T01:00:00Z",
+          "longitude": 57.759998,
+          "latitude": -20.39
+        },
+        {
+          "time": "2020-08-06T02:00:00Z",
+          "longitude": 57.759998,
+          "latitude": -20.39
+        },
+        {
+          "time": "2020-08-06T03:00:00Z",
+          "longitude": 57.759998,
+          "latitude": -20.39
+        },
+        {
+          "time": "2020-08-06T04:00:00Z",
+          "longitude": 57.759998,
+          "latitude": -20.39
+        },
+        {
+          "time": "2020-08-06T05:00:00Z",
+          "longitude": 57.759998,
+          "latitude": -20.39
+        },
+        {
+          "time": "2020-08-06T06:00:00Z",
+          "longitude": 57.759998,
+          "latitude": -20.39
+        },
+        {
+          "time": "2020-08-06T07:00:00Z",
+          "longitude": 57.759998,
+          "latitude": -20.39
+        },
+        {
+          "time": "2020-08-06T08:00:00Z",
+          "longitude": 57.759998,
+          "latitude": -20.39
+        },
+        {
+          "time": "2020-08-06T09:00:00Z",
+          "longitude": 57.759998,
+          "latitude": -20.39
+        },
+        {
+          "time": "2020-08-06T10:00:00Z",
+          "longitude": 57.759998,
+          "latitude": -20.39
+        },
+        {
+          "time": "2020-08-06T11:00:00Z",
+          "longitude": 57.759998,
+          "latitude": -20.39
+        }
+      ]
+    },
+    {
+      "mmsi": "645465000",
+      "name": null,
+      "source": null,
+      "note": "Name not verified; show the recorded MMSI only.",
+      "positions": [
+        {
+          "time": "2020-08-06T07:00:00Z",
+          "longitude": 57.77,
+          "latitude": -20.36
+        },
+        {
+          "time": "2020-08-06T08:00:00Z",
+          "longitude": 57.740002,
+          "latitude": -20.38
+        },
+        {
+          "time": "2020-08-06T09:00:00Z",
+          "longitude": 57.779999,
+          "latitude": -20.34
+        }
+      ]
+    },
+    {
+      "mmsi": "660003900",
+      "name": "VB CARTIER",
+      "source": "https://www.shipspotting.com/photos/3179874?imo=9395848",
+      "note": "Registry/photo identification; verify name at incident time before operational use.",
+      "positions": [
+        {
+          "time": "2020-08-05T00:00:00Z",
+          "longitude": 57.759998,
+          "latitude": -20.39
+        },
+        {
+          "time": "2020-08-05T01:00:00Z",
+          "longitude": 57.759998,
+          "latitude": -20.39
+        },
+        {
+          "time": "2020-08-05T02:00:00Z",
+          "longitude": 57.759998,
+          "latitude": -20.39
+        },
+        {
+          "time": "2020-08-05T03:00:00Z",
+          "longitude": 57.759998,
+          "latitude": -20.39
+        },
+        {
+          "time": "2020-08-05T04:00:00Z",
+          "longitude": 57.77,
+          "latitude": -20.41
+        },
+        {
+          "time": "2020-08-05T05:00:00Z",
+          "longitude": 57.759998,
+          "latitude": -20.44
+        },
+        {
+          "time": "2020-08-05T06:00:00Z",
+          "longitude": 57.75,
+          "latitude": -20.44
+        },
+        {
+          "time": "2020-08-05T07:00:00Z",
+          "longitude": 57.75,
+          "latitude": -20.44
+        },
+        {
+          "time": "2020-08-05T08:00:00Z",
+          "longitude": 57.75,
+          "latitude": -20.44
+        },
+        {
+          "time": "2020-08-05T09:00:00Z",
+          "longitude": 57.75,
+          "latitude": -20.45
+        },
+        {
+          "time": "2020-08-05T10:00:00Z",
+          "longitude": 57.75,
+          "latitude": -20.44
+        },
+        {
+          "time": "2020-08-05T11:00:00Z",
+          "longitude": 57.75,
+          "latitude": -20.44
+        },
+        {
+          "time": "2020-08-05T12:00:00Z",
+          "longitude": 57.75,
+          "latitude": -20.44
+        },
+        {
+          "time": "2020-08-05T13:00:00Z",
+          "longitude": 57.740002,
+          "latitude": -20.46
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "This is a transparent historical reconstruction, not an untouched external blind test.",
+    "The source-vessel position is reconstructed from the official fixed wreck position, not continuous GFW AIS.",
+    "The first visible spill is close to the wreck; this case validates evidence fusion more than long-range drift skill.",
+    "UNOSAT marked the source polygon as not yet field validated, despite high analyst confidence.",
+    "Candidate ranking is investigative support and never a finding of guilt."
+  ],
+  "sources": {
+    "official_casualty_report": "https://blueconomy.govmu.org/Documents/Publications/Report%20Court%20of%20Investigation-MV%20Wakashio.pdf",
+    "unosat_product": "https://unosat.org/products/2888",
+    "sentinel_acquisition_time": "https://www.sentinelvision.eu/gallery/pdf/031dbec6963f41c4991d1cf06d8668f4",
+    "gfw": "Global Fishing Watch public-global-presence:latest",
+    "gfw_documentation": "https://globalfishingwatch.org/platform-update/global-ais-vessel-presence-dataset/"
+  },
+  "provider": {
+    "name": "Global Fishing Watch",
+    "product": "AIS Vessel Presence",
+    "sampling": "Hourly presence at 0.01-degree grid-cell centres; not raw AIS tracks",
+    "rows": 72,
+    "vessels": 5
+  },
+  "source_sha256": {
+    "ais": "32ca4fa4a4ff8002b7d14b311c8d1998931ffcb6250e54de993dbc1fda5c8729",
+    "slick": "ecde7a950553e0dbdb24d617f1ffcec21724f2dcb2977890739f3175fb19db6c",
+    "ranking": "b995e3caff045c0b3b68611170e62c93ad2002123dd93921d25eef8dd1537e11",
+    "release": "a8568a2ef3292f53b45645ee8e92aa41f3dca397cdf9a1a57ad4003f0abb4964"
+  }
+};

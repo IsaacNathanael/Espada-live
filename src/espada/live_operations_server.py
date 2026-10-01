@@ -29,6 +29,7 @@ class LiveOperationsHandler(SimpleHTTPRequestHandler):
 
     _PUBLIC_PREFIXES = (
         "/operator/live_command/",
+        "/operator/historical_case/",
         "/out/live_operations/",
     )
 
