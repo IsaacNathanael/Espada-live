@@ -1,0 +1,157 @@
+{
+  "status": "PASS",
+  "scene_id": "S1D_IW_GRDH_1SDV_20260915T112445_20260915T112510_004587_0088BA_E9EF_COG",
+  "integrity_status": "VERIFIED",
+  "verified_at_utc": "2026-10-02T05:24:01Z",
+  "matched_files": 16,
+  "modified_files": 0,
+  "missing_required_files": 0,
+  "expected_chain_digest_sha256": "c2daa6bff58eb4e3bae7cd33c654e33e31dc67e62d4ed33a829a216e2dff0020",
+  "computed_chain_digest_sha256": "c2daa6bff58eb4e3bae7cd33c654e33e31dc67e62d4ed33a829a216e2dff0020",
+  "artifacts": [
+    {
+      "id": "sentinel_source",
+      "label": "Observed SAR source",
+      "required": true,
+      "relative_path": "input/sentinel1_vv.tif",
+      "status": "MATCH",
+      "expected_sha256": "4955444493976a0d135313d910fa18e19891c774c84c77b8ede4b5cae8e1af11",
+      "computed_sha256": "4955444493976a0d135313d910fa18e19891c774c84c77b8ede4b5cae8e1af11"
+    },
+    {
+      "id": "sentinel_metadata",
+      "label": "Satellite acquisition metadata",
+      "required": true,
+      "relative_path": "input/sentinel1_subset_status.json",
+      "status": "MATCH",
+      "expected_sha256": "69f9cfdad15a4977847290cddd8b44b69c653a9ff1888e0d8bf2aaec90aa1842",
+      "computed_sha256": "69f9cfdad15a4977847290cddd8b44b69c653a9ff1888e0d8bf2aaec90aa1842"
+    },
+    {
+      "id": "model_result",
+      "label": "Frozen SAR model result",
+      "required": true,
+      "relative_path": "segmentation/sar_result.json",
+      "status": "MATCH",
+      "expected_sha256": "99e288c180300f197e8d5fc51443d9a1336289176da7af699ed7b9d0745f9248",
+      "computed_sha256": "99e288c180300f197e8d5fc51443d9a1336289176da7af699ed7b9d0745f9248"
+    },
+    {
+      "id": "physics_screen",
+      "label": "Physical plausibility screen",
+      "required": true,
+      "relative_path": "segmentation/physics_screen.json",
+      "status": "MATCH",
+      "expected_sha256": "cae8e0232c2ba488ef76322737579a48931c4988035cda10ed37cd1f0529de8f",
+      "computed_sha256": "cae8e0232c2ba488ef76322737579a48931c4988035cda10ed37cd1f0529de8f"
+    },
+    {
+      "id": "analyst_decision",
+      "label": "Analyst-approved slick geometry",
+      "required": true,
+      "relative_path": "review/approved_slick.geojson",
+      "status": "MATCH",
+      "expected_sha256": "3e7dcf6fbc1c5182c78c9fc6167affea1ab747402ea75e20eeea9bb143d898eb",
+      "computed_sha256": "3e7dcf6fbc1c5182c78c9fc6167affea1ab747402ea75e20eeea9bb143d898eb"
+    },
+    {
+      "id": "environment",
+      "label": "Date-matched ocean and wind fields",
+      "required": true,
+      "relative_path": "attribution/environment/environment.json",
+      "status": "MATCH",
+      "expected_sha256": "7bd562840468ea06eaf73eb40efae68d5def72e0dc874e18c85f47d39b83d032",
+      "computed_sha256": "7bd562840468ea06eaf73eb40efae68d5def72e0dc874e18c85f47d39b83d032"
+    },
+    {
+      "id": "release_estimate",
+      "label": "Reverse-drift release estimate",
+      "required": true,
+      "relative_path": "attribution/drift/release_estimate.json",
+      "status": "MATCH",
+      "expected_sha256": "049c1546b8ef004519225b7cfd000dd3024d2bf81fdf3af63f62b2608cb5f8d5",
+      "computed_sha256": "049c1546b8ef004519225b7cfd000dd3024d2bf81fdf3af63f62b2608cb5f8d5"
+    },
+    {
+      "id": "origin_zone",
+      "label": "Probable origin-zone geometry",
+      "required": true,
+      "relative_path": "attribution/origin_zone.geojson",
+      "status": "MATCH",
+      "expected_sha256": "b716d311732c94f8cd2bb1c3a687b7b4939c096fdcc95a1f7f78ec71ed4ad9ca",
+      "computed_sha256": "b716d311732c94f8cd2bb1c3a687b7b4939c096fdcc95a1f7f78ec71ed4ad9ca"
+    },
+    {
+      "id": "ais_positions",
+      "label": "Normalized historical AIS evidence",
+      "required": true,
+      "relative_path": "attribution/ais/ais_normalized.csv",
+      "status": "MATCH",
+      "expected_sha256": "605656f477a32c2571504a704e768cd230ec559afcd9d515ca48f489f9d068cd",
+      "computed_sha256": "605656f477a32c2571504a704e768cd230ec559afcd9d515ca48f489f9d068cd"
+    },
+    {
+      "id": "ais_quality",
+      "label": "AIS quality audit",
+      "required": true,
+      "relative_path": "attribution/ais/ais_quality.json",
+      "status": "MATCH",
+      "expected_sha256": "d6692439657854d11e4c7195bf02876a544c04adf74e68b07e0634eb483509ed",
+      "computed_sha256": "d6692439657854d11e4c7195bf02876a544c04adf74e68b07e0634eb483509ed"
+    },
+    {
+      "id": "candidate_ranking",
+      "label": "Candidate ranking ledger",
+      "required": true,
+      "relative_path": "attribution/ranking/candidates.json",
+      "status": "MATCH",
+      "expected_sha256": "fd91d36ec6db592a00b3f1d9782df96cd2b128557751366d12a3f2b61f313202",
+      "computed_sha256": "fd91d36ec6db592a00b3f1d9782df96cd2b128557751366d12a3f2b61f313202"
+    },
+    {
+      "id": "candidate_tracks",
+      "label": "Compared candidate tracks",
+      "required": true,
+      "relative_path": "attribution/candidate_tracks.geojson",
+      "status": "MATCH",
+      "expected_sha256": "11746cd0ac70b0c9011e4f1fd4fdf91d00f8108a2b289c69d5b2024b9c2fb959",
+      "computed_sha256": "11746cd0ac70b0c9011e4f1fd4fdf91d00f8108a2b289c69d5b2024b9c2fb959"
+    },
+    {
+      "id": "sar_diagnostic",
+      "label": "SAR interpretation overview",
+      "required": false,
+      "relative_path": "segmentation/sar_segmentation_overview.png",
+      "status": "MATCH",
+      "expected_sha256": "a3b0bb110ea62712c71c043292c1e07d9d762a63766e0a6a518862f0ccb4f5e2",
+      "computed_sha256": "a3b0bb110ea62712c71c043292c1e07d9d762a63766e0a6a518862f0ccb4f5e2"
+    },
+    {
+      "id": "drift_diagnostic",
+      "label": "Reverse-drift diagnostic",
+      "required": false,
+      "relative_path": "attribution/drift/slick_reverse_analysis.png",
+      "status": "MATCH",
+      "expected_sha256": "b726ed21246e9812429075f44db19aa3f6a6b1e318965dabe956c72a5ae5b1eb",
+      "computed_sha256": "b726ed21246e9812429075f44db19aa3f6a6b1e318965dabe956c72a5ae5b1eb"
+    },
+    {
+      "id": "ranking_diagnostic",
+      "label": "Candidate ranking chart",
+      "required": false,
+      "relative_path": "attribution/ranking/candidate_ranking.png",
+      "status": "MATCH",
+      "expected_sha256": "837f04197cffec3a3678cc59017aeb80d2fba43581c32560c636beb794479de3",
+      "computed_sha256": "837f04197cffec3a3678cc59017aeb80d2fba43581c32560c636beb794479de3"
+    },
+    {
+      "id": "attribution_diagnostic",
+      "label": "Forward-verification map",
+      "required": false,
+      "relative_path": "attribution/ranking/attribution_map.png",
+      "status": "MATCH",
+      "expected_sha256": "e836cf21a1ebb5bc0992fdda1c80919c0178a6124d0521051ebe5946489854ee",
+      "computed_sha256": "e836cf21a1ebb5bc0992fdda1c80919c0178a6124d0521051ebe5946489854ee"
+    }
+  ]
+}

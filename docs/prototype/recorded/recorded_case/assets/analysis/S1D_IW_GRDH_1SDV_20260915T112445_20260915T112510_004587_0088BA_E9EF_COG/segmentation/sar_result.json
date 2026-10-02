@@ -1,0 +1,84 @@
+{
+  "status": "REVIEW_REQUIRED",
+  "source": "Local source artifact: sentinel1_vv.tif",
+  "observation_time_utc": "2026-09-15T11:24:45Z",
+  "image_shape": [
+    896,
+    1024
+  ],
+  "detected_pixel_fraction": 0.0006899152483258929,
+  "segmentation": {
+    "method": "calibrated V6 SAR semantic segmentation",
+    "model_type": "deep-learning binary oil-candidate segmentation",
+    "model_generation": "V6",
+    "architecture": "attention-gated ResNet50 U-Net",
+    "checkpoint_epoch": 3,
+    "checkpoint_sha256": "5447b8900bd082fcbcbdff3f90f2a578f733bc5fbc3c77efc007c39370538176",
+    "checkpoint": "Local source artifact: sar_segmentation_best.pt",
+    "calibration": "Local source artifact: threshold_calibration.json",
+    "threshold": 0.05,
+    "threshold_source": "validation-only IoU calibration",
+    "test_time_augmentation": "flip4",
+    "preprocessing": "linear intensity converted to decibels",
+    "normalization": {
+      "mode": "scene_centered_s1_vv",
+      "clip_min_db": -35.0,
+      "clip_max_db": 5.0,
+      "reference_ocean_median_db": -22.0,
+      "ssl4eo_s1_vv_mean_db": -12.59,
+      "ssl4eo_s1_vv_std_db": 5.26
+    },
+    "device": "cuda",
+    "gpu": "NVIDIA GeForce RTX 5050 Laptop GPU",
+    "probability_summary": {
+      "minimum": 1.2367963790893555e-06,
+      "mean": 0.000578408595174551,
+      "maximum": 0.91497802734375
+    },
+    "detected_components": 1,
+    "largest_component_pixels": [
+      633
+    ],
+    "prediction_bundle": "Local source artifact: v6_prediction.npz",
+    "land_exclusion": {
+      "status": "APPLIED",
+      "dataset": "Natural Earth 1:10m land",
+      "land_mask": "Local source artifact: land_mask.geojson",
+      "mapped_land_fraction": 0.0,
+      "excluded_with_shoreline_halo_fraction": 0.0,
+      "shoreline_halo_pixels": 98,
+      "shoreline_halo_approx_degrees": 0.02,
+      "candidate_pixels_before": 833,
+      "candidate_pixels_removed": 0,
+      "candidate_pixels_after": 833
+    },
+    "operational_component_filter": {
+      "status": "APPLIED",
+      "minimum_component_pixels": 64,
+      "components_before": 2,
+      "edge_components_removed": 1,
+      "small_components_removed": 0,
+      "components_after": 1
+    }
+  },
+  "review_status": "pending",
+  "review_flags": [],
+  "synthetic_evaluation": null,
+  "geojson_status": "candidate written; analyst review required",
+  "limitations": [
+    "Dark-lookalikes such as low wind, rain cells and sensor artefacts can cause false positives.",
+    "V6 has development-replay evidence but still requires an external blind test.",
+    "Real imagery never becomes an attribution input until a human approves the candidate polygon.",
+    "A WGS84 bounding box is required because raster georeferencing is not inferred by this lightweight adapter.",
+    "Natural Earth land exclusion is cartographic and not a navigation-grade shoreline."
+  ],
+  "artifacts": [
+    "sar_input.png",
+    "slick_mask.png",
+    "sar_segmentation_overview.png",
+    "v6_prediction.npz",
+    "slick_candidate.geojson",
+    "sar_result.json",
+    "sar_model_card.json"
+  ]
+}

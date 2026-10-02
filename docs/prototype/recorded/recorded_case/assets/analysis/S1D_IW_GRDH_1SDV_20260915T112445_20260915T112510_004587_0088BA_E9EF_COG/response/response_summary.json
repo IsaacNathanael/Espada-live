@@ -1,0 +1,160 @@
+{
+  "schema": "espada.live-response-summary.v1",
+  "generated_at_utc": "2026-10-02T05:23:41Z",
+  "scene_id": "S1D_IW_GRDH_1SDV_20260915T112445_20260915T112510_004587_0088BA_E9EF_COG",
+  "response_status": "SAFE_ABSTENTION_READY",
+  "operational_decision": "ABSTAIN_INSUFFICIENT_EVIDENCE",
+  "permitted_action": "PRESERVE AND SEEK MORE EVIDENCE",
+  "vessel_nominated": false,
+  "rationale": "The system refused nomination because these gates failed: Candidate separation.",
+  "candidate_count": 40,
+  "top_candidate": {
+    "mmsi": "525021455",
+    "vessel_name": "UNKNOWN",
+    "total_score": 0.4098501490928019,
+    "presence_score": 0.25914243444073876,
+    "forward_consistency": 0.9896821909138228,
+    "forward_error_km": 1.277460169141724,
+    "forward_centroid_consistency": 0.9873316736701028,
+    "forward_shape_consistency": 0.9925550453228138,
+    "forward_shape_error_km": 0.9780180236395378,
+    "data_quality": 0.5795454545454546,
+    "release_position_interpolated": true,
+    "interpolation_gap_hours": 1.0,
+    "interpolation_score_penalty": 0.015,
+    "gap_threshold_minutes": 90.0,
+    "silence_classification": "vessel_specific_gap_with_peer_coverage",
+    "significant_gaps": 1,
+    "gaps_with_local_peer_reception": 1,
+    "silence_interpretation": "Nearby vessels were still being received during at least one gap. This makes a broad local reception outage less likely, but does not establish intent.",
+    "best_match_time_utc": "2026-09-15T08:00:00Z",
+    "motion_state": "stationary_or_anchored",
+    "track_bearing_deg": 331.70472643930503,
+    "track_span_km": 16.417015999930513,
+    "track_span_hours": 18.0,
+    "implied_speed_knots": 0.49247108231133047,
+    "identity_status": "mmsi_only_unverified",
+    "direction_use": "analyst_context_only",
+    "direction_interpretation": "Track direction is available for visual consistency review; it does not add suspicion.",
+    "score_components": {
+      "space_time_presence": {
+        "weight": 0.55,
+        "value": 0.25914243444073876
+      },
+      "forward_replay_consistency": {
+        "weight": 0.4,
+        "value": 0.9896821909138228
+      },
+      "ais_data_quality": {
+        "weight": 0.05,
+        "value": 0.5795454545454546
+      },
+      "bounded_interpolation_penalty": 0.015
+    },
+    "evidence": [
+      "Space-time proximity to the inferred release distribution.",
+      "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+      "Forward replay sampled particle-local Copernicus surface currents.",
+      "Forward particle paths intersecting supplied land polygons were rejected.",
+      "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+      "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+      "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
+    ],
+    "limitations": [
+      "AIS identity and reception completeness require independent verification.",
+      "Interpolated positions are hypotheses, not received AIS messages.",
+      "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+      "AIS gaps do not receive a deliberate-behaviour bonus."
+    ],
+    "rank": 1
+  },
+  "score_margin": 0.009022907590690021,
+  "tied_at_top": 1,
+  "near_tied_count": 3,
+  "nomination_assessment": {
+    "decision": "ABSTAIN_INSUFFICIENT_EVIDENCE",
+    "passed": false,
+    "score_margin": 0.009022907590690021,
+    "near_tied_count": 3,
+    "ambiguity_band": 0.02,
+    "failed_gate_ids": [
+      "score_margin"
+    ],
+    "gates": [
+      {
+        "id": "candidate_population",
+        "label": "Comparative population",
+        "passed": true,
+        "observed": 40,
+        "requirement": ">= 2 incident-relevant tracks"
+      },
+      {
+        "id": "top_score",
+        "label": "Minimum evidence score",
+        "passed": true,
+        "observed": 0.4098501490928019,
+        "requirement": ">= 0.40"
+      },
+      {
+        "id": "score_margin",
+        "label": "Candidate separation",
+        "passed": false,
+        "observed": 0.009022907590690021,
+        "requirement": ">= 0.05"
+      },
+      {
+        "id": "track_quality",
+        "label": "AIS track quality",
+        "passed": true,
+        "observed": 0.5795454545454546,
+        "requirement": ">= 0.40"
+      },
+      {
+        "id": "forward_error",
+        "label": "Forward replay error",
+        "passed": true,
+        "observed": 1.277460169141724,
+        "requirement": "<= 8.0 km"
+      }
+    ],
+    "rationale": "The system refused nomination because these gates failed: Candidate separation.",
+    "claim_boundary": "A limited shortlist prioritizes analyst review. It is not proof of identity, discharge, intent, liability or guilt."
+  },
+  "release_time_utc": "2026-09-14T16:24:45Z",
+  "observation_time_utc": "2026-09-15T11:24:45Z",
+  "credible_radius_90_km": 6.698183709177643,
+  "review": {
+    "status": "APPROVED",
+    "reviewed_at_utc": "2026-09-28T20:15:25Z",
+    "assumed_age_hours": 19.0
+  },
+  "source_status_at_export": {
+    "environment": {
+      "provider": "Open-Meteo marine current + forecast wind",
+      "status": "PASS",
+      "latest_observation_utc": "2026-10-02T05:00:00Z"
+    },
+    "ais": {
+      "provider": "AISStream WebSocket",
+      "status": "PASS",
+      "latest_observation_utc": "2026-10-02T05:20:58Z"
+    },
+    "sentinel": {
+      "provider": "Copernicus Data Space Sentinel-1 GRD",
+      "status": "PASS",
+      "latest_observation_utc": "2026-09-27T11:24:45Z"
+    }
+  },
+  "recommended_actions": [
+    "Preserve the generated evidence package and its integrity digest.",
+    "Acquire terrestrial or commercial AIS for the incident window.",
+    "Request an independent SAR, optical, port-log or sampling record.",
+    "Re-run attribution only when new evidence changes the case record."
+  ],
+  "blocked_actions": [
+    "Automatic vessel accusation",
+    "Enforcement notification without human review",
+    "Treating comparative scores as guilt probabilities"
+  ],
+  "claim_boundary": "Investigative evidence only; not proof of identity, discharge, intent or guilt."
+}

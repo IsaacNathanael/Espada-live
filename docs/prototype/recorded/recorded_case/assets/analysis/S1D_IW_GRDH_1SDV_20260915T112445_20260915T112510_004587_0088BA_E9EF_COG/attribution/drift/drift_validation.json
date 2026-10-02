@@ -1,0 +1,27 @@
+{
+  "status": "PASS",
+  "observation_time_utc": "2026-09-15T11:24:45Z",
+  "release_time_utc": "2026-09-14T16:24:45Z",
+  "reverse_uncertainty": {
+    "credible_radius_50_km": 3.0313430695807386,
+    "credible_radius_90_km": 6.698183709177643,
+    "ensemble_endpoints": 16800
+  },
+  "forward_closure": {
+    "status": "COMPUTED",
+    "method": "posterior reverse endpoints propagated forward through the recorded forcing",
+    "particles_seeded": 1200,
+    "particles_retained": 1200,
+    "finite_fraction": 1.0,
+    "centroid": {
+      "longitude": 104.08277245367557,
+      "latitude": 1.194370821052342
+    },
+    "centroid_error_km": 1.4776384569167729,
+    "cloud_shape_error_km": 5.02082172833309,
+    "radius_90_km_from_observed_centroid": 11.789864350105717,
+    "fraction_inside_observed_polygon": 0.0008333333333333334,
+    "interpretation": "Forward closure measures internal model consistency against the approved slick; it is not external accuracy or proof of a discharge source."
+  },
+  "claim_boundary": "Forward closure measures internal model consistency against the approved slick; it is not external accuracy or proof of a discharge source."
+}
