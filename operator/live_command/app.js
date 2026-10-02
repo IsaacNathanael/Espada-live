@@ -5,6 +5,9 @@
   const CLIENT_ENVIRONMENT_TTL_MS = 30 * 60 * 1000;
   const CLIENT_ENVIRONMENT_RETRY_MS = 10 * 60 * 1000;
   const SNAPSHOT_ENDPOINT = '/api/live/snapshot';
+  const queryMode = new URLSearchParams(window.location.search).get('mode');
+  const RECORDED_MODE = queryMode === 'recorded' || (queryMode !== 'live' && window.location.hostname.endsWith('.onrender.com'));
+  const RECORDED_SNAPSHOT = '/operator/live_command/recorded_case/snapshot.json';
   const REFRESH_ENDPOINT = '/api/live/refresh';
   const ANALYZE_ENDPOINT = '/api/live/analyze-latest-sar';
   const REVIEW_ENDPOINT = '/api/live/review';
@@ -43,7 +46,7 @@
   const defaultPanels = {investigation:'reverse-drift', 'case-file':'respond-workspace'};
   const requestedComponent = window.location.hash.slice(1);
   if (pageByComponent[requestedComponent] && pageByComponent[requestedComponent] !== currentPage) {
-    window.location.replace(`${pageFiles[pageByComponent[requestedComponent]]}#${requestedComponent}`);
+    window.location.replace(`${pageFiles[pageByComponent[requestedComponent]]}${RECORDED_MODE ? '?mode=recorded' : ''}#${requestedComponent}`);
     return;
   }
   let lastSnapshot = null;
@@ -112,7 +115,7 @@
   };
   const normalizeState = status => {
     const value = String(status || 'WAITING').toUpperCase();
-    if (value === 'PASS') return 'pass';
+    if (value === 'PASS' || value === 'RECORDED') return 'pass';
     if (['CONNECTING','SEARCHING','REFRESHING','RUNNING'].includes(value)) return 'active';
     if (value === 'STALE') return 'stale';
     if (value === 'DELAYED') return 'delayed';
@@ -2307,6 +2310,23 @@
 
   function renderAis(source = {}, ais = {}) {
     setCardState('ais', source);
+    if (RECORDED_MODE) {
+      html('aisEvidenceType', 'RECORDED · HISTORICAL AIS CONTEXT');
+      html('aisPositionsLabel', 'Compared candidates');
+      html('aisVesselsLabel', 'Current vessels');
+      html('trafficCurrentLabel', 'HISTORICAL CANDIDATES');
+      html('trafficUnderwayLabel', 'LIVE VESSELS');
+      html('aisBoundaryNote', 'This is a saved incident. Historical candidate tracks appear in Incident evidence and Investigation; no current vessel positions are claimed.');
+      html('aisPositions', compactNumber(ais.vessel_count));
+      html('aisVessels', '—');
+      html('aisObservation', formatUtc(ais.evidence_time_utc));
+      html('aisSuccess', 'Recorded case · not a live feed');
+      html('trafficCurrent', compactNumber(ais.vessel_count));
+      html('trafficUnderway', '—');
+      html('trafficStationary', '—');
+      html('trafficWindow', 'Historical');
+      return;
+    }
     const delayed = ais.mode === 'delayed_context';
     html('aisEvidenceType', delayed ? 'OBSERVED · DELAYED CONTEXT' : 'OBSERVED · LIVE STREAM');
     html('aisPositionsLabel', delayed ? 'Delayed vessels' : 'Current vessels');
@@ -2350,6 +2370,17 @@
   }
 
   function renderIntegrity(snapshot) {
+    if (RECORDED_MODE) {
+      html('sourceCount', 'RECORDED CASE');
+      html('sourceSummary', 'SAR acquisition · historical AIS context · dated ocean forcing');
+      const connection = byId('connectionState');
+      connection.dataset.tone = 'live';
+      connection.querySelector('b').textContent = 'RECORDED · READ ONLY';
+      connection.querySelector('small').textContent = 'Previously computed case';
+      html('integrityTitle', 'Recorded evidence loaded');
+      html('integrityMessage', 'This is a saved real-data investigation, not current vessel traffic or a new model run. The case file preserves its evidence limits and abstention decision.');
+      return;
+    }
     const sources = snapshot.sources || {};
     const sourceNames = {ais:'AIS stream',sentinel:'Sentinel catalogue',environment:'Ocean / weather'};
     const entries = ['ais','sentinel','environment'].map(name => ({name,source:sources[name] || {}}));
@@ -2547,12 +2578,27 @@
 
   function initializePages() {
     document.body.dataset.page = currentPage;
+    document.body.dataset.recorded = String(RECORDED_MODE);
+    const modeSuffix = RECORDED_MODE ? '?mode=recorded' : '?mode=live';
+    document.querySelectorAll('a[href]').forEach(link => {
+      const target = link.getAttribute('href');
+      if (/^(index|detection|investigation|cases|case-file)\.html(?:#.*)?$/.test(target)) {
+        link.setAttribute('href', target.replace(/(#.*)?$/, `${modeSuffix}$1`));
+      }
+    });
+    byId('recordedCaseLink').hidden = RECORDED_MODE;
+    byId('liveFeedsLink').hidden = !RECORDED_MODE;
+    byId('recordedNotice').hidden = !RECORDED_MODE;
+    if (RECORDED_MODE) {
+      document.querySelector('[data-page-link="watch"] b').textContent = 'Case Overview';
+      byId('liveModeButton').hidden = true;
+    }
     const [kicker,title,lede] = pageCopy[currentPage];
-    html('pageKicker',kicker);
-    html('pageTitle',title);
-    html('pageLede',lede);
-    document.title = `${currentPage === 'watch' ? 'Live Watch' : title.replace(/[.]$/,'')} · ESPADA`;
-    byId('refreshControl').hidden = currentPage !== 'watch';
+    html('pageKicker',RECORDED_MODE ? 'RECORDED INCIDENT · READ ONLY' : kicker);
+    html('pageTitle',RECORDED_MODE && currentPage === 'watch' ? 'Explore a completed investigation.' : title);
+    html('pageLede',RECORDED_MODE ? 'Previously computed SAR, reverse drift, historical vessel comparison and evidence dossier.' : lede);
+    document.title = `${RECORDED_MODE ? 'Recorded Case' : currentPage === 'watch' ? 'Live Watch' : title.replace(/[.]$/,'')} · ESPADA`;
+    byId('refreshControl').hidden = RECORDED_MODE || currentPage !== 'watch';
     document.querySelectorAll('[data-page-link]').forEach(link => {
       const active = link.dataset.pageLink === currentPage;
       link.classList.toggle('active',active);
@@ -2623,6 +2669,12 @@
     }
     renderIntegrity(snapshot);
     renderActiveComponents(snapshot);
+    if (RECORDED_MODE) {
+      for (const id of ['analyzeSarButton','approveCandidateButton','rejectCandidateButton','buildAttributionButton','buildResponseButton','verifyCaseButton','resumeCaseButton','buildEvidencePlanButton','stageEvidenceButton','admitEvidenceButton','rejectEvidenceButton','startReanalysisButton','recordClosureButton']) {
+        const button = byId(id);
+        if (button) button.disabled = true;
+      }
+    }
     if (currentPage === 'watch') html('mapEvidenceTime', formatUtc(evidenceTime(snapshot)));
     if (currentPage === 'watch' && mapMode === 'live' && ['LIVE WATCH','MAP READOUT'].includes(byId('detailType').textContent)) {
       const delayed = snapshot.ais?.mode === 'delayed_context';
@@ -2677,9 +2729,10 @@
 
   async function poll() {
     try {
-      const response = await fetch(`${SNAPSHOT_ENDPOINT}?t=${Date.now()}`, {cache: 'no-store'});
+      const response = await fetch(RECORDED_MODE ? RECORDED_SNAPSHOT : `${SNAPSHOT_ENDPOINT}?t=${Date.now()}`, {cache: 'no-store'});
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      render(await applyClientEnvironmentFallback(await response.json()));
+      const snapshot = await response.json();
+      render(RECORDED_MODE ? snapshot : await applyClientEnvironmentFallback(snapshot));
     } catch (error) {
       renderOffline(error);
     }
@@ -2766,11 +2819,17 @@
   byId('closureReviewerRole').addEventListener('input', updateClosureButton);
   byId('closureRationale').addEventListener('input', updateClosureButton);
   byId('closureAcknowledge').addEventListener('change', updateClosureButton);
+  if (RECORDED_MODE) {
+    document.addEventListener('submit', event => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }, true);
+  }
   initializePages();
-  updateMapMode('live');
+  updateMapMode(RECORDED_MODE ? 'incident' : 'live');
   initializeLazyComponents();
   tickClock();
   poll();
   window.setInterval(tickClock, 1000);
-  window.setInterval(poll, POLL_MS);
+  if (!RECORDED_MODE) window.setInterval(poll, POLL_MS);
 })();

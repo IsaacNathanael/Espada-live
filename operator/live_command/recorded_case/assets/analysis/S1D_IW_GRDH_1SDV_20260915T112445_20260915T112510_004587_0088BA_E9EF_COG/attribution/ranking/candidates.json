@@ -1,0 +1,3021 @@
+{
+  "status": "PASS",
+  "candidate_count": 40,
+  "top_candidate": {
+    "mmsi": "525021455",
+    "vessel_name": "UNKNOWN",
+    "total_score": 0.4098501490928019,
+    "presence_score": 0.25914243444073876,
+    "forward_consistency": 0.9896821909138228,
+    "forward_error_km": 1.277460169141724,
+    "forward_centroid_consistency": 0.9873316736701028,
+    "forward_shape_consistency": 0.9925550453228138,
+    "forward_shape_error_km": 0.9780180236395378,
+    "data_quality": 0.5795454545454546,
+    "release_position_interpolated": true,
+    "interpolation_gap_hours": 1.0,
+    "interpolation_score_penalty": 0.015,
+    "gap_threshold_minutes": 90.0,
+    "silence_classification": "vessel_specific_gap_with_peer_coverage",
+    "significant_gaps": 1,
+    "gaps_with_local_peer_reception": 1,
+    "silence_interpretation": "Nearby vessels were still being received during at least one gap. This makes a broad local reception outage less likely, but does not establish intent.",
+    "best_match_time_utc": "2026-09-15T08:00:00Z",
+    "motion_state": "stationary_or_anchored",
+    "track_bearing_deg": 331.70472643930503,
+    "track_span_km": 16.417015999930513,
+    "track_span_hours": 18.0,
+    "implied_speed_knots": 0.49247108231133047,
+    "identity_status": "mmsi_only_unverified",
+    "direction_use": "analyst_context_only",
+    "direction_interpretation": "Track direction is available for visual consistency review; it does not add suspicion.",
+    "score_components": {
+      "space_time_presence": {
+        "weight": 0.55,
+        "value": 0.25914243444073876
+      },
+      "forward_replay_consistency": {
+        "weight": 0.4,
+        "value": 0.9896821909138228
+      },
+      "ais_data_quality": {
+        "weight": 0.05,
+        "value": 0.5795454545454546
+      },
+      "bounded_interpolation_penalty": 0.015
+    },
+    "evidence": [
+      "Space-time proximity to the inferred release distribution.",
+      "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+      "Forward replay sampled particle-local Copernicus surface currents.",
+      "Forward particle paths intersecting supplied land polygons were rejected.",
+      "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+      "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+      "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
+    ],
+    "limitations": [
+      "AIS identity and reception completeness require independent verification.",
+      "Interpolated positions are hypotheses, not received AIS messages.",
+      "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+      "AIS gaps do not receive a deliberate-behaviour bonus."
+    ],
+    "rank": 1
+  },
+  "candidates": [
+    {
+      "mmsi": "525021455",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.4098501490928019,
+      "presence_score": 0.25914243444073876,
+      "forward_consistency": 0.9896821909138228,
+      "forward_error_km": 1.277460169141724,
+      "forward_centroid_consistency": 0.9873316736701028,
+      "forward_shape_consistency": 0.9925550453228138,
+      "forward_shape_error_km": 0.9780180236395378,
+      "data_quality": 0.5795454545454546,
+      "release_position_interpolated": true,
+      "interpolation_gap_hours": 1.0,
+      "interpolation_score_penalty": 0.015,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "vessel_specific_gap_with_peer_coverage",
+      "significant_gaps": 1,
+      "gaps_with_local_peer_reception": 1,
+      "silence_interpretation": "Nearby vessels were still being received during at least one gap. This makes a broad local reception outage less likely, but does not establish intent.",
+      "best_match_time_utc": "2026-09-15T08:00:00Z",
+      "motion_state": "stationary_or_anchored",
+      "track_bearing_deg": 331.70472643930503,
+      "track_span_km": 16.417015999930513,
+      "track_span_hours": 18.0,
+      "implied_speed_knots": 0.49247108231133047,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "Track direction is available for visual consistency review; it does not add suspicion.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.25914243444073876
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.9896821909138228
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 0.5795454545454546
+        },
+        "bounded_interpolation_penalty": 0.015
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 1
+    },
+    {
+      "mmsi": "525121006",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.40082724150211185,
+      "presence_score": 0.23248811655312496,
+      "forward_consistency": 0.6483060344038238,
+      "forward_error_km": 7.871864313061104,
+      "forward_centroid_consistency": 0.6162446035069021,
+      "forward_shape_consistency": 0.6874922277222836,
+      "forward_shape_error_km": 6.925475333396032,
+      "data_quality": 0.2727272727272727,
+      "release_position_interpolated": false,
+      "interpolation_gap_hours": null,
+      "interpolation_score_penalty": 0.0,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "no_significant_gap",
+      "significant_gaps": 0,
+      "gaps_with_local_peer_reception": 0,
+      "silence_interpretation": "No gap exceeded the source-aware threshold.",
+      "best_match_time_utc": "2026-09-14T17:00:00Z",
+      "motion_state": "underway",
+      "track_bearing_deg": 212.00090271210553,
+      "track_span_km": 20.97898756121515,
+      "track_span_hours": 5.0,
+      "implied_speed_knots": 2.2655494126582236,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "Track direction is available for visual consistency review; it does not add suspicion.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.23248811655312496
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.6483060344038238
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 0.2727272727272727
+        },
+        "bounded_interpolation_penalty": 0.0
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "No release-time gap interpolation was used."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 2
+    },
+    {
+      "mmsi": "525701793",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.3989239397445846,
+      "presence_score": 0.20577433312668772,
+      "forward_consistency": 0.9098098493614615,
+      "forward_error_km": 3.776763910937458,
+      "forward_centroid_consistency": 0.8945476787727281,
+      "forward_shape_consistency": 0.9284636134143578,
+      "forward_shape_error_km": 3.082317829697227,
+      "data_quality": 1.0,
+      "release_position_interpolated": true,
+      "interpolation_gap_hours": 1.0,
+      "interpolation_score_penalty": 0.015,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "no_significant_gap",
+      "significant_gaps": 0,
+      "gaps_with_local_peer_reception": 0,
+      "silence_interpretation": "No gap exceeded the source-aware threshold.",
+      "best_match_time_utc": "2026-09-15T03:00:00Z",
+      "motion_state": "stationary_or_anchored",
+      "track_bearing_deg": null,
+      "track_span_km": 0.0,
+      "track_span_hours": 21.0,
+      "implied_speed_knots": 0.0,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "The received positions do not support a reliable movement direction.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.20577433312668772
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.9098098493614615
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 1.0
+        },
+        "bounded_interpolation_penalty": 0.015
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 3
+    },
+    {
+      "mmsi": "525301746",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.38947646003281056,
+      "presence_score": 0.1097903295439526,
+      "forward_consistency": 0.9404525137183899,
+      "forward_error_km": 3.0644582029315064,
+      "forward_centroid_consistency": 0.929260251263022,
+      "forward_shape_consistency": 0.954131945608284,
+      "forward_shape_error_km": 2.4515349466191254,
+      "data_quality": 0.26590909090909093,
+      "release_position_interpolated": false,
+      "interpolation_gap_hours": 12.0,
+      "interpolation_score_penalty": 0.0,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "vessel_specific_gap_with_peer_coverage",
+      "significant_gaps": 1,
+      "gaps_with_local_peer_reception": 1,
+      "silence_interpretation": "Nearby vessels were still being received during at least one gap. This makes a broad local reception outage less likely, but does not establish intent.",
+      "best_match_time_utc": "2026-09-15T05:00:00Z",
+      "motion_state": "stationary_or_anchored",
+      "track_bearing_deg": 146.31372992285895,
+      "track_span_km": 8.018001189597152,
+      "track_span_hours": 19.0,
+      "implied_speed_knots": 0.22786180486521404,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "Track direction is available for visual consistency review; it does not add suspicion.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.1097903295439526
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.9404525137183899
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 0.26590909090909093
+        },
+        "bounded_interpolation_penalty": 0.0
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "No release-time gap interpolation was used."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 4
+    },
+    {
+      "mmsi": "412438950",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.364866499635433,
+      "presence_score": 0.2764663339551795,
+      "forward_consistency": 0.44452503990021064,
+      "forward_error_km": 10.637515026084477,
+      "forward_centroid_consistency": 0.41311184095825015,
+      "forward_shape_consistency": 0.4829189497181622,
+      "forward_shape_error_km": 9.652565721520297,
+      "data_quality": 1.0,
+      "release_position_interpolated": true,
+      "interpolation_gap_hours": 1.0,
+      "interpolation_score_penalty": 0.015,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "no_significant_gap",
+      "significant_gaps": 0,
+      "gaps_with_local_peer_reception": 0,
+      "silence_interpretation": "No gap exceeded the source-aware threshold.",
+      "best_match_time_utc": "2026-09-14T16:24:45Z",
+      "motion_state": "stationary_or_anchored",
+      "track_bearing_deg": 0.0,
+      "track_span_km": 1.1119508023353262,
+      "track_span_hours": 21.0,
+      "implied_speed_knots": 0.028590733372809988,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "Track direction is available for visual consistency review; it does not add suspicion.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.2764663339551795
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.44452503990021064
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 1.0
+        },
+        "bounded_interpolation_penalty": 0.015
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 5
+    },
+    {
+      "mmsi": "525018427",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.33382965894149425,
+      "presence_score": 0.2750271309066511,
+      "forward_consistency": 0.3689118423570903,
+      "forward_error_km": 11.47527136914758,
+      "forward_centroid_consistency": 0.3574483236496913,
+      "forward_shape_consistency": 0.38292280966613346,
+      "forward_shape_error_km": 11.084673968425353,
+      "data_quality": 1.0,
+      "release_position_interpolated": true,
+      "interpolation_gap_hours": 1.0,
+      "interpolation_score_penalty": 0.015,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "no_significant_gap",
+      "significant_gaps": 0,
+      "gaps_with_local_peer_reception": 0,
+      "silence_interpretation": "No gap exceeded the source-aware threshold.",
+      "best_match_time_utc": "2026-09-14T16:24:45Z",
+      "motion_state": "stationary_or_anchored",
+      "track_bearing_deg": null,
+      "track_span_km": 0.0,
+      "track_span_hours": 21.0,
+      "implied_speed_knots": 0.0,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "The received positions do not support a reliable movement direction.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.2750271309066511
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.3689118423570903
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 1.0
+        },
+        "bounded_interpolation_penalty": 0.015
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 6
+    },
+    {
+      "mmsi": "525103010",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.30768171534743,
+      "presence_score": 0.20898066942249688,
+      "forward_consistency": 0.39435586791264177,
+      "forward_error_km": 11.26196471152836,
+      "forward_centroid_consistency": 0.37125214110655114,
+      "forward_shape_consistency": 0.4225937562311968,
+      "forward_shape_error_km": 10.50009644794336,
+      "data_quality": 1.0,
+      "release_position_interpolated": true,
+      "interpolation_gap_hours": 1.0,
+      "interpolation_score_penalty": 0.015,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "no_significant_gap",
+      "significant_gaps": 0,
+      "gaps_with_local_peer_reception": 0,
+      "silence_interpretation": "No gap exceeded the source-aware threshold.",
+      "best_match_time_utc": "2026-09-14T16:24:45Z",
+      "motion_state": "stationary_or_anchored",
+      "track_bearing_deg": null,
+      "track_span_km": 0.0,
+      "track_span_hours": 21.0,
+      "implied_speed_knots": 0.0,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "The received positions do not support a reliable movement direction.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.20898066942249688
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.39435586791264177
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 1.0
+        },
+        "bounded_interpolation_penalty": 0.015
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 7
+    },
+    {
+      "mmsi": "525019679",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.302746455499125,
+      "presence_score": 0.2824867330172863,
+      "forward_consistency": 0.32279240769385475,
+      "forward_error_km": 12.230776208476806,
+      "forward_centroid_consistency": 0.31077484049748066,
+      "forward_shape_consistency": 0.33748054537831196,
+      "forward_shape_error_km": 11.791508340656748,
+      "data_quality": 1.0,
+      "release_position_interpolated": true,
+      "interpolation_gap_hours": 1.0,
+      "interpolation_score_penalty": 0.015,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "no_significant_gap",
+      "significant_gaps": 0,
+      "gaps_with_local_peer_reception": 0,
+      "silence_interpretation": "No gap exceeded the source-aware threshold.",
+      "best_match_time_utc": "2026-09-14T16:00:00Z",
+      "motion_state": "stationary_or_anchored",
+      "track_bearing_deg": 153.44282637172648,
+      "track_span_km": 4.972445004589282,
+      "track_span_hours": 21.0,
+      "implied_speed_knots": 0.12785264333511473,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "Track direction is available for visual consistency review; it does not add suspicion.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.2824867330172863
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.32279240769385475
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 1.0
+        },
+        "bounded_interpolation_penalty": 0.015
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 8
+    },
+    {
+      "mmsi": "525104079",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.2910030462703577,
+      "presence_score": 0.2943748477007388,
+      "forward_consistency": 0.23524220008737853,
+      "forward_error_km": 13.756349083112193,
+      "forward_centroid_consistency": 0.2279987444129853,
+      "forward_shape_consistency": 0.24409531257830358,
+      "forward_shape_error_km": 13.435220600876082,
+      "data_quality": 1.0,
+      "release_position_interpolated": true,
+      "interpolation_gap_hours": 1.0,
+      "interpolation_score_penalty": 0.015,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "no_significant_gap",
+      "significant_gaps": 0,
+      "gaps_with_local_peer_reception": 0,
+      "silence_interpretation": "No gap exceeded the source-aware threshold.",
+      "best_match_time_utc": "2026-09-14T16:24:45Z",
+      "motion_state": "stationary_or_anchored",
+      "track_bearing_deg": null,
+      "track_span_km": 0.0,
+      "track_span_hours": 21.0,
+      "implied_speed_knots": 0.0,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "The received positions do not support a reliable movement direction.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.2943748477007388
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.23524220008737853
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 1.0
+        },
+        "bounded_interpolation_penalty": 0.015
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 9
+    },
+    {
+      "mmsi": "352978276",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.2848221984772071,
+      "presence_score": 0.20789277704799503,
+      "forward_consistency": 0.33870292775202454,
+      "forward_error_km": 12.063149987162024,
+      "forward_centroid_consistency": 0.32082105311541836,
+      "forward_shape_consistency": 0.3605585523078765,
+      "forward_shape_error_km": 11.426850712830767,
+      "data_quality": 1.0,
+      "release_position_interpolated": true,
+      "interpolation_gap_hours": 1.0,
+      "interpolation_score_penalty": 0.015,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "no_significant_gap",
+      "significant_gaps": 0,
+      "gaps_with_local_peer_reception": 0,
+      "silence_interpretation": "No gap exceeded the source-aware threshold.",
+      "best_match_time_utc": "2026-09-14T16:24:45Z",
+      "motion_state": "stationary_or_anchored",
+      "track_bearing_deg": null,
+      "track_span_km": 0.0,
+      "track_span_hours": 21.0,
+      "implied_speed_knots": 0.0,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "The received positions do not support a reliable movement direction.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.20789277704799503
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.33870292775202454
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 1.0
+        },
+        "bounded_interpolation_penalty": 0.015
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 10
+    },
+    {
+      "mmsi": "525400301",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.2848221984772071,
+      "presence_score": 0.20789277704799503,
+      "forward_consistency": 0.33870292775202454,
+      "forward_error_km": 12.063149987162024,
+      "forward_centroid_consistency": 0.32082105311541836,
+      "forward_shape_consistency": 0.3605585523078765,
+      "forward_shape_error_km": 11.426850712830767,
+      "data_quality": 1.0,
+      "release_position_interpolated": true,
+      "interpolation_gap_hours": 1.0,
+      "interpolation_score_penalty": 0.015,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "no_significant_gap",
+      "significant_gaps": 0,
+      "gaps_with_local_peer_reception": 0,
+      "silence_interpretation": "No gap exceeded the source-aware threshold.",
+      "best_match_time_utc": "2026-09-14T16:24:45Z",
+      "motion_state": "stationary_or_anchored",
+      "track_bearing_deg": null,
+      "track_span_km": 0.0,
+      "track_span_hours": 21.0,
+      "implied_speed_knots": 0.0,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "The received positions do not support a reliable movement direction.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.20789277704799503
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.33870292775202454
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 1.0
+        },
+        "bounded_interpolation_penalty": 0.015
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 11
+    },
+    {
+      "mmsi": "525300484",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.2804567644650848,
+      "presence_score": 0.25057426972340663,
+      "forward_consistency": 0.2691022902930278,
+      "forward_error_km": 13.186427040039998,
+      "forward_centroid_consistency": 0.2570583913318303,
+      "forward_shape_consistency": 0.2838226112456026,
+      "forward_shape_error_km": 12.696611676557295,
+      "data_quality": 1.0,
+      "release_position_interpolated": true,
+      "interpolation_gap_hours": 1.0,
+      "interpolation_score_penalty": 0.015,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "no_significant_gap",
+      "significant_gaps": 0,
+      "gaps_with_local_peer_reception": 0,
+      "silence_interpretation": "No gap exceeded the source-aware threshold.",
+      "best_match_time_utc": "2026-09-14T16:24:45Z",
+      "motion_state": "stationary_or_anchored",
+      "track_bearing_deg": null,
+      "track_span_km": 0.0,
+      "track_span_hours": 21.0,
+      "implied_speed_knots": 0.0,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "The received positions do not support a reliable movement direction.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.25057426972340663
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.2691022902930278
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 1.0
+        },
+        "bounded_interpolation_penalty": 0.015
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 12
+    },
+    {
+      "mmsi": "525801822",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.2767974493870037,
+      "presence_score": 0.137604654814904,
+      "forward_consistency": 0.6141840689913853,
+      "forward_error_km": 8.351168517103472,
+      "forward_centroid_consistency": 0.5799232586412413,
+      "forward_shape_consistency": 0.6560583927526725,
+      "forward_shape_error_km": 7.345250269670703,
+      "data_quality": 0.2727272727272727,
+      "release_position_interpolated": true,
+      "interpolation_gap_hours": 1.0,
+      "interpolation_score_penalty": 0.015,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "no_significant_gap",
+      "significant_gaps": 0,
+      "gaps_with_local_peer_reception": 0,
+      "silence_interpretation": "No gap exceeded the source-aware threshold.",
+      "best_match_time_utc": "2026-09-14T18:00:00Z",
+      "motion_state": "slow_or_manoeuvring",
+      "track_bearing_deg": 5.194382648231169,
+      "track_span_km": 12.281899076943176,
+      "track_span_hours": 5.0,
+      "implied_speed_knots": 1.3263389931904077,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "Track direction is available for visual consistency review; it does not add suspicion.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.137604654814904
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.6141840689913853
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 0.2727272727272727
+        },
+        "bounded_interpolation_penalty": 0.015
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 13
+    },
+    {
+      "mmsi": "525001015",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.2723229492668326,
+      "presence_score": 0.29320360080362307,
+      "forward_consistency": 0.19015242206209979,
+      "forward_error_km": 15.118335012032938,
+      "forward_centroid_consistency": 0.16768691016793916,
+      "forward_shape_consistency": 0.21761026993274052,
+      "forward_shape_error_km": 13.971626419200234,
+      "data_quality": 1.0,
+      "release_position_interpolated": true,
+      "interpolation_gap_hours": 1.0,
+      "interpolation_score_penalty": 0.015,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "no_significant_gap",
+      "significant_gaps": 0,
+      "gaps_with_local_peer_reception": 0,
+      "silence_interpretation": "No gap exceeded the source-aware threshold.",
+      "best_match_time_utc": "2026-09-14T16:24:45Z",
+      "motion_state": "stationary_or_anchored",
+      "track_bearing_deg": null,
+      "track_span_km": 0.0,
+      "track_span_hours": 21.0,
+      "implied_speed_knots": 0.0,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "The received positions do not support a reliable movement direction.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.29320360080362307
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.19015242206209979
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 1.0
+        },
+        "bounded_interpolation_penalty": 0.015
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 14
+    },
+    {
+      "mmsi": "525001070",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.2723229492668326,
+      "presence_score": 0.29320360080362307,
+      "forward_consistency": 0.19015242206209979,
+      "forward_error_km": 15.118335012032938,
+      "forward_centroid_consistency": 0.16768691016793916,
+      "forward_shape_consistency": 0.21761026993274052,
+      "forward_shape_error_km": 13.971626419200234,
+      "data_quality": 1.0,
+      "release_position_interpolated": true,
+      "interpolation_gap_hours": 1.0,
+      "interpolation_score_penalty": 0.015,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "no_significant_gap",
+      "significant_gaps": 0,
+      "gaps_with_local_peer_reception": 0,
+      "silence_interpretation": "No gap exceeded the source-aware threshold.",
+      "best_match_time_utc": "2026-09-14T16:24:45Z",
+      "motion_state": "stationary_or_anchored",
+      "track_bearing_deg": null,
+      "track_span_km": 0.0,
+      "track_span_hours": 21.0,
+      "implied_speed_knots": 0.0,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "The received positions do not support a reliable movement direction.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.29320360080362307
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.19015242206209979
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 1.0
+        },
+        "bounded_interpolation_penalty": 0.015
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 15
+    },
+    {
+      "mmsi": "525110418",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.27099468761770606,
+      "presence_score": 0.285501963081185,
+      "forward_consistency": 0.1974215198076359,
+      "forward_error_km": 14.80926812958699,
+      "forward_centroid_consistency": 0.18025298798759343,
+      "forward_shape_consistency": 0.2184052809210211,
+      "forward_shape_error_km": 13.95491187669736,
+      "data_quality": 1.0,
+      "release_position_interpolated": true,
+      "interpolation_gap_hours": 1.0,
+      "interpolation_score_penalty": 0.015,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "no_significant_gap",
+      "significant_gaps": 0,
+      "gaps_with_local_peer_reception": 0,
+      "silence_interpretation": "No gap exceeded the source-aware threshold.",
+      "best_match_time_utc": "2026-09-14T16:24:45Z",
+      "motion_state": "stationary_or_anchored",
+      "track_bearing_deg": 89.99990661036651,
+      "track_span_km": 1.1119944048405215,
+      "track_span_hours": 21.0,
+      "implied_speed_knots": 0.028591854490397032,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "Track direction is available for visual consistency review; it does not add suspicion.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.285501963081185
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.1974215198076359
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 1.0
+        },
+        "bounded_interpolation_penalty": 0.015
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 16
+    },
+    {
+      "mmsi": "525121030",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.27099468761770606,
+      "presence_score": 0.285501963081185,
+      "forward_consistency": 0.1974215198076359,
+      "forward_error_km": 14.80926812958699,
+      "forward_centroid_consistency": 0.18025298798759343,
+      "forward_shape_consistency": 0.2184052809210211,
+      "forward_shape_error_km": 13.95491187669736,
+      "data_quality": 1.0,
+      "release_position_interpolated": true,
+      "interpolation_gap_hours": 1.0,
+      "interpolation_score_penalty": 0.015,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "no_significant_gap",
+      "significant_gaps": 0,
+      "gaps_with_local_peer_reception": 0,
+      "silence_interpretation": "No gap exceeded the source-aware threshold.",
+      "best_match_time_utc": "2026-09-14T16:24:45Z",
+      "motion_state": "stationary_or_anchored",
+      "track_bearing_deg": null,
+      "track_span_km": 0.0,
+      "track_span_hours": 21.0,
+      "implied_speed_knots": 0.0,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "The received positions do not support a reliable movement direction.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.285501963081185
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.1974215198076359
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 1.0
+        },
+        "bounded_interpolation_penalty": 0.015
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 17
+    },
+    {
+      "mmsi": "525010142",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.2609834963870386,
+      "presence_score": 0.09186591773528854,
+      "forward_consistency": 0.6174950522461577,
+      "forward_error_km": 9.784490191961506,
+      "forward_centroid_consistency": 0.4733408958790251,
+      "forward_shape_consistency": 0.7936834655837641,
+      "forward_shape_error_km": 5.438476906489657,
+      "data_quality": 0.5,
+      "release_position_interpolated": true,
+      "interpolation_gap_hours": 1.0,
+      "interpolation_score_penalty": 0.015,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "no_significant_gap",
+      "significant_gaps": 0,
+      "gaps_with_local_peer_reception": 0,
+      "silence_interpretation": "No gap exceeded the source-aware threshold.",
+      "best_match_time_utc": "2026-09-14T20:00:00Z",
+      "motion_state": "slow_or_manoeuvring",
+      "track_bearing_deg": 158.96528321678022,
+      "track_span_km": 30.974578479594395,
+      "track_span_hours": 10.0,
+      "implied_speed_knots": 1.6724934384230234,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "Track direction is available for visual consistency review; it does not add suspicion.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.09186591773528854
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.6174950522461577
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 0.5
+        },
+        "bounded_interpolation_penalty": 0.015
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 18
+    },
+    {
+      "mmsi": "525119051",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.2609834963870386,
+      "presence_score": 0.07139475733102954,
+      "forward_consistency": 0.6174950522461577,
+      "forward_error_km": 9.784490191961506,
+      "forward_centroid_consistency": 0.4733408958790251,
+      "forward_shape_consistency": 0.7936834655837641,
+      "forward_shape_error_km": 5.438476906489657,
+      "data_quality": 0.5,
+      "release_position_interpolated": true,
+      "interpolation_gap_hours": 1.0,
+      "interpolation_score_penalty": 0.015,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "no_significant_gap",
+      "significant_gaps": 0,
+      "gaps_with_local_peer_reception": 0,
+      "silence_interpretation": "No gap exceeded the source-aware threshold.",
+      "best_match_time_utc": "2026-09-14T20:00:00Z",
+      "motion_state": "slow_or_manoeuvring",
+      "track_bearing_deg": 156.50466662809674,
+      "track_span_km": 27.886689193038702,
+      "track_span_hours": 10.0,
+      "implied_speed_knots": 1.5057607555636447,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "Track direction is available for visual consistency review; it does not add suspicion.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.07139475733102954
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.6174950522461577
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 0.5
+        },
+        "bounded_interpolation_penalty": 0.015
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 19
+    },
+    {
+      "mmsi": "525701296",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.2609610092309213,
+      "presence_score": 0.2107418952532899,
+      "forward_consistency": 0.3830869625585751,
+      "forward_error_km": 11.474803888968719,
+      "forward_centroid_consistency": 0.35747828551253,
+      "forward_shape_consistency": 0.4143864567259634,
+      "forward_shape_error_km": 10.618964289785774,
+      "data_quality": 0.13636363636363635,
+      "release_position_interpolated": true,
+      "interpolation_gap_hours": 1.0,
+      "interpolation_score_penalty": 0.015,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "no_significant_gap",
+      "significant_gaps": 0,
+      "gaps_with_local_peer_reception": 0,
+      "silence_interpretation": "No gap exceeded the source-aware threshold.",
+      "best_match_time_utc": "2026-09-14T16:00:00Z",
+      "motion_state": "underway",
+      "track_bearing_deg": 265.2378092023102,
+      "track_span_km": 26.77285675390048,
+      "track_span_hours": 2.0,
+      "implied_speed_knots": 7.228093076107041,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "Track direction is available for visual consistency review; it does not add suspicion.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.2107418952532899
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.3830869625585751
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 0.13636363636363635
+        },
+        "bounded_interpolation_penalty": 0.015
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 20
+    },
+    {
+      "mmsi": "525110774",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.25580390426389615,
+      "presence_score": 0.07471260968385657,
+      "forward_consistency": 0.5140526496171649,
+      "forward_error_km": 9.707667540511608,
+      "forward_centroid_consistency": 0.4789109074159012,
+      "forward_shape_consistency": 0.5570036678631539,
+      "forward_shape_error_km": 8.654679781345152,
+      "data_quality": 0.18181818181818182,
+      "release_position_interpolated": false,
+      "interpolation_gap_hours": null,
+      "interpolation_score_penalty": 0.0,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "no_significant_gap",
+      "significant_gaps": 0,
+      "gaps_with_local_peer_reception": 0,
+      "silence_interpretation": "No gap exceeded the source-aware threshold.",
+      "best_match_time_utc": "2026-09-14T18:00:00Z",
+      "motion_state": "underway",
+      "track_bearing_deg": 253.49466882846855,
+      "track_span_km": 31.305498560967727,
+      "track_span_hours": 3.0,
+      "implied_speed_knots": 5.6345389778559625,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "Track direction is available for visual consistency review; it does not add suspicion.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.07471260968385657
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.5140526496171649
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 0.18181818181818182
+        },
+        "bounded_interpolation_penalty": 0.0
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "No release-time gap interpolation was used."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 21
+    },
+    {
+      "mmsi": "525121104",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.2535704405626371,
+      "presence_score": 0.285501963081185,
+      "forward_consistency": 0.19931544762450887,
+      "forward_error_km": 14.80926812958699,
+      "forward_centroid_consistency": 0.18025298798759343,
+      "forward_shape_consistency": 0.22261400940296105,
+      "forward_shape_error_km": 13.867099050274124,
+      "data_quality": 0.6363636363636364,
+      "release_position_interpolated": true,
+      "interpolation_gap_hours": 1.0,
+      "interpolation_score_penalty": 0.015,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "no_significant_gap",
+      "significant_gaps": 0,
+      "gaps_with_local_peer_reception": 0,
+      "silence_interpretation": "No gap exceeded the source-aware threshold.",
+      "best_match_time_utc": "2026-09-14T16:24:45Z",
+      "motion_state": "slow_or_manoeuvring",
+      "track_bearing_deg": 329.0432062327264,
+      "track_span_km": 19.449955995917062,
+      "track_span_hours": 13.0,
+      "implied_speed_knots": 0.8078566205315277,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "Track direction is available for visual consistency review; it does not add suspicion.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.285501963081185
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.19931544762450887
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 0.6363636363636364
+        },
+        "bounded_interpolation_penalty": 0.015
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 22
+    },
+    {
+      "mmsi": "525100960",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.2503680321074267,
+      "presence_score": 0.25391991582118345,
+      "forward_consistency": 0.19496201419625767,
+      "forward_error_km": 14.719218187264508,
+      "forward_centroid_consistency": 0.1840366810247387,
+      "forward_shape_consistency": 0.20831519918366972,
+      "forward_shape_error_km": 14.170179236673714,
+      "data_quality": 0.9545454545454546,
+      "release_position_interpolated": true,
+      "interpolation_gap_hours": 1.0,
+      "interpolation_score_penalty": 0.015,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "no_significant_gap",
+      "significant_gaps": 0,
+      "gaps_with_local_peer_reception": 0,
+      "silence_interpretation": "No gap exceeded the source-aware threshold.",
+      "best_match_time_utc": "2026-09-14T16:24:45Z",
+      "motion_state": "stationary_or_anchored",
+      "track_bearing_deg": 270.00009251693353,
+      "track_span_km": 1.1119980127685274,
+      "track_span_hours": 20.0,
+      "implied_speed_knots": 0.03002154462118054,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "Track direction is available for visual consistency review; it does not add suspicion.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.25391991582118345
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.19496201419625767
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 0.9545454545454546
+        },
+        "bounded_interpolation_penalty": 0.015
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 23
+    },
+    {
+      "mmsi": "525501574",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.24435816648731684,
+      "presence_score": 0.285501963081185,
+      "forward_consistency": 0.20043248970893554,
+      "forward_error_km": 14.80926812958699,
+      "forward_centroid_consistency": 0.18025298798759343,
+      "forward_shape_consistency": 0.22509632514613143,
+      "forward_shape_error_km": 13.815825623130372,
+      "data_quality": 0.44318181818181823,
+      "release_position_interpolated": true,
+      "interpolation_gap_hours": 1.0,
+      "interpolation_score_penalty": 0.015,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "vessel_specific_gap_with_peer_coverage",
+      "significant_gaps": 1,
+      "gaps_with_local_peer_reception": 1,
+      "silence_interpretation": "Nearby vessels were still being received during at least one gap. This makes a broad local reception outage less likely, but does not establish intent.",
+      "best_match_time_utc": "2026-09-14T16:24:45Z",
+      "motion_state": "stationary_or_anchored",
+      "track_bearing_deg": 180.0,
+      "track_span_km": 10.007557221017958,
+      "track_span_hours": 14.0,
+      "implied_speed_knots": 0.38597490053293576,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "Track direction is available for visual consistency review; it does not add suspicion.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.285501963081185
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.20043248970893554
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 0.44318181818181823
+        },
+        "bounded_interpolation_penalty": 0.015
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 24
+    },
+    {
+      "mmsi": "538012154",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.23103393491174684,
+      "presence_score": 0.1832755335425134,
+      "forward_consistency": 0.24344927399017496,
+      "forward_error_km": 13.73788898588099,
+      "forward_centroid_consistency": 0.22890460106255286,
+      "forward_shape_consistency": 0.2612260964572686,
+      "forward_shape_error_km": 13.108135985640615,
+      "data_quality": 1.0,
+      "release_position_interpolated": true,
+      "interpolation_gap_hours": 1.0,
+      "interpolation_score_penalty": 0.015,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "no_significant_gap",
+      "significant_gaps": 0,
+      "gaps_with_local_peer_reception": 0,
+      "silence_interpretation": "No gap exceeded the source-aware threshold.",
+      "best_match_time_utc": "2026-09-14T16:00:00Z",
+      "motion_state": "stationary_or_anchored",
+      "track_bearing_deg": 315.02116539614144,
+      "track_span_km": 1.5719579611984775,
+      "track_span_hours": 21.0,
+      "implied_speed_knots": 0.04041854266169077,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "Track direction is available for visual consistency review; it does not add suspicion.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.1832755335425134
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.24344927399017496
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 1.0
+        },
+        "bounded_interpolation_penalty": 0.015
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 25
+    },
+    {
+      "mmsi": "636022837",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.21934318730477864,
+      "presence_score": 0.14794455138078538,
+      "forward_consistency": 0.2574342101133667,
+      "forward_error_km": 13.530911950828907,
+      "forward_centroid_consistency": 0.23922372432761724,
+      "forward_shape_consistency": 0.27969147051817156,
+      "forward_shape_error_km": 12.770306430015607,
+      "data_quality": 1.0,
+      "release_position_interpolated": true,
+      "interpolation_gap_hours": 1.0,
+      "interpolation_score_penalty": 0.015,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "no_significant_gap",
+      "significant_gaps": 0,
+      "gaps_with_local_peer_reception": 0,
+      "silence_interpretation": "No gap exceeded the source-aware threshold.",
+      "best_match_time_utc": "2026-09-14T16:24:45Z",
+      "motion_state": "stationary_or_anchored",
+      "track_bearing_deg": null,
+      "track_span_km": 0.0,
+      "track_span_hours": 21.0,
+      "implied_speed_knots": 0.0,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "The received positions do not support a reliable movement direction.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.14794455138078538
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.2574342101133667
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 1.0
+        },
+        "bounded_interpolation_penalty": 0.015
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 26
+    },
+    {
+      "mmsi": "667002550",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.21934318730477864,
+      "presence_score": 0.14794455138078538,
+      "forward_consistency": 0.2574342101133667,
+      "forward_error_km": 13.530911950828907,
+      "forward_centroid_consistency": 0.23922372432761724,
+      "forward_shape_consistency": 0.27969147051817156,
+      "forward_shape_error_km": 12.770306430015607,
+      "data_quality": 1.0,
+      "release_position_interpolated": true,
+      "interpolation_gap_hours": 1.0,
+      "interpolation_score_penalty": 0.015,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "no_significant_gap",
+      "significant_gaps": 0,
+      "gaps_with_local_peer_reception": 0,
+      "silence_interpretation": "No gap exceeded the source-aware threshold.",
+      "best_match_time_utc": "2026-09-14T16:24:45Z",
+      "motion_state": "stationary_or_anchored",
+      "track_bearing_deg": 216.8640882714834,
+      "track_span_km": 5.55931039694507,
+      "track_span_hours": 21.0,
+      "implied_speed_knots": 0.14294226054060138,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "Track direction is available for visual consistency review; it does not add suspicion.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.14794455138078538
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.2574342101133667
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 1.0
+        },
+        "bounded_interpolation_penalty": 0.015
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 27
+    },
+    {
+      "mmsi": "525022219",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.21855486595691578,
+      "presence_score": 0.07936404769597494,
+      "forward_consistency": 0.4258979629466875,
+      "forward_error_km": 11.052250518655576,
+      "forward_centroid_consistency": 0.38507606725261856,
+      "forward_shape_consistency": 0.47579139101721624,
+      "forward_shape_error_km": 9.750656346992217,
+      "data_quality": 0.09090909090909091,
+      "release_position_interpolated": false,
+      "interpolation_gap_hours": null,
+      "interpolation_score_penalty": 0.0,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "no_significant_gap",
+      "significant_gaps": 0,
+      "gaps_with_local_peer_reception": 0,
+      "silence_interpretation": "No gap exceeded the source-aware threshold.",
+      "best_match_time_utc": "2026-09-14T15:00:00Z",
+      "motion_state": "underway",
+      "track_bearing_deg": 348.69849795878196,
+      "track_span_km": 5.669694049193703,
+      "track_span_hours": 1.0,
+      "implied_speed_knots": 3.0613898753745694,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "Track direction is available for visual consistency review; it does not add suspicion.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.07936404769597494
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.4258979629466875
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 0.09090909090909091
+        },
+        "bounded_interpolation_penalty": 0.0
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "No release-time gap interpolation was used."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 28
+    },
+    {
+      "mmsi": "525121110",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.21214505852246934,
+      "presence_score": 0.1734714409925192,
+      "forward_consistency": 0.20433941494145946,
+      "forward_error_km": 14.710117950324458,
+      "forward_centroid_consistency": 0.18442214340948207,
+      "forward_shape_consistency": 0.22868274681387624,
+      "forward_shape_error_km": 13.742405593447735,
+      "data_quality": 1.0,
+      "release_position_interpolated": true,
+      "interpolation_gap_hours": 1.0,
+      "interpolation_score_penalty": 0.015,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "no_significant_gap",
+      "significant_gaps": 0,
+      "gaps_with_local_peer_reception": 0,
+      "silence_interpretation": "No gap exceeded the source-aware threshold.",
+      "best_match_time_utc": "2026-09-14T16:24:45Z",
+      "motion_state": "stationary_or_anchored",
+      "track_bearing_deg": null,
+      "track_span_km": 0.0,
+      "track_span_hours": 21.0,
+      "implied_speed_knots": 0.0,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "The received positions do not support a reliable movement direction.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.1734714409925192
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.20433941494145946
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 1.0
+        },
+        "bounded_interpolation_penalty": 0.015
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 29
+    },
+    {
+      "mmsi": "525901595",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.21214505852246934,
+      "presence_score": 0.1734714409925192,
+      "forward_consistency": 0.20433941494145946,
+      "forward_error_km": 14.710117950324458,
+      "forward_centroid_consistency": 0.18442214340948207,
+      "forward_shape_consistency": 0.22868274681387624,
+      "forward_shape_error_km": 13.742405593447735,
+      "data_quality": 1.0,
+      "release_position_interpolated": true,
+      "interpolation_gap_hours": 1.0,
+      "interpolation_score_penalty": 0.015,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "no_significant_gap",
+      "significant_gaps": 0,
+      "gaps_with_local_peer_reception": 0,
+      "silence_interpretation": "No gap exceeded the source-aware threshold.",
+      "best_match_time_utc": "2026-09-14T16:24:45Z",
+      "motion_state": "stationary_or_anchored",
+      "track_bearing_deg": null,
+      "track_span_km": 0.0,
+      "track_span_hours": 21.0,
+      "implied_speed_knots": 0.0,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "The received positions do not support a reliable movement direction.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.1734714409925192
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.20433941494145946
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 1.0
+        },
+        "bounded_interpolation_penalty": 0.015
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 30
+    },
+    {
+      "mmsi": "563100400",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.20368005656297267,
+      "presence_score": 0.17216944415103683,
+      "forward_consistency": 0.3888708238851603,
+      "forward_error_km": 11.355572802018058,
+      "forward_centroid_consistency": 0.3651619498870894,
+      "forward_shape_consistency": 0.4178483365494692,
+      "forward_shape_error_km": 10.56870394941091,
+      "data_quality": 0.2363636363636364,
+      "release_position_interpolated": true,
+      "interpolation_gap_hours": 1.0,
+      "interpolation_score_penalty": 0.015,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "vessel_specific_gap_with_peer_coverage",
+      "significant_gaps": 1,
+      "gaps_with_local_peer_reception": 1,
+      "silence_interpretation": "Nearby vessels were still being received during at least one gap. This makes a broad local reception outage less likely, but does not establish intent.",
+      "best_match_time_utc": "2026-09-14T18:00:00Z",
+      "motion_state": "stationary_or_anchored",
+      "track_bearing_deg": 319.40141446486473,
+      "track_span_km": 10.25134657025939,
+      "track_span_hours": 21.0,
+      "implied_speed_knots": 0.2635849678663835,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "Track direction is available for visual consistency review; it does not add suspicion.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.17216944415103683
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.3888708238851603
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 0.2363636363636364
+        },
+        "bounded_interpolation_penalty": 0.015
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 31
+    },
+    {
+      "mmsi": "357591000",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.1997220538310578,
+      "presence_score": 0.13928205646563602,
+      "forward_consistency": 0.22029230693739493,
+      "forward_error_km": 14.405005727412028,
+      "forward_centroid_consistency": 0.19767589479713255,
+      "forward_shape_consistency": 0.24793458844216001,
+      "forward_shape_error_km": 13.360672193334338,
+      "data_quality": 1.0,
+      "release_position_interpolated": true,
+      "interpolation_gap_hours": 1.0,
+      "interpolation_score_penalty": 0.015,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "no_significant_gap",
+      "significant_gaps": 0,
+      "gaps_with_local_peer_reception": 0,
+      "silence_interpretation": "No gap exceeded the source-aware threshold.",
+      "best_match_time_utc": "2026-09-14T16:24:45Z",
+      "motion_state": "stationary_or_anchored",
+      "track_bearing_deg": 296.5733541216056,
+      "track_span_km": 2.4856938889811575,
+      "track_span_hours": 21.0,
+      "implied_speed_knots": 0.06391272984112818,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "Track direction is available for visual consistency review; it does not add suspicion.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.13928205646563602
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.22029230693739493
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 1.0
+        },
+        "bounded_interpolation_penalty": 0.015
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 32
+    },
+    {
+      "mmsi": "525500348",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.19744848428721218,
+      "presence_score": 0.24050425873149486,
+      "forward_consistency": 0.07542785496222507,
+      "forward_error_km": 19.737690037346745,
+      "forward_centroid_consistency": 0.047664628951131854,
+      "forward_shape_consistency": 0.10936068675356123,
+      "forward_shape_error_km": 16.830843332254926,
+      "data_quality": 1.0,
+      "release_position_interpolated": true,
+      "interpolation_gap_hours": 1.0,
+      "interpolation_score_penalty": 0.015,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "no_significant_gap",
+      "significant_gaps": 0,
+      "gaps_with_local_peer_reception": 0,
+      "silence_interpretation": "No gap exceeded the source-aware threshold.",
+      "best_match_time_utc": "2026-09-14T16:24:45Z",
+      "motion_state": "stationary_or_anchored",
+      "track_bearing_deg": 0.0,
+      "track_span_km": 1.1119508023353262,
+      "track_span_hours": 21.0,
+      "implied_speed_knots": 0.028590733372809988,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "Track direction is available for visual consistency review; it does not add suspicion.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.24050425873149486
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.07542785496222507
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 1.0
+        },
+        "bounded_interpolation_penalty": 0.015
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 33
+    },
+    {
+      "mmsi": "525019417",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.18234657995249948,
+      "presence_score": 0.13183035907970017,
+      "forward_consistency": 0.25187243341938814,
+      "forward_error_km": 13.679585884513967,
+      "forward_centroid_consistency": 0.23178119342004047,
+      "forward_shape_consistency": 0.2764283934185909,
+      "forward_shape_error_km": 12.828984516196275,
+      "data_quality": 0.18181818181818182,
+      "release_position_interpolated": false,
+      "interpolation_gap_hours": null,
+      "interpolation_score_penalty": 0.0,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "no_significant_gap",
+      "significant_gaps": 0,
+      "gaps_with_local_peer_reception": 0,
+      "silence_interpretation": "No gap exceeded the source-aware threshold.",
+      "best_match_time_utc": "2026-09-14T18:00:00Z",
+      "motion_state": "underway",
+      "track_bearing_deg": 344.7487190282587,
+      "track_span_km": 25.35598361448595,
+      "track_span_hours": 3.0,
+      "implied_speed_knots": 4.563711953651179,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "Track direction is available for visual consistency review; it does not add suspicion.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.13183035907970017
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.25187243341938814
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 0.18181818181818182
+        },
+        "bounded_interpolation_penalty": 0.0
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "No release-time gap interpolation was used."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 34
+    },
+    {
+      "mmsi": "525200182",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.1677034445508228,
+      "presence_score": 0.24050425873149486,
+      "forward_consistency": 0.07805389198488792,
+      "forward_error_km": 19.737690037346745,
+      "forward_centroid_consistency": 0.047664628951131854,
+      "forward_shape_consistency": 0.11519632458170088,
+      "forward_shape_error_km": 16.631988209335105,
+      "data_quality": 0.38409090909090915,
+      "release_position_interpolated": true,
+      "interpolation_gap_hours": 1.0,
+      "interpolation_score_penalty": 0.015,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "vessel_specific_gap_with_peer_coverage",
+      "significant_gaps": 4,
+      "gaps_with_local_peer_reception": 4,
+      "silence_interpretation": "Nearby vessels were still being received during at least one gap. This makes a broad local reception outage less likely, but does not establish intent.",
+      "best_match_time_utc": "2026-09-14T16:24:45Z",
+      "motion_state": "stationary_or_anchored",
+      "track_bearing_deg": 314.99882953773124,
+      "track_span_km": 1.57257055416699,
+      "track_span_hours": 21.0,
+      "implied_speed_knots": 0.040434293792219224,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "Track direction is available for visual consistency review; it does not add suspicion.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.24050425873149486
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.07805389198488792
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 0.38409090909090915
+        },
+        "bounded_interpolation_penalty": 0.015
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 35
+    },
+    {
+      "mmsi": "525801719",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.15238465302584547,
+      "presence_score": 0.14636584935083619,
+      "forward_consistency": 0.20016313516175938,
+      "forward_error_km": 14.375459466115137,
+      "forward_centroid_consistency": 0.1989935066163232,
+      "forward_shape_consistency": 0.20159268116173687,
+      "forward_shape_error_km": 14.317568719662525,
+      "data_quality": 0.13636363636363635,
+      "release_position_interpolated": true,
+      "interpolation_gap_hours": 1.0,
+      "interpolation_score_penalty": 0.015,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "no_significant_gap",
+      "significant_gaps": 0,
+      "gaps_with_local_peer_reception": 0,
+      "silence_interpretation": "No gap exceeded the source-aware threshold.",
+      "best_match_time_utc": "2026-09-14T16:00:00Z",
+      "motion_state": "underway",
+      "track_bearing_deg": 148.00068218981255,
+      "track_span_km": 10.489376864035755,
+      "track_span_hours": 2.0,
+      "implied_speed_knots": 2.831905200873584,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "Track direction is available for visual consistency review; it does not add suspicion.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.14636584935083619
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.20016313516175938
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 0.13636363636363635
+        },
+        "bounded_interpolation_penalty": 0.015
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 36
+    },
+    {
+      "mmsi": "525012114",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.1437364102764141,
+      "presence_score": 0.1494293153715127,
+      "forward_consistency": 0.06637571705520526,
+      "forward_error_km": 20.5529046160597,
+      "forward_centroid_consistency": 0.036876860873646,
+      "forward_shape_consistency": 0.10242987461044434,
+      "forward_shape_error_km": 17.077992817642468,
+      "data_quality": 1.0,
+      "release_position_interpolated": true,
+      "interpolation_gap_hours": 1.0,
+      "interpolation_score_penalty": 0.015,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "no_significant_gap",
+      "significant_gaps": 0,
+      "gaps_with_local_peer_reception": 0,
+      "silence_interpretation": "No gap exceeded the source-aware threshold.",
+      "best_match_time_utc": "2026-09-14T16:24:45Z",
+      "motion_state": "stationary_or_anchored",
+      "track_bearing_deg": null,
+      "track_span_km": 0.0,
+      "track_span_hours": 21.0,
+      "implied_speed_knots": 0.0,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "The received positions do not support a reliable movement direction.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.1494293153715127
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.06637571705520526
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 1.0
+        },
+        "bounded_interpolation_penalty": 0.015
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 37
+    },
+    {
+      "mmsi": "525110959",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.1437364102764141,
+      "presence_score": 0.1494293153715127,
+      "forward_consistency": 0.06637571705520526,
+      "forward_error_km": 20.5529046160597,
+      "forward_centroid_consistency": 0.036876860873646,
+      "forward_shape_consistency": 0.10242987461044434,
+      "forward_shape_error_km": 17.077992817642468,
+      "data_quality": 1.0,
+      "release_position_interpolated": true,
+      "interpolation_gap_hours": 1.0,
+      "interpolation_score_penalty": 0.015,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "no_significant_gap",
+      "significant_gaps": 0,
+      "gaps_with_local_peer_reception": 0,
+      "silence_interpretation": "No gap exceeded the source-aware threshold.",
+      "best_match_time_utc": "2026-09-14T16:24:45Z",
+      "motion_state": "stationary_or_anchored",
+      "track_bearing_deg": null,
+      "track_span_km": 0.0,
+      "track_span_hours": 21.0,
+      "implied_speed_knots": 0.0,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "The received positions do not support a reliable movement direction.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.1494293153715127
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.06637571705520526
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 1.0
+        },
+        "bounded_interpolation_penalty": 0.015
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 38
+    },
+    {
+      "mmsi": "525100984",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.1389159155198797,
+      "presence_score": 0.1494293153715127,
+      "forward_consistency": 0.06568811652750559,
+      "forward_error_km": 20.5529046160597,
+      "forward_centroid_consistency": 0.036876860873646,
+      "forward_shape_consistency": 0.1009018734377784,
+      "forward_shape_error_km": 17.134225060354908,
+      "data_quality": 0.9090909090909091,
+      "release_position_interpolated": true,
+      "interpolation_gap_hours": 1.0,
+      "interpolation_score_penalty": 0.015,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "no_significant_gap",
+      "significant_gaps": 0,
+      "gaps_with_local_peer_reception": 0,
+      "silence_interpretation": "No gap exceeded the source-aware threshold.",
+      "best_match_time_utc": "2026-09-14T16:24:45Z",
+      "motion_state": "stationary_or_anchored",
+      "track_bearing_deg": 89.99990748306647,
+      "track_span_km": 1.1119980127669473,
+      "track_span_hours": 19.0,
+      "implied_speed_knots": 0.031601625916987244,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "Track direction is available for visual consistency review; it does not add suspicion.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.1494293153715127
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.06568811652750559
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 0.9090909090909091
+        },
+        "bounded_interpolation_penalty": 0.015
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 39
+    },
+    {
+      "mmsi": "525010388",
+      "vessel_name": "UNKNOWN",
+      "total_score": 0.13550908386550464,
+      "presence_score": 0.1494293153715127,
+      "forward_consistency": 0.06143240102793157,
+      "forward_error_km": 20.5529046160597,
+      "forward_centroid_consistency": 0.036876860873646,
+      "forward_shape_consistency": 0.09144472788316947,
+      "forward_shape_error_km": 17.49796077196894,
+      "data_quality": 0.875,
+      "release_position_interpolated": true,
+      "interpolation_gap_hours": 1.0,
+      "interpolation_score_penalty": 0.015,
+      "gap_threshold_minutes": 90.0,
+      "silence_classification": "vessel_specific_gap_with_peer_coverage",
+      "significant_gaps": 1,
+      "gaps_with_local_peer_reception": 1,
+      "silence_interpretation": "Nearby vessels were still being received during at least one gap. This makes a broad local reception outage less likely, but does not establish intent.",
+      "best_match_time_utc": "2026-09-14T16:24:45Z",
+      "motion_state": "stationary_or_anchored",
+      "track_bearing_deg": null,
+      "track_span_km": 0.0,
+      "track_span_hours": 21.0,
+      "implied_speed_knots": 0.0,
+      "identity_status": "mmsi_only_unverified",
+      "direction_use": "analyst_context_only",
+      "direction_interpretation": "The received positions do not support a reliable movement direction.",
+      "score_components": {
+        "space_time_presence": {
+          "weight": 0.55,
+          "value": 0.1494293153715127
+        },
+        "forward_replay_consistency": {
+          "weight": 0.4,
+          "value": 0.06143240102793157
+        },
+        "ais_data_quality": {
+          "weight": 0.05,
+          "value": 0.875
+        },
+        "bounded_interpolation_penalty": 0.015
+      },
+      "evidence": [
+        "Space-time proximity to the inferred release distribution.",
+        "Forward particle-cloud consistency with both the slick centroid and mapped shape.",
+        "Forward replay sampled particle-local Copernicus surface currents.",
+        "Forward particle paths intersecting supplied land polygons were rejected.",
+        "Coverage-aware AIS gap classification using simultaneous nearby peer reception.",
+        "Vessel movement direction is preserved as analyst context and contributes no suspicion bonus.",
+        "Release-time position was linearly interpolated inside a bounded AIS gap and penalized."
+      ],
+      "limitations": [
+        "AIS identity and reception completeness require independent verification.",
+        "Interpolated positions are hypotheses, not received AIS messages.",
+        "Shape matching uses a point-release particle cloud and a robust symmetric nearest-neighbour distance.",
+        "AIS gaps do not receive a deliberate-behaviour bonus."
+      ],
+      "rank": 40
+    }
+  ],
+  "nomination_assessment": {
+    "decision": "ABSTAIN_INSUFFICIENT_EVIDENCE",
+    "passed": false,
+    "score_margin": 0.009022907590690021,
+    "near_tied_count": 3,
+    "ambiguity_band": 0.02,
+    "failed_gate_ids": [
+      "score_margin"
+    ],
+    "gates": [
+      {
+        "id": "candidate_population",
+        "label": "Comparative population",
+        "passed": true,
+        "observed": 40,
+        "requirement": ">= 2 incident-relevant tracks"
+      },
+      {
+        "id": "top_score",
+        "label": "Minimum evidence score",
+        "passed": true,
+        "observed": 0.4098501490928019,
+        "requirement": ">= 0.40"
+      },
+      {
+        "id": "score_margin",
+        "label": "Candidate separation",
+        "passed": false,
+        "observed": 0.009022907590690021,
+        "requirement": ">= 0.05"
+      },
+      {
+        "id": "track_quality",
+        "label": "AIS track quality",
+        "passed": true,
+        "observed": 0.5795454545454546,
+        "requirement": ">= 0.40"
+      },
+      {
+        "id": "forward_error",
+        "label": "Forward replay error",
+        "passed": true,
+        "observed": 1.277460169141724,
+        "requirement": "<= 8.0 km"
+      }
+    ],
+    "rationale": "The system refused nomination because these gates failed: Candidate separation.",
+    "claim_boundary": "A limited shortlist prioritizes analyst review. It is not proof of identity, discharge, intent, liability or guilt."
+  },
+  "decision": "ABSTAIN_INSUFFICIENT_EVIDENCE",
+  "score_definition": {
+    "space_time_presence_weight": 0.55,
+    "forward_replay_consistency_weight": 0.4,
+    "ais_data_quality_weight": 0.05,
+    "bounded_interpolation_penalty": 0.015,
+    "direction_contribution": 0.0,
+    "ais_silence_contribution": 0.0
+  },
+  "silence_analysis": {
+    "status": "PASS",
+    "method": "local peer-reception coverage proxy",
+    "sampling_interval_minutes": 60.0,
+    "gap_threshold_minutes": 90.0,
+    "peer_radius_km": 50.0,
+    "vessels_analyzed": 40,
+    "vessels_with_significant_gaps": 6,
+    "vessels_with_peer_supported_gaps": 6,
+    "vessels": [
+      {
+        "mmsi": "352978276",
+        "vessel_name": "UNKNOWN",
+        "classification": "no_significant_gap",
+        "significant_gaps": 0,
+        "gaps_with_local_peer_reception": 0,
+        "maximum_gap_minutes": 0.0,
+        "gaps": [],
+        "interpretation": "No gap exceeded the source-aware threshold."
+      },
+      {
+        "mmsi": "357591000",
+        "vessel_name": "UNKNOWN",
+        "classification": "no_significant_gap",
+        "significant_gaps": 0,
+        "gaps_with_local_peer_reception": 0,
+        "maximum_gap_minutes": 0.0,
+        "gaps": [],
+        "interpretation": "No gap exceeded the source-aware threshold."
+      },
+      {
+        "mmsi": "412438950",
+        "vessel_name": "UNKNOWN",
+        "classification": "no_significant_gap",
+        "significant_gaps": 0,
+        "gaps_with_local_peer_reception": 0,
+        "maximum_gap_minutes": 0.0,
+        "gaps": [],
+        "interpretation": "No gap exceeded the source-aware threshold."
+      },
+      {
+        "mmsi": "525001015",
+        "vessel_name": "UNKNOWN",
+        "classification": "no_significant_gap",
+        "significant_gaps": 0,
+        "gaps_with_local_peer_reception": 0,
+        "maximum_gap_minutes": 0.0,
+        "gaps": [],
+        "interpretation": "No gap exceeded the source-aware threshold."
+      },
+      {
+        "mmsi": "525001070",
+        "vessel_name": "UNKNOWN",
+        "classification": "no_significant_gap",
+        "significant_gaps": 0,
+        "gaps_with_local_peer_reception": 0,
+        "maximum_gap_minutes": 0.0,
+        "gaps": [],
+        "interpretation": "No gap exceeded the source-aware threshold."
+      },
+      {
+        "mmsi": "525010142",
+        "vessel_name": "UNKNOWN",
+        "classification": "no_significant_gap",
+        "significant_gaps": 0,
+        "gaps_with_local_peer_reception": 0,
+        "maximum_gap_minutes": 0.0,
+        "gaps": [],
+        "interpretation": "No gap exceeded the source-aware threshold."
+      },
+      {
+        "mmsi": "525010388",
+        "vessel_name": "UNKNOWN",
+        "classification": "vessel_specific_gap_with_peer_coverage",
+        "significant_gaps": 1,
+        "gaps_with_local_peer_reception": 1,
+        "maximum_gap_minutes": 120.0,
+        "gaps": [
+          {
+            "start_utc": "2026-09-14T19:00:00Z",
+            "end_utc": "2026-09-14T21:00:00Z",
+            "duration_minutes": 120.0,
+            "nearby_peer_reports": 33,
+            "nearby_peer_vessels": 33,
+            "local_reception_supported": true
+          }
+        ],
+        "interpretation": "Nearby vessels were still being received during at least one gap. This makes a broad local reception outage less likely, but does not establish intent."
+      },
+      {
+        "mmsi": "525012114",
+        "vessel_name": "UNKNOWN",
+        "classification": "no_significant_gap",
+        "significant_gaps": 0,
+        "gaps_with_local_peer_reception": 0,
+        "maximum_gap_minutes": 0.0,
+        "gaps": [],
+        "interpretation": "No gap exceeded the source-aware threshold."
+      },
+      {
+        "mmsi": "525018427",
+        "vessel_name": "UNKNOWN",
+        "classification": "no_significant_gap",
+        "significant_gaps": 0,
+        "gaps_with_local_peer_reception": 0,
+        "maximum_gap_minutes": 0.0,
+        "gaps": [],
+        "interpretation": "No gap exceeded the source-aware threshold."
+      },
+      {
+        "mmsi": "525019417",
+        "vessel_name": "UNKNOWN",
+        "classification": "no_significant_gap",
+        "significant_gaps": 0,
+        "gaps_with_local_peer_reception": 0,
+        "maximum_gap_minutes": 0.0,
+        "gaps": [],
+        "interpretation": "No gap exceeded the source-aware threshold."
+      },
+      {
+        "mmsi": "525019679",
+        "vessel_name": "UNKNOWN",
+        "classification": "no_significant_gap",
+        "significant_gaps": 0,
+        "gaps_with_local_peer_reception": 0,
+        "maximum_gap_minutes": 0.0,
+        "gaps": [],
+        "interpretation": "No gap exceeded the source-aware threshold."
+      },
+      {
+        "mmsi": "525021455",
+        "vessel_name": "UNKNOWN",
+        "classification": "vessel_specific_gap_with_peer_coverage",
+        "significant_gaps": 1,
+        "gaps_with_local_peer_reception": 1,
+        "maximum_gap_minutes": 180.0,
+        "gaps": [
+          {
+            "start_utc": "2026-09-14T19:00:00Z",
+            "end_utc": "2026-09-14T22:00:00Z",
+            "duration_minutes": 180.0,
+            "nearby_peer_reports": 64,
+            "nearby_peer_vessels": 34,
+            "local_reception_supported": true
+          }
+        ],
+        "interpretation": "Nearby vessels were still being received during at least one gap. This makes a broad local reception outage less likely, but does not establish intent."
+      },
+      {
+        "mmsi": "525022219",
+        "vessel_name": "UNKNOWN",
+        "classification": "no_significant_gap",
+        "significant_gaps": 0,
+        "gaps_with_local_peer_reception": 0,
+        "maximum_gap_minutes": 0.0,
+        "gaps": [],
+        "interpretation": "No gap exceeded the source-aware threshold."
+      },
+      {
+        "mmsi": "525100960",
+        "vessel_name": "UNKNOWN",
+        "classification": "no_significant_gap",
+        "significant_gaps": 0,
+        "gaps_with_local_peer_reception": 0,
+        "maximum_gap_minutes": 0.0,
+        "gaps": [],
+        "interpretation": "No gap exceeded the source-aware threshold."
+      },
+      {
+        "mmsi": "525100984",
+        "vessel_name": "UNKNOWN",
+        "classification": "no_significant_gap",
+        "significant_gaps": 0,
+        "gaps_with_local_peer_reception": 0,
+        "maximum_gap_minutes": 0.0,
+        "gaps": [],
+        "interpretation": "No gap exceeded the source-aware threshold."
+      },
+      {
+        "mmsi": "525103010",
+        "vessel_name": "UNKNOWN",
+        "classification": "no_significant_gap",
+        "significant_gaps": 0,
+        "gaps_with_local_peer_reception": 0,
+        "maximum_gap_minutes": 0.0,
+        "gaps": [],
+        "interpretation": "No gap exceeded the source-aware threshold."
+      },
+      {
+        "mmsi": "525104079",
+        "vessel_name": "UNKNOWN",
+        "classification": "no_significant_gap",
+        "significant_gaps": 0,
+        "gaps_with_local_peer_reception": 0,
+        "maximum_gap_minutes": 0.0,
+        "gaps": [],
+        "interpretation": "No gap exceeded the source-aware threshold."
+      },
+      {
+        "mmsi": "525110418",
+        "vessel_name": "UNKNOWN",
+        "classification": "no_significant_gap",
+        "significant_gaps": 0,
+        "gaps_with_local_peer_reception": 0,
+        "maximum_gap_minutes": 0.0,
+        "gaps": [],
+        "interpretation": "No gap exceeded the source-aware threshold."
+      },
+      {
+        "mmsi": "525110774",
+        "vessel_name": "UNKNOWN",
+        "classification": "no_significant_gap",
+        "significant_gaps": 0,
+        "gaps_with_local_peer_reception": 0,
+        "maximum_gap_minutes": 0.0,
+        "gaps": [],
+        "interpretation": "No gap exceeded the source-aware threshold."
+      },
+      {
+        "mmsi": "525110959",
+        "vessel_name": "UNKNOWN",
+        "classification": "no_significant_gap",
+        "significant_gaps": 0,
+        "gaps_with_local_peer_reception": 0,
+        "maximum_gap_minutes": 0.0,
+        "gaps": [],
+        "interpretation": "No gap exceeded the source-aware threshold."
+      },
+      {
+        "mmsi": "525119051",
+        "vessel_name": "UNKNOWN",
+        "classification": "no_significant_gap",
+        "significant_gaps": 0,
+        "gaps_with_local_peer_reception": 0,
+        "maximum_gap_minutes": 0.0,
+        "gaps": [],
+        "interpretation": "No gap exceeded the source-aware threshold."
+      },
+      {
+        "mmsi": "525121006",
+        "vessel_name": "UNKNOWN",
+        "classification": "no_significant_gap",
+        "significant_gaps": 0,
+        "gaps_with_local_peer_reception": 0,
+        "maximum_gap_minutes": 0.0,
+        "gaps": [],
+        "interpretation": "No gap exceeded the source-aware threshold."
+      },
+      {
+        "mmsi": "525121030",
+        "vessel_name": "UNKNOWN",
+        "classification": "no_significant_gap",
+        "significant_gaps": 0,
+        "gaps_with_local_peer_reception": 0,
+        "maximum_gap_minutes": 0.0,
+        "gaps": [],
+        "interpretation": "No gap exceeded the source-aware threshold."
+      },
+      {
+        "mmsi": "525121104",
+        "vessel_name": "UNKNOWN",
+        "classification": "no_significant_gap",
+        "significant_gaps": 0,
+        "gaps_with_local_peer_reception": 0,
+        "maximum_gap_minutes": 0.0,
+        "gaps": [],
+        "interpretation": "No gap exceeded the source-aware threshold."
+      },
+      {
+        "mmsi": "525121110",
+        "vessel_name": "UNKNOWN",
+        "classification": "no_significant_gap",
+        "significant_gaps": 0,
+        "gaps_with_local_peer_reception": 0,
+        "maximum_gap_minutes": 0.0,
+        "gaps": [],
+        "interpretation": "No gap exceeded the source-aware threshold."
+      },
+      {
+        "mmsi": "525200182",
+        "vessel_name": "UNKNOWN",
+        "classification": "vessel_specific_gap_with_peer_coverage",
+        "significant_gaps": 4,
+        "gaps_with_local_peer_reception": 4,
+        "maximum_gap_minutes": 300.0,
+        "gaps": [
+          {
+            "start_utc": "2026-09-14T21:00:00Z",
+            "end_utc": "2026-09-14T23:00:00Z",
+            "duration_minutes": 120.0,
+            "nearby_peer_reports": 31,
+            "nearby_peer_vessels": 31,
+            "local_reception_supported": true
+          },
+          {
+            "start_utc": "2026-09-14T23:00:00Z",
+            "end_utc": "2026-09-15T02:00:00Z",
+            "duration_minutes": 180.0,
+            "nearby_peer_reports": 58,
+            "nearby_peer_vessels": 29,
+            "local_reception_supported": true
+          },
+          {
+            "start_utc": "2026-09-15T02:00:00Z",
+            "end_utc": "2026-09-15T07:00:00Z",
+            "duration_minutes": 300.0,
+            "nearby_peer_reports": 112,
+            "nearby_peer_vessels": 29,
+            "local_reception_supported": true
+          },
+          {
+            "start_utc": "2026-09-15T08:00:00Z",
+            "end_utc": "2026-09-15T11:00:00Z",
+            "duration_minutes": 180.0,
+            "nearby_peer_reports": 54,
+            "nearby_peer_vessels": 28,
+            "local_reception_supported": true
+          }
+        ],
+        "interpretation": "Nearby vessels were still being received during at least one gap. This makes a broad local reception outage less likely, but does not establish intent."
+      },
+      {
+        "mmsi": "525300484",
+        "vessel_name": "UNKNOWN",
+        "classification": "no_significant_gap",
+        "significant_gaps": 0,
+        "gaps_with_local_peer_reception": 0,
+        "maximum_gap_minutes": 0.0,
+        "gaps": [],
+        "interpretation": "No gap exceeded the source-aware threshold."
+      },
+      {
+        "mmsi": "525301746",
+        "vessel_name": "UNKNOWN",
+        "classification": "vessel_specific_gap_with_peer_coverage",
+        "significant_gaps": 1,
+        "gaps_with_local_peer_reception": 1,
+        "maximum_gap_minutes": 720.0,
+        "gaps": [
+          {
+            "start_utc": "2026-09-14T16:00:00Z",
+            "end_utc": "2026-09-15T04:00:00Z",
+            "duration_minutes": 720.0,
+            "nearby_peer_reports": 351,
+            "nearby_peer_vessels": 38,
+            "local_reception_supported": true
+          }
+        ],
+        "interpretation": "Nearby vessels were still being received during at least one gap. This makes a broad local reception outage less likely, but does not establish intent."
+      },
+      {
+        "mmsi": "525400301",
+        "vessel_name": "UNKNOWN",
+        "classification": "no_significant_gap",
+        "significant_gaps": 0,
+        "gaps_with_local_peer_reception": 0,
+        "maximum_gap_minutes": 0.0,
+        "gaps": [],
+        "interpretation": "No gap exceeded the source-aware threshold."
+      },
+      {
+        "mmsi": "525500348",
+        "vessel_name": "UNKNOWN",
+        "classification": "no_significant_gap",
+        "significant_gaps": 0,
+        "gaps_with_local_peer_reception": 0,
+        "maximum_gap_minutes": 0.0,
+        "gaps": [],
+        "interpretation": "No gap exceeded the source-aware threshold."
+      },
+      {
+        "mmsi": "525501574",
+        "vessel_name": "UNKNOWN",
+        "classification": "vessel_specific_gap_with_peer_coverage",
+        "significant_gaps": 1,
+        "gaps_with_local_peer_reception": 1,
+        "maximum_gap_minutes": 180.0,
+        "gaps": [
+          {
+            "start_utc": "2026-09-14T23:00:00Z",
+            "end_utc": "2026-09-15T02:00:00Z",
+            "duration_minutes": 180.0,
+            "nearby_peer_reports": 58,
+            "nearby_peer_vessels": 29,
+            "local_reception_supported": true
+          }
+        ],
+        "interpretation": "Nearby vessels were still being received during at least one gap. This makes a broad local reception outage less likely, but does not establish intent."
+      },
+      {
+        "mmsi": "525701296",
+        "vessel_name": "UNKNOWN",
+        "classification": "no_significant_gap",
+        "significant_gaps": 0,
+        "gaps_with_local_peer_reception": 0,
+        "maximum_gap_minutes": 0.0,
+        "gaps": [],
+        "interpretation": "No gap exceeded the source-aware threshold."
+      },
+      {
+        "mmsi": "525701793",
+        "vessel_name": "UNKNOWN",
+        "classification": "no_significant_gap",
+        "significant_gaps": 0,
+        "gaps_with_local_peer_reception": 0,
+        "maximum_gap_minutes": 0.0,
+        "gaps": [],
+        "interpretation": "No gap exceeded the source-aware threshold."
+      },
+      {
+        "mmsi": "525801719",
+        "vessel_name": "UNKNOWN",
+        "classification": "no_significant_gap",
+        "significant_gaps": 0,
+        "gaps_with_local_peer_reception": 0,
+        "maximum_gap_minutes": 0.0,
+        "gaps": [],
+        "interpretation": "No gap exceeded the source-aware threshold."
+      },
+      {
+        "mmsi": "525801822",
+        "vessel_name": "UNKNOWN",
+        "classification": "no_significant_gap",
+        "significant_gaps": 0,
+        "gaps_with_local_peer_reception": 0,
+        "maximum_gap_minutes": 0.0,
+        "gaps": [],
+        "interpretation": "No gap exceeded the source-aware threshold."
+      },
+      {
+        "mmsi": "525901595",
+        "vessel_name": "UNKNOWN",
+        "classification": "no_significant_gap",
+        "significant_gaps": 0,
+        "gaps_with_local_peer_reception": 0,
+        "maximum_gap_minutes": 0.0,
+        "gaps": [],
+        "interpretation": "No gap exceeded the source-aware threshold."
+      },
+      {
+        "mmsi": "538012154",
+        "vessel_name": "UNKNOWN",
+        "classification": "no_significant_gap",
+        "significant_gaps": 0,
+        "gaps_with_local_peer_reception": 0,
+        "maximum_gap_minutes": 0.0,
+        "gaps": [],
+        "interpretation": "No gap exceeded the source-aware threshold."
+      },
+      {
+        "mmsi": "563100400",
+        "vessel_name": "UNKNOWN",
+        "classification": "vessel_specific_gap_with_peer_coverage",
+        "significant_gaps": 1,
+        "gaps_with_local_peer_reception": 1,
+        "maximum_gap_minutes": 900.0,
+        "gaps": [
+          {
+            "start_utc": "2026-09-14T19:00:00Z",
+            "end_utc": "2026-09-15T10:00:00Z",
+            "duration_minutes": 900.0,
+            "nearby_peer_reports": 408,
+            "nearby_peer_vessels": 36,
+            "local_reception_supported": true
+          }
+        ],
+        "interpretation": "Nearby vessels were still being received during at least one gap. This makes a broad local reception outage less likely, but does not establish intent."
+      },
+      {
+        "mmsi": "636022837",
+        "vessel_name": "UNKNOWN",
+        "classification": "no_significant_gap",
+        "significant_gaps": 0,
+        "gaps_with_local_peer_reception": 0,
+        "maximum_gap_minutes": 0.0,
+        "gaps": [],
+        "interpretation": "No gap exceeded the source-aware threshold."
+      },
+      {
+        "mmsi": "667002550",
+        "vessel_name": "UNKNOWN",
+        "classification": "no_significant_gap",
+        "significant_gaps": 0,
+        "gaps_with_local_peer_reception": 0,
+        "maximum_gap_minutes": 0.0,
+        "gaps": [],
+        "interpretation": "No gap exceeded the source-aware threshold."
+      }
+    ],
+    "safety_rule": "Silence classification never increases the attribution score.",
+    "limitations": [
+      "Peer reception is a coverage proxy, not a calibrated receiver-coverage map.",
+      "A vessel-specific gap can result from equipment, regulation, filtering or data-provider effects.",
+      "Silence is never proof of deliberate disabling, discharge, identity or guilt."
+    ]
+  },
+  "warning": "AIS import output; identity and data completeness require verification, and ranking is not a finding of guilt."
+}

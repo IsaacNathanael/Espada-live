@@ -96,6 +96,7 @@ body[data-page]:not([data-page="watch"]) .briefing h1{font-size:clamp(30px,3.2vw
 h1,h2,h3,p{margin-top:0}
 h1{max-width:760px;margin-bottom:10px;font:700 clamp(32px,4.1vw,58px)/.98 Georgia,serif;color:var(--navy);letter-spacing:-.035em}
 .lede{max-width:760px;margin:0;color:var(--slate);font-size:16px;line-height:1.55}
+.recorded-notice{max-width:760px;margin:12px 0 0;padding:10px 13px;border-left:3px solid #b77924;background:#fff6e7;color:#4a4032;font-size:13px;line-height:1.45}
 .briefing-actions{min-width:390px;text-align:right}
 .info-actions{position:relative;display:flex;justify-content:flex-end;gap:6px;margin-bottom:9px}
 .demo-launch{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:6px 10px;border:1px solid var(--amber);background:var(--amber);color:#fff;font:700 10px/1 "Segoe UI",sans-serif;text-decoration:none;text-transform:uppercase;letter-spacing:.04em}
