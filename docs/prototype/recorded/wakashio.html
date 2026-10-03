@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>ESPADA | Wakashio known-source exercise</title>
+  <link rel="stylesheet" href="styles.css?v=20261003">
+  <link rel="stylesheet" href="demo.css?v=20261003">
+  <link rel="stylesheet" href="wakashio.css?v=20261003">
+</head>
+<body class="demo-body wakashio-body">
+  <header class="demo-masthead">
+    <a class="identity" href="index.html" aria-label="ESPADA live operations">
+      <svg class="identity-mark" viewBox="0 0 44 44" aria-hidden="true"><path d="M22 3 38 12v20L22 41 6 32V12Z"/><path d="m13 26 9-16 9 16-9 8Z"/><path d="M16 24h12M22 10v24"/></svg>
+      <span><b>ESPADA</b><small>Maritime Evidence Operations</small></span>
+    </a>
+    <div class="exercise-label"><span>KNOWN-SOURCE EXERCISE</span><b>Mauritius · 6 August 2020</b><small>Documented spill, controlled comparison</small></div>
+    <div class="demo-boundary"><b>NOT A LIVE INVESTIGATION</b><span>Real satellite image · synthetic comparison traffic</span></div>
+    <a class="return-live" href="index.html">← LIVE OPERATIONS</a>
+  </header>
+
+  <main class="demo-main">
+    <section class="wakashio-intro">
+      <div>
+        <p class="kicker">CASE EXERCISE · WHAT IS REAL, WHAT IS SIMULATED</p>
+        <h1>Can one documented source stand out from plausible traffic?</h1>
+        <p>The oil-spill image and MV Wakashio’s grounding position are historical. Two named offshore routes, the drift forcing and the scoring exercise are synthetic. Nothing here is presented as historical AIS or an independent verdict.</p>
+      </div>
+      <a class="wakashio-alt" href="demo.html"><b>ALSO AVAILABLE</b><span>Original KESTREL-01 controlled exercise →</span></a>
+    </section>
+
+    <nav class="demo-steps wakashio-steps" aria-label="Exercise stages">
+      <button type="button" data-case-stage="0" class="active" aria-current="step"><span>01</span><b>Scene</b></button>
+      <button type="button" data-case-stage="1"><span>02</span><b>Observe</b></button>
+      <button type="button" data-case-stage="2"><span>03</span><b>Trace back</b></button>
+      <button type="button" data-case-stage="3"><span>04</span><b>Compare ships</b></button>
+      <button type="button" data-case-stage="4"><span>05</span><b>Decision</b></button>
+    </nav>
+
+    <section class="wakashio-workspace" aria-label="Interactive case evidence">
+      <div class="wakashio-main-panel">
+        <header class="wakashio-panel-head">
+          <div><p class="kicker" id="caseViewKicker">HISTORICAL IMAGE</p><h2 id="caseViewTitle">The actual spill, before and after</h2></div>
+          <div class="wakashio-view-switch" role="group" aria-label="Evidence view">
+            <button type="button" data-view="image" class="active" aria-pressed="true">Satellite image</button>
+            <button type="button" data-view="chart" aria-pressed="false">Coordinate chart</button>
+          </div>
+        </header>
+
+        <div id="caseImageView" class="wakashio-image-view">
+          <img src="assets/wakashio_sentinel2_20200806.jpg" width="3508" height="2540" alt="Actual Copernicus Sentinel-2 before-and-after comparison of the Wakashio oil spill off Mauritius, acquired 1 and 6 August 2020">
+          <div class="wakashio-image-caption"><b>OBSERVED · SENTINEL-2</b><span>1 August (left) / 6 August (right). The oil is visible near the stranded ship. This image was not produced by ESPADA.</span></div>
+        </div>
+
+        <div id="caseChartView" class="wakashio-chart-view" hidden>
+          <svg id="caseChart" viewBox="0 0 900 530" role="img" aria-label="Geographic coordinate chart of a documented grounding position and two synthetic offshore vessel routes"></svg>
+          <div class="wakashio-map-key"><span><i class="key-wreck"></i>Official fixed wreck</span><span><i class="key-route"></i>Synthetic route</span><span><i class="key-origin"></i>Modelled origin</span><span><i class="key-oil"></i>Illustrative oil point</span></div>
+          <div class="wakashio-clock-control">
+            <label for="caseClock">Inspect synthetic traffic at <b id="caseClockLabel">05:00 UTC</b></label>
+            <button type="button" id="casePlay">Play routes ▶</button>
+            <input id="caseClock" type="range" min="0" max="14" step="1" value="8">
+            <small>03:00 UTC</small><small>06:30 UTC</small>
+          </div>
+          <details class="wakashio-route-ledger"><summary>Inspect route waypoints and speeds</summary><div id="caseRouteLedger"></div></details>
+        </div>
+        <p class="wakashio-provenance" id="caseViewNote">Source: European Union / Copernicus Sentinel-2. Image credit remains embedded in the original image.</p>
+      </div>
+
+      <aside class="wakashio-analysis">
+        <p class="kicker" id="caseStageKicker">01 / 05 · SCENE</p>
+        <h2 id="caseStageTitle">A spill with a known source</h2>
+        <p class="wakashio-stage-body" id="caseStageBody"></p>
+        <div class="wakashio-facts" id="caseStageFacts"></div>
+        <div class="wakashio-age-control" id="caseAgeControl" hidden>
+          <label for="caseAge">Assumed slick age <b id="caseAgeLabel">1.5 h</b></label>
+          <input id="caseAge" type="range" min="1" max="3" step="0.5" value="1.5">
+          <small>Move this to test release-time uncertainty. The displayed origin and comparison recompute; it does not change the satellite image.</small>
+        </div>
+        <div class="wakashio-ranking" id="caseRanking" hidden></div>
+        <div class="wakashio-decision" id="caseDecision" hidden></div>
+        <div class="wakashio-controls"><button type="button" id="caseBack" disabled>← BACK</button><button type="button" id="caseNext">NEXT: OBSERVE →</button></div>
+      </aside>
+    </section>
+
+    <section class="wakashio-ledger" aria-label="Evidence boundaries">
+      <div><span>HISTORICAL FACT</span><b>Sentinel-2 image + documented wreck position</b><p>MV Wakashio was grounded at the reef before the 6 August spill image.</p></div>
+      <div><span>CONTROLLED INPUT</span><b>Two fictional ships + wind/current vectors</b><p>Routes are geographically plausible exercise waypoints, not AIS observations.</p></div>
+      <div><span>COMPUTED OUTPUT</span><b>Origin estimate + comparative shortlist</b><p>Computed in this page from the stated assumptions; never a probability of guilt.</p></div>
+    </section>
+    <div class="wakashio-sources"><b>Source record</b><a href="https://commons.wikimedia.org/wiki/File:Oil_Spill_in_Mauritius.jpg" target="_blank" rel="noopener noreferrer">Copernicus image ↗</a><a href="https://blueconomy.govmu.org/Documents/Publications/Report%20Court%20of%20Investigation-MV%20Wakashio.pdf" target="_blank" rel="noopener noreferrer">Mauritius casualty report ↗</a><a href="https://www.copernicus.eu/en/media/image-day-gallery/oil-spill-mauritius" target="_blank" rel="noopener noreferrer">Copernicus description ↗</a></div>
+  </main>
+  <script src="wakashio-core.js?v=20261003"></script>
+  <script src="wakashio.js?v=20261003"></script>
+</body>
+</html>

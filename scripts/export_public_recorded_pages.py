@@ -30,8 +30,16 @@ def main() -> None:
     document = (SOURCE / "index.html").read_bytes()
     for page in PAGES:
         (TARGET / f"{page}.html").write_bytes(document)
-    for filename in ("app.js", "styles.css", "demo.html", "demo.js", "demo.css"):
+    for filename in (
+        "app.js", "styles.css", "demo.html", "demo.js", "demo.css",
+        "wakashio.html", "wakashio.js", "wakashio-core.js", "wakashio.css",
+    ):
         shutil.copy2(SOURCE / filename, TARGET / filename)
+    (TARGET / "assets").mkdir(exist_ok=True)
+    shutil.copy2(
+        SOURCE / "assets/wakashio_sentinel2_20200806.jpg",
+        TARGET / "assets/wakashio_sentinel2_20200806.jpg",
+    )
     source_assets = SOURCE / "recorded_case"
     destination_assets = TARGET / "recorded_case"
     if destination_assets.exists():
