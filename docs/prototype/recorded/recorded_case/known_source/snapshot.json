@@ -1,0 +1,887 @@
+{
+  "status": "RECORDED",
+  "generated_at_utc": "2020-08-11T06:00:00Z",
+  "region": {
+    "name": "Mauritius · Pointe d'Esny case exercise",
+    "bbox": [
+      57.66,
+      -20.53,
+      58.16,
+      -20.26
+    ],
+    "center": [
+      57.91,
+      -20.395
+    ]
+  },
+  "sources": {
+    "environment": {
+      "status": "RECORDED",
+      "kind": "EXERCISE FORCING",
+      "provider": "Controlled constant-vector current and wind assumptions",
+      "latest_observation_utc": "2020-08-11T06:00:00Z",
+      "message": "Illustrative forcing only; no historical ocean-grid download used.",
+      "current": {
+        "current_east_ms": -0.05,
+        "current_north_ms": 0.03,
+        "current_speed_ms": 0.058,
+        "wind_east_ms": -5.5,
+        "wind_north_ms": 3.0,
+        "wind_speed_ms": 6.26
+      }
+    },
+    "ais": {
+      "status": "RECORDED",
+      "kind": "SYNTHETIC EXERCISE ROUTES",
+      "provider": "Three explicitly constructed exercise tracks",
+      "latest_observation_utc": "2020-08-11T06:00:00Z",
+      "message": "No historical AIS is claimed for the two alternative vessels."
+    },
+    "sentinel": {
+      "status": "RECORDED",
+      "kind": "REAL SAR REFERENCE",
+      "provider": "ESA Sentinel-1 via Sentinel Hub / Wikimedia Commons",
+      "latest_observation_utc": "2020-08-11T06:00:00Z",
+      "scenes_returned": 1,
+      "latest_scene": {
+        "id": "EXERCISE_S1_WAKASHIO_20200811",
+        "platform": "Sentinel-1",
+        "polarizations": [
+          "VV",
+          "VH"
+        ],
+        "acquisition_time_utc": "2020-08-11T06:00:00Z"
+      },
+      "scenes": [
+        {
+          "id": "EXERCISE_S1_WAKASHIO_20200811",
+          "platform": "Sentinel-1",
+          "polarizations": [
+            "VV",
+            "VH"
+          ],
+          "acquisition_time_utc": "2020-08-11T06:00:00Z",
+          "processed_evidence": true
+        }
+      ],
+      "footprints_url": "recorded_case/known_source/assets/scene_footprint.geojson",
+      "message": "The public SAR preview is dated 11 Aug 2020; 06:00 UTC is an exercise clock, not verified image metadata."
+    }
+  },
+  "ais": {
+    "positions": [
+      {
+        "mmsi": "EXERCISE-01",
+        "vessel_name": "MV Wakashio",
+        "longitude": 57.743333,
+        "latitude": -20.443333,
+        "timestamp_utc": "2020-08-11T06:00:00Z",
+        "motion_state": "stationary",
+        "sog": 0,
+        "cog": null,
+        "source": "Controlled exercise route — not provider AIS"
+      },
+      {
+        "mmsi": "EXERCISE-02",
+        "vessel_name": "MV Coral Trader",
+        "longitude": 57.95,
+        "latitude": -20.2,
+        "timestamp_utc": "2020-08-11T06:00:00Z",
+        "motion_state": "underway",
+        "sog": 6.2,
+        "cog": 4,
+        "source": "Controlled exercise route — not provider AIS"
+      },
+      {
+        "mmsi": "EXERCISE-03",
+        "vessel_name": "MV Aster Point",
+        "longitude": 58.2,
+        "latitude": -20.68,
+        "timestamp_utc": "2020-08-11T06:00:00Z",
+        "motion_state": "underway",
+        "sog": 6.2,
+        "cog": 4,
+        "source": "Controlled exercise route — not provider AIS"
+      }
+    ],
+    "tracks": {
+      "EXERCISE-01": [
+        [
+          57.743333,
+          -20.443333
+        ],
+        [
+          57.743333,
+          -20.443333
+        ],
+        [
+          57.743333,
+          -20.443333
+        ]
+      ],
+      "EXERCISE-02": [
+        [
+          57.84,
+          -20.64
+        ],
+        [
+          57.885,
+          -20.442
+        ],
+        [
+          57.95,
+          -20.2
+        ]
+      ],
+      "EXERCISE-03": [
+        [
+          58.0,
+          -20.13
+        ],
+        [
+          58.055,
+          -20.4
+        ],
+        [
+          58.2,
+          -20.68
+        ]
+      ]
+    },
+    "position_count": 3,
+    "vessel_count": 3,
+    "underway_count": 2,
+    "stationary_count": 1,
+    "window_minutes": 240,
+    "mode": "recorded_case",
+    "evidence_time_utc": "2020-08-11T06:00:00Z"
+  },
+  "coastline_url": "recorded_case/known_source/assets/mauritius_land_d3.geojson",
+  "map_context": {
+    "name": "Southeast Mauritius context",
+    "bbox": [
+      57.4,
+      -20.55,
+      58.2,
+      -20.12
+    ],
+    "coastline_url": "recorded_case/known_source/assets/mauritius_land_d3.geojson"
+  },
+  "pipeline": {
+    "stage": "EVIDENCE_PACKAGE_READY",
+    "environment_ready": true,
+    "sentinel_catalog_ready": true,
+    "live_ais_ready": true,
+    "delayed_ais_context_ready": false,
+    "slick_detection_ready": true,
+    "analyst_review_ready": true,
+    "incident_handoff_ready": false,
+    "attribution_ready": true,
+    "response_ready": true,
+    "retasking_ready": false,
+    "evidence_intake_ready": false,
+    "reanalysis_eligible": false,
+    "reanalysis_ready": false,
+    "reanalysis_complete": false,
+    "closure_ready": true,
+    "closure_recorded": false,
+    "message": "Controlled known-source exercise; real SAR preview and documented grounding, constructed drift and other traffic."
+  },
+  "analysis": {
+    "status": "REVIEW_REQUIRED",
+    "scene_id": "EXERCISE_S1_WAKASHIO_20200811",
+    "acquisition_time_utc": "2020-08-11T06:00:00Z",
+    "bbox": [
+      57.66,
+      -20.53,
+      58.16,
+      -20.26
+    ],
+    "detected_pixel_fraction": null,
+    "detected_components": 1,
+    "probability_summary": {},
+    "review_status": "approved",
+    "input_url": "recorded_case/wakashio_sentinel1_20200811.jpg",
+    "overview_url": null,
+    "mask_url": null,
+    "result_url": "recorded_case/known_source/assets/exercise_evidence.json",
+    "slick_geojson_url": "recorded_case/known_source/assets/slick_candidate.geojson",
+    "physics_screen": {
+      "status": "REFERENCE_ONLY",
+      "method": "Published SAR preview + documented grounding; exercise geometry",
+      "components_detected": 1,
+      "components_assessed": 0,
+      "weighted_local_contrast_db": null,
+      "wind_speed_ms": null,
+      "contrast_gate_passed": null,
+      "wind_gate_passed": null,
+      "interpretation": "This real SAR reference shows the Wakashio spill, but no calibrated ESPADA mask or physical-screen result was generated from this JPEG."
+    },
+    "input_provenance": {
+      "provider": "ESA Sentinel-1 via Sentinel Hub / Wikimedia Commons",
+      "polarization": "VV + VH preview",
+      "measurement": "public display image, not calibrated pixels",
+      "source_url": "https://commons.wikimedia.org/wiki/File:Sentinel-1_(IW-VVVH)_image_on_2020-08-11_(1).jpg",
+      "acquisition_time_verified": false
+    },
+    "model_provenance": {
+      "method": "Reference image, no inference run",
+      "model_type": "none",
+      "model_generation": null,
+      "threshold": null
+    },
+    "provenance_verified": false,
+    "message": "Real Sentinel-1 preview; slick outline is an exercise interpretation, not an ESPADA model output."
+  },
+  "review": {
+    "status": "APPROVED",
+    "scene_id": "EXERCISE_S1_WAKASHIO_20200811",
+    "reviewed_at_utc": "2020-08-11T06:00:00Z",
+    "assumed_age_hours": 4,
+    "approved_slick_url": "recorded_case/known_source/assets/slick_candidate.geojson",
+    "message": "Approved for this controlled exercise only; the slick polygon and age are assumed."
+  },
+  "attribution": {
+    "status": "COMPLETE",
+    "drift_status": "COMPLETE",
+    "message": "Controlled source-recovery exercise completed; not a blind historical replay.",
+    "observation_time_utc": "2020-08-11T06:00:00Z",
+    "release_time_utc": "2020-08-11T02:00:00Z",
+    "assumed_age_hours": 4,
+    "origin_zone_url": "recorded_case/known_source/assets/origin_zone.geojson",
+    "origin_particles": [
+      [
+        57.7492755,
+        -20.4418957
+      ],
+      [
+        57.7457499,
+        -20.4373603
+      ],
+      [
+        57.7384144,
+        -20.4369947
+      ],
+      [
+        57.7340133,
+        -20.4411351
+      ],
+      [
+        57.736593,
+        -20.4459748
+      ],
+      [
+        57.7437816,
+        -20.4470642
+      ],
+      [
+        57.74897,
+        -20.4434017
+      ],
+      [
+        57.7473881,
+        -20.4383546
+      ],
+      [
+        57.7404901,
+        -20.4365632
+      ],
+      [
+        57.7346182,
+        -20.4396744
+      ],
+      [
+        57.7351708,
+        -20.4448279
+      ],
+      [
+        57.74164,
+        -20.4472855
+      ],
+      [
+        57.748078,
+        -20.4447878
+      ],
+      [
+        57.7485657,
+        -20.4396311
+      ],
+      [
+        57.7426548,
+        -20.4365565
+      ],
+      [
+        57.7357797,
+        -20.4383907
+      ],
+      [
+        57.7342613,
+        -20.4434475
+      ],
+      [
+        57.7394957,
+        -20.4470775
+      ],
+      [
+        57.7466703,
+        -20.4459434
+      ],
+      [
+        57.7491889,
+        -20.4410879
+      ],
+      [
+        57.7447358,
+        -20.436975
+      ],
+      [
+        57.7374053,
+        -20.4373862
+      ],
+      [
+        57.7339369,
+        -20.4419434
+      ],
+      [
+        57.7375195,
+        -20.4464567
+      ],
+      [
+        57.7448593,
+        -20.4467766
+      ],
+      [
+        57.749208,
+        -20.4426091
+      ],
+      [
+        57.7465676,
+        -20.4377856
+      ],
+      [
+        57.7393655,
+        -20.436741
+      ],
+      [
+        57.7342234,
+        -20.4404356
+      ],
+      [
+        57.7358689,
+        -20.4454726
+      ],
+      [
+        57.7427891,
+        -20.4472211
+      ],
+      [
+        57.7486216,
+        -20.4440734
+      ]
+    ],
+    "forward_replay_particles": [
+      [
+        57.7318281,
+        -20.4343499
+      ],
+      [
+        57.7283027,
+        -20.4298145
+      ],
+      [
+        57.7209676,
+        -20.4294489
+      ],
+      [
+        57.7165667,
+        -20.4335893
+      ],
+      [
+        57.7191462,
+        -20.438429
+      ],
+      [
+        57.7263345,
+        -20.4395184
+      ],
+      [
+        57.7315227,
+        -20.4358559
+      ],
+      [
+        57.7299408,
+        -20.4308088
+      ],
+      [
+        57.7230432,
+        -20.4290174
+      ],
+      [
+        57.7171715,
+        -20.4321286
+      ],
+      [
+        57.7177241,
+        -20.4372821
+      ],
+      [
+        57.724193,
+        -20.4397397
+      ],
+      [
+        57.7306306,
+        -20.4372419
+      ],
+      [
+        57.7311183,
+        -20.4320852
+      ],
+      [
+        57.7252077,
+        -20.4290106
+      ],
+      [
+        57.7183329,
+        -20.4308449
+      ],
+      [
+        57.7168147,
+        -20.4359016
+      ],
+      [
+        57.7220488,
+        -20.4395317
+      ],
+      [
+        57.7292231,
+        -20.4383976
+      ],
+      [
+        57.7317415,
+        -20.4335421
+      ],
+      [
+        57.7272887,
+        -20.4294292
+      ],
+      [
+        57.7199585,
+        -20.4298404
+      ],
+      [
+        57.7164903,
+        -20.4343976
+      ],
+      [
+        57.7200727,
+        -20.4389109
+      ],
+      [
+        57.7274121,
+        -20.4392308
+      ],
+      [
+        57.7317607,
+        -20.4350632
+      ],
+      [
+        57.7291203,
+        -20.4302398
+      ],
+      [
+        57.7219186,
+        -20.4291951
+      ],
+      [
+        57.7167768,
+        -20.4328897
+      ],
+      [
+        57.7184221,
+        -20.4379268
+      ],
+      [
+        57.725342,
+        -20.4396752
+      ],
+      [
+        57.7311743,
+        -20.4365276
+      ]
+    ],
+    "observed_centroid": [
+      57.7224335278176,
+      -20.432912590370105
+    ],
+    "estimated_origin": {
+      "longitude": 57.741606056049605,
+      "latitude": -20.441895702120014
+    },
+    "credible_radius_90_km": 1.7,
+    "forward_closure": {
+      "status": "COMPUTED",
+      "method": "Constant-vector exercise reversal and replay",
+      "particles_seeded": 32,
+      "particles_retained": 32,
+      "centroid": {
+        "longitude": 57.72415905535848,
+        "latitude": -20.43434988825009
+      },
+      "centroid_error_km": 0.241,
+      "cloud_shape_error_km": 0.241,
+      "interpretation": "Internal consistency of a constructed scenario; not measured accuracy."
+    },
+    "reverse_analysis_url": "recorded_case/known_source/assets/exercise_evidence.json",
+    "drift_validation_url": "recorded_case/known_source/assets/exercise_evidence.json",
+    "forcing_source": "Controlled constant-vector exercise; not Copernicus Marine or Open-Meteo historical forcing",
+    "ais_source": "Synthetic routes plus documented grounded position",
+    "ais_filter": {
+      "status": "PASS",
+      "method": "exercise time-and-origin relevance filter",
+      "release_time_utc": "2020-08-11T02:00:00Z",
+      "observation_time_utc": "2020-08-11T06:00:00Z",
+      "search_radius_km": 20,
+      "release_window_hours": 1,
+      "raw_vessels": 3,
+      "raw_positions": 9,
+      "release_window_vessels": 3,
+      "origin_zone_vessels": 2,
+      "retained_vessels": 2,
+      "retained_positions": 6,
+      "excluded_vessels": 1,
+      "retained": [
+        {
+          "mmsi": "EXERCISE-01",
+          "vessel_name": "MV Wakashio",
+          "disposition": "retained",
+          "reason": "space_time_gate_passed",
+          "time_gate_passed": true,
+          "origin_gate_passed": true,
+          "closest_release_distance_km": 0.241,
+          "closest_report_time_utc": "2020-08-11T02:00:00Z",
+          "closest_time_offset_hours": 0,
+          "motion_state": "grounded",
+          "course_evidence": "exercise_route_only",
+          "track_continuity": "controlled_complete",
+          "positions": 3
+        },
+        {
+          "mmsi": "EXERCISE-02",
+          "vessel_name": "MV Coral Trader",
+          "disposition": "retained",
+          "reason": "space_time_gate_passed",
+          "time_gate_passed": true,
+          "origin_gate_passed": true,
+          "closest_release_distance_km": 14.957,
+          "closest_report_time_utc": "2020-08-11T02:00:00Z",
+          "closest_time_offset_hours": 0,
+          "motion_state": "underway",
+          "course_evidence": "exercise_route_only",
+          "track_continuity": "controlled_complete",
+          "positions": 3
+        }
+      ],
+      "excluded": [
+        {
+          "mmsi": "EXERCISE-03",
+          "vessel_name": "MV Aster Point",
+          "disposition": "excluded",
+          "reason": "outside_origin_search_area",
+          "time_gate_passed": true,
+          "origin_gate_passed": false,
+          "closest_release_distance_km": 33.025,
+          "closest_report_time_utc": "2020-08-11T02:00:00Z",
+          "closest_time_offset_hours": 0,
+          "motion_state": "underway",
+          "course_evidence": "exercise_route_only",
+          "track_continuity": "controlled_complete",
+          "positions": 3
+        }
+      ],
+      "report_url": "recorded_case/known_source/assets/exercise_evidence.json",
+      "claim_boundary": "These are exercise tracks, not provider AIS."
+    },
+    "decision": "LIMITED_SHORTLIST",
+    "candidate_count": 2,
+    "candidates": [
+      {
+        "mmsi": "EXERCISE-01",
+        "vessel_name": "MV Wakashio",
+        "rank": 1,
+        "total_score": 0.8999,
+        "presence_score": 0.88,
+        "forward_consistency": 0.9397,
+        "forward_error_km": 0.24,
+        "data_quality": 0.8,
+        "release_position_interpolated": false,
+        "identity_status": "exercise_identity_not_AIS_verified",
+        "best_match_time_utc": "2020-08-11T02:00:00Z",
+        "motion_state": "grounded",
+        "track_bearing_deg": null,
+        "significant_gaps": 0,
+        "silence_classification": "not_assessed_synthetic_tracks",
+        "evidence": [
+          "Controlled route overlaps the constructed release zone."
+        ],
+        "limitations": [
+          "Exercise track, not historical AIS; no accusation can be drawn."
+        ]
+      },
+      {
+        "mmsi": "EXERCISE-02",
+        "vessel_name": "MV Coral Trader",
+        "rank": 2,
+        "total_score": 0.4152,
+        "presence_score": 0.3839,
+        "forward_consistency": 0.4101,
+        "forward_error_km": 14.778,
+        "data_quality": 0.8,
+        "release_position_interpolated": false,
+        "identity_status": "exercise_identity_not_AIS_verified",
+        "best_match_time_utc": "2020-08-11T02:00:00Z",
+        "motion_state": "underway",
+        "track_bearing_deg": 5,
+        "significant_gaps": 0,
+        "silence_classification": "not_assessed_synthetic_tracks",
+        "evidence": [
+          "Controlled route overlaps the constructed release zone."
+        ],
+        "limitations": [
+          "Exercise track, not historical AIS; no accusation can be drawn."
+        ]
+      }
+    ],
+    "top_candidate": {
+      "mmsi": "EXERCISE-01",
+      "vessel_name": "MV Wakashio",
+      "rank": 1,
+      "total_score": 0.8999,
+      "presence_score": 0.88,
+      "forward_consistency": 0.9397,
+      "forward_error_km": 0.24,
+      "data_quality": 0.8,
+      "release_position_interpolated": false,
+      "identity_status": "exercise_identity_not_AIS_verified",
+      "best_match_time_utc": "2020-08-11T02:00:00Z",
+      "motion_state": "grounded",
+      "track_bearing_deg": null,
+      "significant_gaps": 0,
+      "silence_classification": "not_assessed_synthetic_tracks",
+      "evidence": [
+        "Controlled route overlaps the constructed release zone."
+      ],
+      "limitations": [
+        "Exercise track, not historical AIS; no accusation can be drawn."
+      ]
+    },
+    "score_margin": 0.485,
+    "nomination_assessment": {
+      "decision": "LIMITED_SHORTLIST",
+      "passed": true,
+      "score_margin": 0.485,
+      "near_tied_count": 1,
+      "ambiguity_band": 0.02,
+      "failed_gate_ids": [],
+      "gates": [
+        {
+          "id": "candidate_population",
+          "label": "Comparative population",
+          "passed": true,
+          "observed": 2,
+          "requirement": ">= 2 incident-relevant exercise tracks"
+        },
+        {
+          "id": "top_score",
+          "label": "Minimum evidence score",
+          "passed": true,
+          "observed": 0.8999,
+          "requirement": ">= 0.40"
+        },
+        {
+          "id": "score_margin",
+          "label": "Candidate separation",
+          "passed": true,
+          "observed": 0.485,
+          "requirement": ">= 0.05"
+        },
+        {
+          "id": "track_quality",
+          "label": "Exercise track completeness",
+          "passed": true,
+          "observed": 0.8,
+          "requirement": ">= 0.40"
+        },
+        {
+          "id": "forward_error",
+          "label": "Constructed forward replay",
+          "passed": true,
+          "observed": 0.24,
+          "requirement": "<= 8.0 km"
+        }
+      ],
+      "rationale": "MV Wakashio is the only route in the constructed source zone and ranks #1 of 2 retained candidates. This is a controlled exercise, not independent vessel attribution.",
+      "claim_boundary": "The real image and documented grounding do not validate synthetic drift or invented AIS tracks."
+    },
+    "candidate_tracks_url": "recorded_case/known_source/assets/candidate_tracks.geojson",
+    "ranking_chart_url": null,
+    "attribution_map_url": null,
+    "completed_at_utc": "2020-08-11T06:00:00Z"
+  },
+  "response": {
+    "status": "READY",
+    "response_status": "EXERCISE_SHORTLIST_READY",
+    "operational_decision": "LIMITED_SHORTLIST",
+    "permitted_action": "ANALYST REVIEW ONLY",
+    "rationale": "MV Wakashio is the only route in the constructed source zone and ranks #1 of 2 retained candidates. This is a controlled exercise, not independent vessel attribution.",
+    "generated_at_utc": "2020-08-11T06:00:00Z",
+    "verified_files": 0,
+    "required_files": 0,
+    "missing_required_files": 0,
+    "chain_digest_sha256": null,
+    "recommended_actions": [
+      "Treat MV Wakashio as the recovered known source in this exercise.",
+      "For a real incident, obtain original SAR pixels, date-matched forcing and independently verified AIS."
+    ],
+    "blocked_actions": [
+      "Present synthetic routes as historical AIS",
+      "Claim a blind or legal attribution"
+    ],
+    "message": "Read-only exercise dossier; no original operational evidence package was generated.",
+    "dossier_url": "recorded_case/known_source/assets/evidence_dossier.html",
+    "bundle_url": "recorded_case/known_source/assets/exercise_evidence.json",
+    "manifest_url": null,
+    "summary_url": "recorded_case/known_source/assets/exercise_evidence.json"
+  },
+  "retasking": {
+    "status": "NOT_BUILT",
+    "message": "Follow-up tasking is not part of this controlled exercise."
+  },
+  "evidence_intake": {
+    "status": "NOT_READY",
+    "message": "No evidence returns are accepted in read-only exercise mode.",
+    "receipts": []
+  },
+  "reanalysis": {
+    "status": "NOT_READY",
+    "message": "No versioned reanalysis was conducted for this controlled exercise.",
+    "version_count": 0,
+    "eligible_receipts": [],
+    "original_attribution_unchanged": true
+  },
+  "closure": {
+    "status": "NOT_READY",
+    "message": "Exercise result only; no operational case disposition or accusation.",
+    "case_state": "EXERCISE",
+    "versions": [],
+    "version_count": 0,
+    "history": [],
+    "event_count": 0,
+    "allowed_dispositions": []
+  },
+  "case_register": {
+    "status": "PASS",
+    "generated_at_utc": "2026-10-02T06:00:03Z",
+    "case_count": 2,
+    "sealed_count": 1,
+    "review_required_count": 0,
+    "integrity_verified_count": 1,
+    "provenance_warning_count": 0,
+    "cases": [
+      {
+        "scene_id": "S1D_IW_GRDH_1SDV_20260915T112445_20260915T112510_004587_0088BA_E9EF_COG",
+        "recorded_scene_id": "S1D_IW_GRDH_1SDV_20260915T112445_20260915T112510_004587_0088BA_E9EF_COG",
+        "stage": "EVIDENCE_PACKAGE_READY",
+        "acquisition_time_utc": "2026-09-15T11:24:45Z",
+        "updated_at_utc": "2026-10-02T05:24:01Z",
+        "platform": "Sentinel-1",
+        "polarization": "VV",
+        "candidate_pixel_fraction": 0.0006899152483258929,
+        "operational_decision": "ABSTAIN_INSUFFICIENT_EVIDENCE",
+        "response_status": "SAFE_ABSTENTION_READY",
+        "permitted_action": "PRESERVE AND SEEK MORE EVIDENCE",
+        "candidate_count": 40,
+        "top_score": 0.4098501490928019,
+        "verified_files": 16,
+        "required_files": 12,
+        "missing_required_files": 0,
+        "chain_digest_sha256": "c2daa6bff58eb4e3bae7cd33c654e33e31dc67e62d4ed33a829a216e2dff0020",
+        "integrity_status": "VERIFIED",
+        "last_verified_at_utc": "2026-10-02T05:24:01Z",
+        "artifact_count": 46,
+        "provenance_warnings": [],
+        "milestones": {
+          "observed": true,
+          "detected": true,
+          "reviewed": true,
+          "reconstructed": true,
+          "attributed": true,
+          "packaged": true
+        },
+        "urls": {
+          "dossier": "recorded_case/assets/analysis/S1D_IW_GRDH_1SDV_20260915T112445_20260915T112510_004587_0088BA_E9EF_COG/response/evidence_dossier.html",
+          "manifest": "recorded_case/assets/analysis/S1D_IW_GRDH_1SDV_20260915T112445_20260915T112510_004587_0088BA_E9EF_COG/response/evidence_manifest.json",
+          "summary": "recorded_case/assets/analysis/S1D_IW_GRDH_1SDV_20260915T112445_20260915T112510_004587_0088BA_E9EF_COG/response/response_summary.json",
+          "sar_diagnostic": "recorded_case/assets/analysis/S1D_IW_GRDH_1SDV_20260915T112445_20260915T112510_004587_0088BA_E9EF_COG/segmentation/sar_segmentation_overview.png",
+          "verification": "recorded_case/assets/analysis/S1D_IW_GRDH_1SDV_20260915T112445_20260915T112510_004587_0088BA_E9EF_COG/response/integrity_verification.json"
+        },
+        "recorded_case_key": "singapore",
+        "display_name": "Singapore · evidence-limited abstention"
+      },
+      {
+        "scene_id": "EXERCISE_S1_WAKASHIO_20200811",
+        "recorded_scene_id": "EXERCISE_S1_WAKASHIO_20200811",
+        "recorded_case_key": "known_source",
+        "display_name": "Mauritius · known-source exercise",
+        "stage": "EVIDENCE_PACKAGE_READY",
+        "acquisition_time_utc": "2020-08-11T06:00:00Z",
+        "updated_at_utc": "2020-08-11T06:00:00Z",
+        "platform": "Sentinel-1 reference",
+        "polarization": "VV+VH display",
+        "candidate_pixel_fraction": null,
+        "operational_decision": "LIMITED_SHORTLIST_EXERCISE",
+        "response_status": "EXERCISE_SHORTLIST_READY",
+        "permitted_action": "ANALYST REVIEW ONLY",
+        "candidate_count": 2,
+        "top_score": 0.8999,
+        "verified_files": 0,
+        "required_files": 0,
+        "missing_required_files": 0,
+        "chain_digest_sha256": null,
+        "integrity_status": "EXERCISE",
+        "artifact_count": 8,
+        "provenance_warnings": [
+          "Constructed exercise; alternative tracks and release hour are not historical observations."
+        ],
+        "milestones": {
+          "observed": true,
+          "detected": true,
+          "reviewed": true,
+          "reconstructed": true,
+          "attributed": true,
+          "packaged": true
+        },
+        "urls": {
+          "dossier": "recorded_case/known_source/assets/evidence_dossier.html",
+          "manifest": null,
+          "summary": "recorded_case/known_source/assets/exercise_evidence.json",
+          "sar_diagnostic": "recorded_case/wakashio_sentinel1_20200811.jpg",
+          "verification": null
+        }
+      }
+    ]
+  },
+  "truth_policy": {
+    "synthetic_fallback": false,
+    "empty_feed_behavior": "show NO DATA and render no objects",
+    "candidate_scores": "investigative ranking, never guilt probability"
+  },
+  "recorded_case": {
+    "mode": "RECORDED_READ_ONLY",
+    "case_key": "known_source",
+    "scene_id": "EXERCISE_S1_WAKASHIO_20200811",
+    "description": "Known-source exercise: real 11 Aug 2020 SAR reference and documented Wakashio grounding; all other tracks, slick geometry, release hour and forcing are constructed.",
+    "public_copy": "Controlled reconstruction, not an external blind test or operational evidence package.",
+    "synthetic": true
+  },
+  "updated_at_utc": "2020-08-11T06:00:00Z"
+}

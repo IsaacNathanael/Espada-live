@@ -1,0 +1,39 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Exercise map extent",
+        "exercise_geometry": true
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              57.66,
+              -20.51
+            ],
+            [
+              57.66,
+              -20.26
+            ],
+            [
+              58.16,
+              -20.26
+            ],
+            [
+              58.16,
+              -20.51
+            ],
+            [
+              57.66,
+              -20.51
+            ]
+          ]
+        ]
+      }
+    }
+  ]
+}

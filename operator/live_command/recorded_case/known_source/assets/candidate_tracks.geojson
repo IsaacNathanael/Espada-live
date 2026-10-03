@@ -1,0 +1,83 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "rank": 1,
+        "mmsi": "EXERCISE-01",
+        "vessel_name": "MV Wakashio",
+        "source": "controlled exercise"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            57.743333,
+            -20.443333
+          ],
+          [
+            57.743333,
+            -20.443333
+          ],
+          [
+            57.743333,
+            -20.443333
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "rank": 2,
+        "mmsi": "EXERCISE-02",
+        "vessel_name": "MV Coral Trader",
+        "source": "controlled exercise"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            57.84,
+            -20.64
+          ],
+          [
+            57.885,
+            -20.442
+          ],
+          [
+            57.95,
+            -20.2
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "rank": 11,
+        "mmsi": "EXERCISE-03",
+        "vessel_name": "MV Aster Point",
+        "source": "controlled exercise"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            58.0,
+            -20.13
+          ],
+          [
+            58.055,
+            -20.4
+          ],
+          [
+            58.2,
+            -20.68
+          ]
+        ]
+      }
+    }
+  ]
+}

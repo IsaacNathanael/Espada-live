@@ -6,9 +6,13 @@
   const CLIENT_ENVIRONMENT_RETRY_MS = 10 * 60 * 1000;
   const SNAPSHOT_ENDPOINT = '/api/live/snapshot';
   const queryMode = new URLSearchParams(window.location.search).get('mode');
+  const requestedRecordedCase = new URLSearchParams(window.location.search).get('case');
+  const RECORDED_CASE_KEY = requestedRecordedCase === 'known_source' ? 'known_source' : 'singapore';
   const STATIC_RECORDED_SITE = window.location.pathname.includes('/recorded/');
   const RECORDED_MODE = queryMode === 'recorded' || (queryMode !== 'live' && (window.location.hostname.endsWith('.onrender.com') || STATIC_RECORDED_SITE));
-  const RECORDED_SNAPSHOT = STATIC_RECORDED_SITE ? 'recorded_case/snapshot.json' : '/operator/live_command/recorded_case/snapshot.json';
+  const RECORDED_SNAPSHOT = (STATIC_RECORDED_SITE ? 'recorded_case/' : '/operator/live_command/recorded_case/')
+    + (RECORDED_CASE_KEY === 'known_source' ? 'known_source/snapshot.json' : 'snapshot.json');
+  const recordedQuery = RECORDED_MODE ? `?mode=recorded${RECORDED_CASE_KEY === 'known_source' ? '&case=known_source' : ''}` : '';
   const REFRESH_ENDPOINT = '/api/live/refresh';
   const ANALYZE_ENDPOINT = '/api/live/analyze-latest-sar';
   const REVIEW_ENDPOINT = '/api/live/review';
@@ -47,7 +51,7 @@
   const defaultPanels = {investigation:'reverse-drift', 'case-file':'respond-workspace'};
   const requestedComponent = window.location.hash.slice(1);
   if (pageByComponent[requestedComponent] && pageByComponent[requestedComponent] !== currentPage) {
-    window.location.replace(`${pageFiles[pageByComponent[requestedComponent]]}${RECORDED_MODE ? '?mode=recorded' : ''}#${requestedComponent}`);
+    window.location.replace(`${pageFiles[pageByComponent[requestedComponent]]}${recordedQuery}#${requestedComponent}`);
     return;
   }
   let lastSnapshot = null;
@@ -60,7 +64,7 @@
   let lastMapRenderFingerprint = '';
   const activeComponentIds = new Set();
   const componentRenderFingerprints = new Map();
-  let sarView = 'overview';
+  let sarView = RECORDED_CASE_KEY === 'known_source' ? 'input' : 'overview';
   let selectedSceneId = null;
   let driftView = 'comparison';
   let aisFilterView = 'retained';
@@ -719,8 +723,9 @@
 
   function renderSceneSelector(snapshot) {
     const select = byId('sarSceneSelect');
+    const exercise = snapshot.recorded_case?.synthetic === true;
     const scenes = Array.isArray(snapshot.sources?.sentinel?.scenes) ? [...snapshot.sources.sentinel.scenes] : [];
-    scenes.forEach(scene => { if (scene.id === snapshot.analysis?.scene_id) scene.processed_evidence = true; });
+    scenes.forEach(scene => { if (scene.id === snapshot.analysis?.scene_id && !exercise) scene.processed_evidence = true; });
     if (snapshot.analysis?.scene_id && !scenes.some(scene => scene.id === snapshot.analysis.scene_id)) {
       scenes.push({
         id: snapshot.analysis.scene_id,
@@ -737,7 +742,9 @@
       option.value = scene.id;
       const acquired = parseTime(scene.acquisition_time_utc);
       const ageHours = acquired ? (Date.now() - acquired.getTime()) / 3600000 : null;
-      option.textContent = `${formatUtc(scene.acquisition_time_utc)} · ${String(scene.platform || 'Sentinel-1').toUpperCase()} · ${scene.processed_evidence ? 'PROCESSED EVIDENCE' : ageHours !== null && ageHours >= 96 ? 'AIS READY' : 'AIS DELAY'}`;
+      option.textContent = exercise
+        ? `11 AUG 2020 · SENTINEL-1 · REFERENCE IMAGE (HOUR ASSUMED)`
+        : `${formatUtc(scene.acquisition_time_utc)} · ${String(scene.platform || 'Sentinel-1').toUpperCase()} · ${scene.processed_evidence ? 'PROCESSED EVIDENCE' : ageHours !== null && ageHours >= 96 ? 'AIS READY' : 'AIS DELAY'}`;
       select.append(option);
     });
     if (scenes.some(scene => scene.id === preferred)) select.value = preferred;
@@ -752,8 +759,8 @@
     const acquired = parseTime(scene.acquisition_time_utc);
     const ageHours = acquired ? (Date.now() - acquired.getTime()) / 3600000 : null;
     const ready = ageHours !== null && ageHours >= 96;
-    html('sceneAvailability',ready?'FULL EVIDENCE PATH READY':'SAR READY · AIS DELAYED');
-    html('sceneDelayNote',ready?'Historical AIS availability window has elapsed':`Historical AIS expected in about ${Math.max(1,Math.ceil(96-(ageHours||0)))} h`);
+    html('sceneAvailability',exercise?'EXERCISE REFERENCE READY':ready?'FULL EVIDENCE PATH READY':'SAR READY · AIS DELAYED');
+    html('sceneDelayNote',exercise?'Only the image date is sourced; the displayed hour and other tracks are assumed':ready?'Historical AIS availability window has elapsed':`Historical AIS expected in about ${Math.max(1,Math.ceil(96-(ageHours||0)))} h`);
     return scene;
   }
 
@@ -769,6 +776,7 @@
 
   function renderSarImage(snapshot) {
     const analysis = snapshot.analysis || {};
+    const exercise = snapshot.recorded_case?.synthetic === true;
     const scene = (snapshot.sources?.sentinel?.scenes || []).find(item => item.id === selectedSceneId) || (analysis.scene_id === selectedSceneId ? {
       id: analysis.scene_id,
       acquisition_time_utc: analysis.acquisition_time_utc,
@@ -778,7 +786,9 @@
     } : null);
     const matchesAnalysis = Boolean(selectedSceneId && analysis.scene_id === selectedSceneId);
     const urls = {input: analysis.input_url, overview: analysis.overview_url, mask: analysis.mask_url};
-    const labels = {input:'CALIBRATED VV BACKSCATTER',overview:'MODEL PROBABILITY + CANDIDATE BOUNDARY',mask:'THRESHOLDED BINARY CANDIDATE'};
+    const labels = exercise
+      ? {input:'REAL SENTINEL-1 PREVIEW · NO MODEL INFERENCE',overview:'NO MODEL OUTPUT FOR THIS EXERCISE',mask:'NO CALIBRATED MASK FOR THIS EXERCISE'}
+      : {input:'CALIBRATED VV BACKSCATTER',overview:'MODEL PROBABILITY + CANDIDATE BOUNDARY',mask:'THRESHOLDED BINARY CANDIDATE'};
     const image = byId('sarEvidenceImage');
     const empty = byId('sarImageEmpty');
     const viewUrl = matchesAnalysis ? urls[sarView] : null;
@@ -818,6 +828,7 @@
   }
 
   function renderDetectionWorkbench(snapshot) {
+    const exercise = snapshot.recorded_case?.synthetic === true;
     const scene = renderSceneSelector(snapshot);
     const analysis = snapshot.analysis || {status:'NOT_RUN'};
     const review = snapshot.review || {status:'NOT_REVIEWED'};
@@ -872,6 +883,14 @@
 
     html('reviewHeading',approved?'Candidate approved':rejected?'Candidate rejected':reviewable?'Decision required':'No reviewable candidate');
     html('reviewMessage',operatorMessage(review.message || analysis.message) || 'A decision becomes available only after the model and physics gates complete.');
+    if (exercise) {
+      setDetectionStatus('approved','EXERCISE INPUT ACCEPTED','Reference image and constructed slick geometry; no model detection run');
+      setGate('modelGate','review','REFERENCE IMAGE','Real SAR preview; no ESPADA pixel inference was run');
+      setGate('physicsGate','review','NOT MEASURED','The mapped slick shape is a constructed exercise input');
+      setGate('analystGate','pass','EXERCISE ACCEPTED','Documented source used only for a controlled reconstruction');
+      html('maximumProbability','—');
+      html('candidateFraction','—');
+    }
     const age = finite(review.assumed_age_hours) ? Number(review.assumed_age_hours) : Number(byId('releaseAgeInput').value || 19);
     byId('releaseAgeInput').value = String(age);
     html('releaseAgeValue',`${age} h`);
@@ -1033,6 +1052,7 @@
   }
 
   function renderReverseDrift(snapshot) {
+    const exercise = snapshot.recorded_case?.synthetic === true;
     const review=snapshot.review||{};
     const attribution=snapshot.attribution||{};
     const status=String(attribution.status||'NOT_RUN').toUpperCase();
@@ -1076,7 +1096,9 @@
     const forcing=String(attribution.forcing_source||'');
     html('driftCurrentSource',forcing.includes('Copernicus')?'Copernicus Marine':'—');
     html('driftWindSource',forcing.includes('Open-Meteo')?'Open-Meteo historical':'—');
-    html('driftMethodStatus',driftComplete?`Reverse ensemble + posterior forward closure · ${compactNumber(closure.particles_retained)} replay particles`:'Drift reconstruction has not completed');
+    html('driftMethodStatus',exercise
+      ? 'Controlled constant-vector exercise · constructed particles and forward closure'
+      : driftComplete?`Reverse ensemble + posterior forward closure · ${compactNumber(closure.particles_retained)} replay particles`:'Drift reconstruction has not completed');
     const link=byId('driftDiagnosticLink');
     link.hidden=!driftComplete||!attribution.reverse_analysis_url;
     if(!link.hidden)link.href=attribution.reverse_analysis_url;
@@ -1138,7 +1160,7 @@
     const retained=String(record.disposition).toLowerCase()==='retained';
     html('aisFilterSelectedState',retained?'RETAINED FOR COMPARISON':'EXCLUDED AS IRRELEVANT');
     html('aisFilterSelectedName',filterTrackName(record));
-    html('aisFilterSelectedMmsi',`MMSI ${record.mmsi}`);
+    html('aisFilterSelectedMmsi',`${lastSnapshot?.recorded_case?.synthetic ? 'EXERCISE ID' : 'MMSI'} ${record.mmsi}`);
     html('aisFilterClosestTime',formatUtc(record.closest_report_time_utc));
     html('aisFilterDistance',finite(record.closest_release_distance_km)?`${Number(record.closest_release_distance_km).toFixed(2)} km`:'—');
     const offset=Number(record.closest_time_offset_hours);
@@ -1171,7 +1193,7 @@
       const selected=String(record.mmsi)===String(selectedFilterMmsi);
       const retained=String(record.disposition).toLowerCase()==='retained';
       const offset=Number(record.closest_time_offset_hours);
-      return `<tr tabindex="0" data-filter-mmsi="${escapeMarkup(record.mmsi)}" class="${selected?'selected':''}" aria-selected="${selected}"><td><strong>${escapeMarkup(filterTrackName(record))}</strong><small>MMSI ${escapeMarkup(record.mmsi)}</small></td><td>${finite(record.closest_release_distance_km)?Number(record.closest_release_distance_km).toFixed(2)+' km':'—'}</td><td>${finite(offset)?(offset>=0?'+':'')+offset.toFixed(2)+' h':'—'}</td><td>${escapeMarkup(String(record.motion_state||'unknown').replaceAll('_',' '))}</td><td>${escapeMarkup(String(record.track_continuity||'unknown').replaceAll('_',' '))}</td><td><span class="ais-filter-result ${retained?'retained':'excluded'}">${escapeMarkup(filterReasonLabel(record.reason))}</span></td></tr>`;
+      return `<tr tabindex="0" data-filter-mmsi="${escapeMarkup(record.mmsi)}" class="${selected?'selected':''}" aria-selected="${selected}"><td><strong>${escapeMarkup(filterTrackName(record))}</strong><small>${lastSnapshot?.recorded_case?.synthetic ? 'EXERCISE ID' : 'MMSI'} ${escapeMarkup(record.mmsi)}</small></td><td>${finite(record.closest_release_distance_km)?Number(record.closest_release_distance_km).toFixed(2)+' km':'—'}</td><td>${finite(offset)?(offset>=0?'+':'')+offset.toFixed(2)+' h':'—'}</td><td>${escapeMarkup(String(record.motion_state||'unknown').replaceAll('_',' '))}</td><td>${escapeMarkup(String(record.track_continuity||'unknown').replaceAll('_',' '))}</td><td><span class="ais-filter-result ${retained?'retained':'excluded'}">${escapeMarkup(filterReasonLabel(record.reason))}</span></td></tr>`;
     }).join('');
     body.querySelectorAll('tr[data-filter-mmsi]').forEach(row=>{
       const choose=()=>{selectedFilterMmsi=String(row.dataset.filterMmsi);renderAisFilterRows(filter);};
@@ -1266,8 +1288,9 @@
       const mmsi=String(feature.properties?.mmsi);
       const active=mmsi===String(selected?.mmsi);
       const geometry=feature.geometry||{};
-      const mark=group.append('path').datum(feature).attr('class',`candidate-track-line${rank<=5?' top-five':''}${active?' selected':''}`).attr('tabindex',0).attr('aria-label',`Candidate rank ${rank}, MMSI ${mmsi}`).attr('d',path);
-      appendMapTitle(mark,`Rank ${rank} · MMSI ${mmsi}`).on('click keydown',event=>{if(event.type==='keydown'&&!['Enter',' '].includes(event.key))return;selectCandidate(mmsi);});
+      const idLabel = snapshot.recorded_case?.synthetic ? 'exercise ID' : 'MMSI';
+      const mark=group.append('path').datum(feature).attr('class',`candidate-track-line${rank<=5?' top-five':''}${active?' selected':''}`).attr('tabindex',0).attr('aria-label',`Candidate rank ${rank}, ${idLabel} ${mmsi}`).attr('d',path);
+      appendMapTitle(mark,`Rank ${rank} · ${idLabel} ${mmsi}`).on('click keydown',event=>{if(event.type==='keydown'&&!['Enter',' '].includes(event.key))return;selectCandidate(mmsi);});
       const coordinates=geometry.type==='LineString'?geometry.coordinates:geometry.type==='Point'?[geometry.coordinates]:[];
       const start=coordinates[0];
       if(Array.isArray(start)&&start.every(finite)&&rank<=12){
@@ -1276,7 +1299,7 @@
         if(active||rank<=5)svg.append('text').attr('class','candidate-map-rank').attr('x',point[0]+8).attr('y',point[1]-7).text(`#${rank}`);
       }
     });
-    html('candidateMapCaption',selected?`SELECTED · RANK ${selected.rank} · MMSI ${selected.mmsi}`:'TOP EVIDENCE MATCHES');
+    html('candidateMapCaption',selected?`SELECTED · RANK ${selected.rank} · ${snapshot.recorded_case?.synthetic ? 'EXERCISE ID' : 'MMSI'} ${selected.mmsi}`:'TOP EVIDENCE MATCHES');
   }
 
   function renderCandidateInspector(snapshot,candidate) {
@@ -1288,20 +1311,24 @@
     }
     html('selectedCandidateRank',`RANK ${candidate.rank} OF ${compactNumber(snapshot.attribution?.candidate_count)}`);
     html('selectedCandidateName',candidateDisplayName(candidate));
-    html('selectedCandidateMmsi',`MMSI ${candidate.mmsi}`);
+    html('selectedCandidateMmsi',`${snapshot.recorded_case?.synthetic ? 'EXERCISE ID' : 'MMSI'} ${candidate.mmsi}`);
     html('selectedCandidateScore',finite(candidate.total_score)?`${(Number(candidate.total_score)*100).toFixed(1)}%`:'—');
     const measures=[['presence',candidate.presence_score],['forward',candidate.forward_consistency],['quality',candidate.data_quality]];
     measures.forEach(([name,value])=>{html(`${name}ScoreLabel`,finite(value)?`${(Number(value)*100).toFixed(1)}%`:'—');byId(`${name}ScoreBar`).style.width=finite(value)?`${Math.max(0,Math.min(100,Number(value)*100))}%`:'0%';});
     html('candidateIdentityStatus',String(candidate.identity_status||'unverified').replaceAll('_',' ').toUpperCase());
     html('candidateForwardError',finite(candidate.forward_error_km)?`${Number(candidate.forward_error_km).toFixed(2)} km`:'—');
-    html('candidatePositionType',candidate.release_position_interpolated?`INTERPOLATED · ${Number(candidate.interpolation_gap_hours||0).toFixed(1)} h gap`:'RECEIVED AIS FIX');
+    html('candidatePositionType',snapshot.recorded_case?.synthetic
+      ? 'CONSTRUCTED EXERCISE POSITION'
+      : candidate.release_position_interpolated?`INTERPOLATED · ${Number(candidate.interpolation_gap_hours||0).toFixed(1)} h gap`:'RECEIVED AIS FIX');
     html('candidateMatchTime',formatUtc(candidate.best_match_time_utc));
     html('candidateMotionState',String(candidate.motion_state||'not available').replaceAll('_',' ').toUpperCase());
     html('candidateTrackDirection',finite(candidate.track_bearing_deg)?`${Number(candidate.track_bearing_deg).toFixed(0)}° · CONTEXT ONLY`:'NOT RESOLVED');
     const gapCount=Number(candidate.significant_gaps||0);
     const silenceClass=String(candidate.silence_classification||'not_assessed').replaceAll('_',' ').toUpperCase();
     html('candidateSilence',gapCount?`${gapCount} GAP${gapCount===1?'':'S'} · ${silenceClass}`:silenceClass);
-    html('candidateSilenceNote',gapCount?`${Number(candidate.gaps_with_local_peer_reception||0)} gap(s) occurred while nearby peers were still received. This triggers scrutiny but adds no score.`:'No gap exceeded the source-aware threshold. Silence contributes no positive score.');
+    html('candidateSilenceNote',snapshot.recorded_case?.synthetic
+      ? 'AIS silence is not tested because the comparison routes are constructed.'
+      : gapCount?`${Number(candidate.gaps_with_local_peer_reception||0)} gap(s) occurred while nearby peers were still received. This triggers scrutiny but adds no score.`:'No gap exceeded the source-aware threshold. Silence contributes no positive score.');
   }
 
   function renderCandidateRows(snapshot) {
@@ -1311,7 +1338,7 @@
     body.innerHTML=candidates.map(candidate=>{
       const selected=String(candidate.mmsi)===String(selectedCandidateMmsi);
       const gaps=Number(candidate.significant_gaps||0);
-      return `<tr tabindex="0" data-candidate-mmsi="${escapeMarkup(candidate.mmsi)}" class="${selected?'selected':''}" aria-selected="${selected}"><td>${escapeMarkup(candidate.rank)}</td><td><strong>${escapeMarkup(candidateDisplayName(candidate))}</strong><small>MMSI ${escapeMarkup(candidate.mmsi)}</small></td><td class="score-value">${finite(candidate.total_score)?(Number(candidate.total_score)*100).toFixed(1)+'%':'—'}</td><td>${finite(candidate.forward_error_km)?Number(candidate.forward_error_km).toFixed(2)+' km':'—'}</td><td>${finite(candidate.data_quality)?(Number(candidate.data_quality)*100).toFixed(0)+'%':'—'}</td><td><span class="continuity${gaps?' gap':''}">${gaps?`${gaps} GAP${gaps===1?'':'S'}`:'CONTINUOUS'}</span></td></tr>`;
+      return `<tr tabindex="0" data-candidate-mmsi="${escapeMarkup(candidate.mmsi)}" class="${selected?'selected':''}" aria-selected="${selected}"><td>${escapeMarkup(candidate.rank)}</td><td><strong>${escapeMarkup(candidateDisplayName(candidate))}</strong><small>${snapshot.recorded_case?.synthetic ? 'EXERCISE ID' : 'MMSI'} ${escapeMarkup(candidate.mmsi)}</small></td><td class="score-value">${finite(candidate.total_score)?(Number(candidate.total_score)*100).toFixed(1)+'%':'—'}</td><td>${finite(candidate.forward_error_km)?Number(candidate.forward_error_km).toFixed(2)+' km':'—'}</td><td>${finite(candidate.data_quality)?(Number(candidate.data_quality)*100).toFixed(0)+'%':'—'}</td><td><span class="continuity${gaps?' gap':''}">${gaps?`${gaps} GAP${gaps===1?'':'S'}`:'CONTINUOUS'}</span></td></tr>`;
     }).join('');
     body.querySelectorAll('tr[data-candidate-mmsi]').forEach(row=>{
       const choose=()=>selectCandidate(row.dataset.candidateMmsi);
@@ -1352,6 +1379,14 @@
   }
 
   function renderCandidateWorkspace(snapshot) {
+    const exercise = snapshot.recorded_case?.synthetic === true;
+    if (exercise) {
+      document.querySelector('.candidate-map-toolbar span').textContent = 'CONSTRUCTED ROUTES · EXERCISE WINDOW';
+      document.querySelector('.attribution-method p').textContent = 'Exercise ranking: 55% release-zone proximity · 40% constructed forward replay · 5% exercise track completeness. No historical AIS or calibrated guilt probability is claimed.';
+      byId('qualityScoreLabel').parentElement.firstChild.textContent = 'Exercise track completeness ';
+      html('candidateMapTitle', 'Controlled vessel route comparison');
+      html('candidateMapDescription', 'Documented grounded source compared with two fictional offshore exercise routes.');
+    }
     const attribution=snapshot.attribution||{};
     const candidates=Array.isArray(attribution.candidates)?attribution.candidates:[];
     const complete=String(attribution.status||'').toUpperCase()==='COMPLETE';
@@ -1392,6 +1427,7 @@
   }
 
   function renderResponseWorkspace(snapshot) {
+    const exercise = snapshot.recorded_case?.synthetic === true;
     const analysis = snapshot.analysis || {};
     const review = snapshot.review || {};
     const attribution = snapshot.attribution || {};
@@ -1407,7 +1443,7 @@
     const status = byId('responseStatus');
     status.dataset.state = error || packageIncomplete ? 'error' : ready ? (abstain ? 'abstain' : 'ready') : building ? 'ready' : 'waiting';
     status.querySelector('b').textContent = error ? 'PACKAGE FAILED' : packageIncomplete ? 'PACKAGE INCOMPLETE' : ready ? (abstain ? 'SAFE ABSTENTION READY' : 'ANALYST SHORTLIST READY') : building ? 'BUILDING EVIDENCE PACKAGE…' : attributionComplete ? 'READY TO PACKAGE' : 'WAITING FOR ATTRIBUTION';
-    status.querySelector('small').textContent = error ? String(response.message || 'The response package could not be generated.') : ready ? `${compactNumber(response.verified_files)} evidence files integrity-checked` : building ? 'Hashing artifacts and assembling the dossier' : attributionComplete ? 'Candidate attribution is complete' : 'No package is available';
+    status.querySelector('small').textContent = error ? String(response.message || 'The response package could not be generated.') : ready ? (exercise ? 'Controlled exercise · no operational evidence sealed' : `${compactNumber(response.verified_files)} evidence files integrity-checked`) : building ? 'Hashing artifacts and assembling the dossier' : attributionComplete ? 'Candidate attribution is complete' : 'No package is available';
 
     const button = byId('buildResponseButton');
     button.disabled = !attributionComplete || building;
@@ -1446,9 +1482,14 @@
     setResponseChain('chainDrift', driftVerified ? 'verified' : 'waiting');
     setResponseChain('chainCorrelation', correlationVerified ? 'verified' : 'waiting');
     setResponseChain('chainDecision', decisionVerified ? 'verified' : 'waiting');
+    if (exercise) {
+      for (const id of ['chainObservation','chainInference','chainReview','chainDrift','chainCorrelation','chainDecision']) {
+        setResponseChain(id, 'waiting', 'EXERCISE');
+      }
+    }
 
     html('responseDigest', ready ? response.chain_digest_sha256 || 'Digest unavailable' : 'Not generated');
-    html('responseGenerated', ready ? `Generated ${formatUtc(response.generated_at_utc)} · ${packageIncomplete ? 'required evidence is missing' : 'integrity register complete'}` : 'Every included file receives an integrity fingerprint.');
+    html('responseGenerated', ready ? (exercise ? 'Controlled example · no signed operational manifest' : `Generated ${formatUtc(response.generated_at_utc)} · ${packageIncomplete ? 'required evidence is missing' : 'integrity register complete'}`) : 'Every included file receives an integrity fingerprint.');
     const links = [
       ['dossierLink', response.dossier_url],
       ['bundleLink', response.bundle_url],
@@ -1616,7 +1657,7 @@
       const selected = record.scene_id === selectedCaseId;
       const shortId = String(record.scene_id).replace(/^S1[AD]_IW_GRDH_1SDV_/, '');
       const integrity = String(record.integrity_status || 'NOT_VERIFIED').replaceAll('_', ' ');
-      return `<tr tabindex="0" data-case-id="${escapeMarkup(record.scene_id)}" class="${selected ? 'selected' : ''}" aria-selected="${selected}"><td><strong>${escapeMarkup(shortId)}</strong><small>${escapeMarkup(record.platform)} · ${escapeMarkup(record.polarization || '—')}</small></td><td>${escapeMarkup(formatUtc(record.acquisition_time_utc))}</td><td><span class="case-stage ${caseStageClass(record.stage)}">${escapeMarkup(caseStageLabel(record.stage))}</span></td><td><span class="case-integrity ${integrityClass(record.integrity_status)}">${escapeMarkup(integrity)}</span></td><td>${compactNumber(record.artifact_count)}</td></tr>`;
+      return `<tr tabindex="0" data-case-id="${escapeMarkup(record.scene_id)}" class="${selected ? 'selected' : ''}" aria-selected="${selected}"><td><strong>${escapeMarkup(RECORDED_MODE && record.display_name ? record.display_name : shortId)}</strong><small>${escapeMarkup(record.platform)} · ${escapeMarkup(record.polarization || '—')}</small></td><td>${escapeMarkup(formatUtc(record.acquisition_time_utc))}</td><td><span class="case-stage ${caseStageClass(record.stage)}">${escapeMarkup(caseStageLabel(record.stage))}</span></td><td><span class="case-integrity ${integrityClass(record.integrity_status)}">${escapeMarkup(integrity)}</span></td><td>${compactNumber(record.artifact_count)}</td></tr>`;
     }).join('');
     body.querySelectorAll('tr[data-case-id]').forEach(row => {
       const choose = () => selectCase(row.dataset.caseId);
@@ -1637,13 +1678,22 @@
     html('registerSealedCount', compactNumber(register.sealed_count));
     html('registerReviewCount', compactNumber(register.review_required_count));
     html('registerWarningCount', compactNumber(register.provenance_warning_count));
-    if (!selectedCaseId && cases.length) selectedCaseId = cases[0].scene_id;
+    if (!selectedCaseId && cases.length) selectedCaseId = snapshot.recorded_case?.scene_id || cases[0].scene_id;
     const record = selectedCase(snapshot);
     renderCaseRows(snapshot);
     renderCaseInspector(snapshot, record);
   }
 
   function selectCase(sceneId) {
+    if (RECORDED_MODE) {
+      const record = lastSnapshot?.case_register?.cases?.find(item => item.scene_id === sceneId);
+      const nextCase = record?.recorded_case_key === 'known_source' ? 'known_source' : 'singapore';
+      if (nextCase !== RECORDED_CASE_KEY) {
+        const query = nextCase === 'known_source' ? '?mode=recorded&case=known_source' : '?mode=recorded';
+        window.location.assign(`${filename}${query}${window.location.hash}`);
+        return;
+      }
+    }
     selectedCaseId = String(sceneId);
     if (!lastSnapshot) return;
     renderCaseRows(lastSnapshot);
@@ -2312,12 +2362,15 @@
   function renderAis(source = {}, ais = {}) {
     setCardState('ais', source);
     if (RECORDED_MODE) {
-      html('aisEvidenceType', 'RECORDED · HISTORICAL AIS CONTEXT');
+      const exercise = lastSnapshot?.recorded_case?.synthetic === true;
+      html('aisEvidenceType', exercise ? 'EXERCISE · CONSTRUCTED ROUTES' : 'RECORDED · HISTORICAL AIS CONTEXT');
       html('aisPositionsLabel', 'Compared candidates');
-      html('aisVesselsLabel', 'Current vessels');
-      html('trafficCurrentLabel', 'HISTORICAL CANDIDATES');
+      html('aisVesselsLabel', 'Live vessels');
+      html('trafficCurrentLabel', exercise ? 'EXERCISE ROUTES' : 'HISTORICAL CANDIDATES');
       html('trafficUnderwayLabel', 'LIVE VESSELS');
-      html('aisBoundaryNote', 'This is a saved incident. Historical candidate tracks appear in Incident evidence and Investigation; no current vessel positions are claimed.');
+      html('aisBoundaryNote', exercise
+        ? 'MV Wakashio is the documented grounded source. Other named vessels and all routes are fictional exercise inputs, not historical AIS.'
+        : 'This is a saved incident. Historical candidate tracks appear in Incident evidence and Investigation; no current vessel positions are claimed.');
       html('aisPositions', compactNumber(ais.vessel_count));
       html('aisVessels', '—');
       html('aisObservation', formatUtc(ais.evidence_time_utc));
@@ -2372,14 +2425,19 @@
 
   function renderIntegrity(snapshot) {
     if (RECORDED_MODE) {
-      html('sourceCount', 'RECORDED CASE');
-      html('sourceSummary', 'SAR acquisition · historical AIS context · dated ocean forcing');
+      const exercise = snapshot.recorded_case?.synthetic === true;
+      html('sourceCount', exercise ? 'KNOWN-SOURCE EXERCISE' : 'RECORDED CASE');
+      html('sourceSummary', exercise
+        ? 'Real SAR reference · documented source · constructed routes and forcing'
+        : 'SAR acquisition · historical AIS context · dated ocean forcing');
       const connection = byId('connectionState');
       connection.dataset.tone = 'live';
-      connection.querySelector('b').textContent = 'RECORDED · READ ONLY';
-      connection.querySelector('small').textContent = 'Previously computed case';
-      html('integrityTitle', 'Recorded evidence loaded');
-      html('integrityMessage', 'This is a saved real-data investigation, not current vessel traffic or a new model run. The case file preserves its evidence limits and abstention decision.');
+      connection.querySelector('b').textContent = exercise ? 'EXERCISE · READ ONLY' : 'RECORDED · READ ONLY';
+      connection.querySelector('small').textContent = exercise ? 'Controlled case, not live traffic' : 'Previously computed case';
+      html('integrityTitle', exercise ? 'Known-source exercise loaded' : 'Recorded evidence loaded');
+      html('integrityMessage', exercise
+        ? 'The Wakashio spill image and grounded source are documented. The simulated release hour, drift, other ships and ranking are exercise inputs; this is not a historical AIS reconstruction or blind validation.'
+        : 'This is a saved real-data investigation, not current vessel traffic or a new model run. The case file preserves its evidence limits and abstention decision.');
       return;
     }
     const sources = snapshot.sources || {};
@@ -2580,7 +2638,7 @@
   function initializePages() {
     document.body.dataset.page = currentPage;
     document.body.dataset.recorded = String(RECORDED_MODE);
-    const modeSuffix = RECORDED_MODE ? '?mode=recorded' : '?mode=live';
+    const modeSuffix = RECORDED_MODE ? recordedQuery : '?mode=live';
     document.querySelectorAll('a[href]').forEach(link => {
       const target = link.getAttribute('href');
       if (/^(index|detection|investigation|cases|case-file)\.html(?:#.*)?$/.test(target)) {
@@ -2654,6 +2712,15 @@
 
   function render(snapshot) {
     lastSnapshot = snapshot;
+    if (RECORDED_MODE) {
+      const exercise = snapshot.recorded_case?.synthetic === true;
+      if (exercise) html('recordedNotice',
+        'KNOWN-SOURCE EXERCISE · Real 11 August 2020 Sentinel-1 spill preview and documented MV Wakashio grounding. The displayed observation hour, release hour, slick outline, forcing and other named ship routes are constructed—not historical AIS or a blind attribution test. This read-only case ranks Wakashio for analyst review, not a legal accusation.');
+      if (exercise) {
+        html('pageKicker', 'KNOWN-SOURCE EXERCISE · READ ONLY');
+        html('pageLede', 'Real SAR reference and documented source; constructed slick geometry, forcing and comparison routes.');
+      }
+    }
     renderHeader(snapshot);
     activateChapter(snapshot);
     const fingerprint = meaningfulFingerprint(snapshot);

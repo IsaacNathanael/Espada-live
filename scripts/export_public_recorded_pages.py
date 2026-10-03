@@ -11,8 +11,8 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "operator/live_command"
 TARGET = ROOT / "docs/prototype/recorded"
 PAGES = ("index", "detection", "investigation", "cases", "case-file")
-SERVER_ASSETS = "/operator/live_command/recorded_case/assets/"
-STATIC_ASSETS = "recorded_case/assets/"
+SERVER_ASSETS = "/operator/live_command/recorded_case/"
+STATIC_ASSETS = "recorded_case/"
 
 
 def rewrite(value):

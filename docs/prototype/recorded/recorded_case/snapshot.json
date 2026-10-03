@@ -6570,7 +6570,7 @@
   "case_register": {
     "status": "PASS",
     "generated_at_utc": "2026-10-02T06:00:03Z",
-    "case_count": 1,
+    "case_count": 2,
     "sealed_count": 1,
     "review_required_count": 0,
     "integrity_verified_count": 1,
@@ -6612,6 +6612,49 @@
           "summary": "recorded_case/assets/analysis/S1D_IW_GRDH_1SDV_20260915T112445_20260915T112510_004587_0088BA_E9EF_COG/response/response_summary.json",
           "sar_diagnostic": "recorded_case/assets/analysis/S1D_IW_GRDH_1SDV_20260915T112445_20260915T112510_004587_0088BA_E9EF_COG/segmentation/sar_segmentation_overview.png",
           "verification": "recorded_case/assets/analysis/S1D_IW_GRDH_1SDV_20260915T112445_20260915T112510_004587_0088BA_E9EF_COG/response/integrity_verification.json"
+        },
+        "recorded_case_key": "singapore",
+        "display_name": "Singapore · evidence-limited abstention"
+      },
+      {
+        "scene_id": "EXERCISE_S1_WAKASHIO_20200811",
+        "recorded_scene_id": "EXERCISE_S1_WAKASHIO_20200811",
+        "recorded_case_key": "known_source",
+        "display_name": "Mauritius · known-source exercise",
+        "stage": "EVIDENCE_PACKAGE_READY",
+        "acquisition_time_utc": "2020-08-11T06:00:00Z",
+        "updated_at_utc": "2020-08-11T06:00:00Z",
+        "platform": "Sentinel-1 reference",
+        "polarization": "VV+VH display",
+        "candidate_pixel_fraction": null,
+        "operational_decision": "LIMITED_SHORTLIST_EXERCISE",
+        "response_status": "EXERCISE_SHORTLIST_READY",
+        "permitted_action": "ANALYST REVIEW ONLY",
+        "candidate_count": 2,
+        "top_score": 0.8999,
+        "verified_files": 0,
+        "required_files": 0,
+        "missing_required_files": 0,
+        "chain_digest_sha256": null,
+        "integrity_status": "EXERCISE",
+        "artifact_count": 8,
+        "provenance_warnings": [
+          "Constructed exercise; alternative tracks and release hour are not historical observations."
+        ],
+        "milestones": {
+          "observed": true,
+          "detected": true,
+          "reviewed": true,
+          "reconstructed": true,
+          "attributed": true,
+          "packaged": true
+        },
+        "urls": {
+          "dossier": "recorded_case/known_source/assets/evidence_dossier.html",
+          "manifest": null,
+          "summary": "recorded_case/known_source/assets/exercise_evidence.json",
+          "sar_diagnostic": "recorded_case/wakashio_sentinel1_20200811.jpg",
+          "verification": null
         }
       }
     ]
